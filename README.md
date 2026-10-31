@@ -28,7 +28,43 @@ docs/          요구사항, 화면, ERD, API 문서
 
 ## 실행
 
-(Docker Compose 구성 후 작성)
+Docker와 Docker Compose(v2)가 필요하다. 명령은 모두 **레포 루트**에서 실행한다.
+
+```bash
+# 1. 환경 변수 파일 만들기 → 빈 값 중 아래 3개는 반드시 채운다
+cp .env.example .env
+#    MYSQL_PASSWORD, MYSQL_ROOT_PASSWORD : 아무 비밀번호
+#    DJANGO_SECRET_KEY                   : python3 -c "import secrets; print(secrets.token_urlsafe(50))"
+#    외부 API 키는 해당 기능을 만들 때 채운다
+
+# 2. 실행 (처음 또는 requirements.txt·Dockerfile을 바꿨을 때 --build)
+docker compose -f infra/docker-compose.yml up --build
+
+# 3. 확인 → {"status": "ok"}
+curl localhost:8000/api/health
+```
+
+| 서비스 | 주소 | 비고 |
+|---|---|---|
+| backend (Django) | http://localhost:8000 | `backend/`가 마운트되어 코드 저장 시 자동 재시작 |
+| mysql 8.4 | localhost:**3307** | DB 도구로 접속할 때. 컨테이너끼리는 `mysql:3306` |
+
+자주 쓰는 명령
+
+```bash
+docker compose -f infra/docker-compose.yml logs -f backend                    # 로그 보기
+docker compose -f infra/docker-compose.yml exec backend python manage.py test # 테스트 (test_farmit DB 자동 생성·삭제)
+docker compose -f infra/docker-compose.yml exec backend python manage.py makemigrations
+docker compose -f infra/docker-compose.yml down                               # 종료 (DB 데이터 유지)
+docker compose -f infra/docker-compose.yml down -v                            # 종료 + DB 데이터 삭제
+```
+
+- `.env`의 `MYSQL_*` 값과 `infra/mysql/init/` 스크립트는 **DB 볼륨이 비어 있을 때(첫 실행)만** 적용된다. 바꾼 뒤에는 `down -v`로 볼륨을 지우고 다시 띄운다.
+- backend는 시작할 때 `migrate`를 먼저 실행한다.
+
+## 개발 규칙
+
+- **시간:** DB에는 UTC로 저장하고(Django `USE_TZ=True`, MySQL `default-time-zone=+00:00`), 화면·API 응답에서 Asia/Seoul로 바꿔 보여 준다. 수집기·배치도 UTC로 저장한다.
 
 ## 브랜치
 

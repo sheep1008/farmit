@@ -1,0 +1,40 @@
+# 실행: 레포 루트에서  docker compose -f infra/docker-compose.yml up --build
+# 이 파일 안의 상대 경로(../.env, ../backend 등)는 이 파일이 있는 infra/ 기준이다.
+name: farmit
+
+services:
+  mysql:
+    image: mysql:8.4
+    env_file: ../.env              # MYSQL_DATABASE·USER·PASSWORD·ROOT_PASSWORD로 첫 실행 때 DB와 계정을 만든다
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00 # DB에는 UTC로 저장한다. 한국 시간 변환은 Django가 한다
+    ports:
+      - "3307:3306"                # 호스트 3307 → 컨테이너 3306 (DB 도구 접속용)
+    volumes:
+      - mysql-data:/var/lib/mysql                         # 데이터 보존. down -v 하면 지워진다
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro       # 볼륨이 비어 있을 때(첫 실행)만 실행된다
+    healthcheck:
+      # -h 127.0.0.1 로 TCP 접속을 확인한다. 첫 실행 때 초기화용 임시 서버는 소켓으로만 떠서
+      # TCP ping이 실패하므로, 초기화가 끝나고 진짜 서버가 뜬 뒤에야 healthy가 된다
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  backend:
+    build: ../backend
+    env_file: ../.env
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/app            # 코드 변경이 바로 반영된다 (runserver 자동 재시작)
+    depends_on:
+      mysql:
+        condition: service_healthy # mysql healthcheck가 통과한 뒤 시작
+
+volumes:
+  mysql-data:
