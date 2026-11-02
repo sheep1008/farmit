@@ -15,15 +15,16 @@ SSAFY 관통 프로젝트 · 양정호, 김기현 · 2026-10-19 ~ 2026-12-24
 ## 폴더 구조
 
 ```
-backend/       Django API 서버
+backend/       Django API 서버 (config: 설정, api: health 등 공통)
 frontend/      Vue 웹
 collectors/    Open API 수집기 (aT, 기상청, KOSIS, 관세청, NCPMS 등)
 streaming/     Kafka 프로듀서, Flink 작업 (실시간 경로)
 batch/         Spark 작업, Airflow DAG (배치 경로)
 ml/            가격 예측 모델, MLflow
 rag/           재배·병해충 문서 수집, 색인, 검색
-infra/         docker-compose, Nginx 등 실행 환경
+infra/         docker-compose, mysql/init(DB 초기화 스크립트), Nginx 등 실행 환경
 docs/          요구사항, 화면, ERD, API 문서
+.gitlab/       MR 템플릿
 ```
 
 ## 실행
@@ -65,13 +66,15 @@ docker compose -f infra/docker-compose.yml down -v                            # 
 ## 개발 규칙
 
 - **시간:** DB에는 UTC로 저장하고(Django `USE_TZ=True`, MySQL `default-time-zone=+00:00`), 화면·API 응답에서 Asia/Seoul로 바꿔 보여 준다. 수집기·배치도 UTC로 저장한다.
+- **단위:** 가격은 원/kg, 물량은 kg으로 저장한다.
+- **코드값:** 시장·품목 코드는 코드에 직접 쓰지 않고 market, item 테이블에서 읽는다.
 
 ## 브랜치
 
 ```
 master    배포용. 발표·배포 시점에만 develop에서 합친다
 develop   개발 통합. 모든 작업은 여기로 합친다
-feature/  기능 작업 (develop에서 만들어 develop으로 MR)
+feature/ fix/ docs/ chore/   작업 브랜치 (develop에서 만들어 develop으로 MR)
 ```
 
 - 브랜치 이름: `종류/영역-내용` (영문 소문자, 하이픈)
