@@ -115,3 +115,16 @@ feature/  기능 작업 (develop에서 만들어 develop으로 MR)
 
 - `.env`와 API 키는 커밋하지 않는다. 키 이름은 `.env.example`에 값 없이 적는다.
 - 수집한 원본 데이터, 모델 파일, `mlruns/`는 커밋하지 않는다.
+
+## AI 에이전트
+
+이 프로젝트는 AI 코딩 에이전트와 함께 개발한다. 에이전트가 읽는 규칙 파일은 아래 두 개다.
+
+| 파일 | 읽는 에이전트 | 내용 |
+|---|---|---|
+| [CLAUDE.md](CLAUDE.md) | Claude Code (김기현·양정호) | 개발 규칙, 노션 WBS 카드 작업 방법, 학습노트·트러블슈팅 기록 양식 |
+| [AGENTS.md](AGENTS.md) | Codex (김기현, 리뷰 전용) | 리뷰 체크리스트와 출력 형식. 파일은 수정하지 않는다 |
+
+- 작업 시작: Claude Code에 `K04 진행해줘`처럼 WBS 카드 코드로 요청한다.
+- 1차 리뷰: 김기현은 Codex, 양정호는 새 Claude Code 세션의 `/code-review`. 사람 리뷰(MR 규칙 4)는 그대로 한다.
+- 공통 규칙을 바꾸면 `CLAUDE.md`와 `AGENTS.md`를 같은 MR에서 함께 고친다.
