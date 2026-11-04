@@ -267,7 +267,7 @@ erDiagram
 | user_id | int | PK, FK | 회원 |
 | item_id | int | PK, FK | 품목 |
 
-회원 탈퇴 시 `user_profile`, `user_interest_item`, `sale_record`, `alert`, `chat_session`을 모두 삭제한다 (ON DELETE CASCADE, REQ-USR-004).
+회원 탈퇴 시 `user_profile`, `user_interest_item`, `sale_record`, `alert`, `chat_session`을 모두 삭제한다 (REQ-USR-004). Django의 `on_delete=CASCADE`로 구현하므로 DB의 FK 제약(`DELETE_RULE`)은 `NO ACTION`이다. 탈퇴 처리는 반드시 Django ORM(`user.delete()`)으로 한다. SQL로 `auth_user`를 직접 지우지 않는다.
 
 ### 2.3 가격
 
@@ -340,6 +340,42 @@ erDiagram
 | row_count | int | | 저장 건수 |
 | api_calls | int | | API 호출 수 (일일 한도 확인) |
 | error_msg | text | | 실패 사유 |
+
+### 2.6 구현 규칙 (Django 모델)
+
+위 표가 정하지 않은 부분을 Django 모델에서 이렇게 정했다. 테이블은 앱별로 나눠 두었다 (`codes`, `accounts`, `weather`, `prices`, `api`). 테이블 이름은 `db_table`로 이 문서의 이름에 맞춘다.
+
+**비어도 되는 컬럼 (NULL 허용).** 값이 없다는 것(NULL)과 0은 다르다. 이 컬럼을 읽는 코드는 `None`을 처리해야 한다.
+| 테이블 | 컬럼 | 이유 |
+|---|---|---|
+| `item` | `hs_code`, `ncpms_crop_code`, `nongsaro_code` | 해당 기능을 만들 때 채운다 (1주차엔 `at_code`만 필요) |
+| `market_closure` | `reason` | 직접 입력하며 사유를 모를 수 있다 |
+| `weather_daily` | `avg_temp`, `max_temp`, `min_temp`, `rain_mm`, `humidity` | 관측값이 빠진 날이 있다. 빠진 값을 0으로 채우지 않는다 |
+| `user_profile` | `lat`, `lng`, `transport_cost_per_km`, `storage_cost_per_week` | 가입 뒤에 채운다 (`sido`, `sigungu`는 가입 때 필수) |
+| `collect_log` | `finished_at`, `error_msg` | 실행 중이거나 성공이면 없다 |
+
+위에 적지 않은 컬럼은 모두 NOT NULL이다.
+
+**삭제 규칙 (`on_delete`).** DB의 FK 제약이 아니라 Django가 처리한다 (2.2절 마지막 문단 참고).
+| 규칙 | 해당 | 의미 |
+|---|---|---|
+| `PROTECT` | `settle_price`·`auction_trade`의 `market`, `item`, `item_producing_area.station` | 가격 이력이 있는 시장·품목, 주산지가 쓰는 관측소는 지울 수 없다 |
+| `CASCADE` | `user_interest_item`(`user`, `item`), `user_profile.user`, `market_closure.market`, `item_producing_area.item`, `weather_daily.station` | 부모를 지우면 함께 지운다 |
+
+**기본값.** `default`는 Django가 값을 채울 때만 적용되고 DB에는 기본값이 없다. SQL로 직접 INSERT하는 수집기는 값을 직접 넣어야 한다. DB에도 기본값을 심을지(`db_default`)는 수집기를 만들 때 정한다.
+| 테이블 | 컬럼 | 기본값 |
+|---|---|---|
+| `market` | `is_collect`, `is_reference` | false |
+| `item` | `is_storable`, `is_forecast` | false |
+| `collect_log` | `row_count`, `api_calls` | 0 |
+| `user_profile` | `loss_rate` | 0 |
+
+**제약·인덱스 이름.**
+| 이름 | 테이블 | 내용 |
+|---|---|---|
+| `uk_settle_price` | `settle_price` | UK① (trade_date, market_id, item_id, grade) |
+| `idx_settle_item_mkt_date` | `settle_price` | (item_id, market_id, trade_date) |
+| `idx_auction_mkt_item_at` | `auction_trade` | (market_id, item_id, auction_at) |
 
 ---
 
