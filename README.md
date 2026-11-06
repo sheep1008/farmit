@@ -65,8 +65,12 @@ docker compose -f infra/docker-compose.yml down -v                            # 
 # Git Bash에서는 /opt/... 경로가 C:/Program Files/Git/opt/...로 바뀌어 실패한다. 앞에 MSYS_NO_PATHCONV=1 을 붙인다
 docker compose -f infra/docker-compose.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
 docker compose -f infra/docker-compose.yml exec flink-jobmanager ./bin/sql-client.sh
+
+# 코드 테이블 초기 데이터 (수집 대상 시장 5곳, 품목 155개). 여러 번 실행해도 중복되지 않는다
+docker compose -f infra/docker-compose.yml exec backend python manage.py loaddata markets_collect items
 ```
 
+- `markets_collect.json`의 시장 위도·경도는 `0`(임시)이다. 실제 좌표는 Y01(시장 33곳 초기 데이터)에서 채운다.
 - `.env`의 `MYSQL_*` 값과 `infra/mysql/init/` 스크립트는 **DB 볼륨이 비어 있을 때(첫 실행)만** 적용된다. 바꾼 뒤에는 `down -v`로 볼륨을 지우고 다시 띄운다.
 - backend는 시작할 때 `migrate`를 먼저 실행한다.
 
@@ -97,6 +101,23 @@ streaming/.venv/Scripts/python -m unittest discover streaming/producers         
 - Flink SQL 파일의 `${MYSQL_...}`는 `submit.sh`가 `.env` 값으로 채운다. SQL 파일에 비밀번호를 직접 적지 않는다.
 - Kafka는 볼륨이 없어 `down` 하면 토픽과 Flink 작업이 사라진다. 다시 `up` 한 뒤 `submit.sh`부터 실행한다.
 - Flink 작업을 새로 제출하면 "이미 본 특보" 상태가 비어 최근 6일치 이벤트가 한 번 다시 나간다. 알림은 DB UNIQUE 제약으로 중복되지 않는다.
+
+#### 실시간 경매 (수집기 → Kafka `auction.trade.raw` → Flink → MySQL `auction_trade`)
+
+경매 수집기는 각자 인증키로 5분마다 API를 부르므로 **기본으로는 뜨지 않는다** (`--profile auction`). 위 `loaddata markets_collect items`를 먼저 해 둔다.
+
+```bash
+# Flink 작업 제출 (compose up 뒤 한 번)
+bash streaming/flink/submit.sh auction_trade
+
+# 프로듀서: 한국 시간 00~12시 5분마다 / 한 날짜 한 번 / 테스트
+docker compose -f infra/docker-compose.yml --profile auction up -d auction-producer
+docker compose -f infra/docker-compose.yml --profile auction run --rm auction-producer python producer.py --once --date 2026-11-06
+docker compose -f infra/docker-compose.yml --profile auction run --rm auction-producer python -m unittest
+```
+
+- Flink 작업을 다시 제출해도 Kafka 오프셋을 이어서 읽고, 같은 건은 `source_key`로 UPSERT되어 행이 늘지 않는다.
+- 제출된 작업 설정에는 DB 비밀번호가 들어 있어 Flink 웹 UI(내 PC에서만 열림)에서 보인다. 배포 설정에서는 다른 방법이 필요하다.
 
 ## 개발 규칙
 

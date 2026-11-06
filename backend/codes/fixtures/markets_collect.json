@@ -1,0 +1,62 @@
+[
+  {
+    "model": "codes.market",
+    "pk": "250001",
+    "fields": {
+      "name": "대전오정",
+      "sido": "대전",
+      "lat": "0.000000",
+      "lng": "0.000000",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "250003",
+    "fields": {
+      "name": "대전노은",
+      "sido": "대전",
+      "lat": "0.000000",
+      "lng": "0.000000",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "340101",
+    "fields": {
+      "name": "천안",
+      "sido": "충남",
+      "lat": "0.000000",
+      "lng": "0.000000",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "330101",
+    "fields": {
+      "name": "청주",
+      "sido": "충북",
+      "lat": "0.000000",
+      "lng": "0.000000",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "110001",
+    "fields": {
+      "name": "서울가락",
+      "sido": "서울",
+      "lat": "0.000000",
+      "lng": "0.000000",
+      "is_collect": false,
+      "is_reference": true
+    }
+  }
+]
