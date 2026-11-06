@@ -211,7 +211,7 @@ erDiagram
 | 컬럼 | 타입 | 키 | 설명 |
 |---|---|---|---|
 | item_id | int | PK | 자동 증가 |
-| at_code | varchar(10) | UK | aT 품목 코드 |
+| at_code | varchar(10) | UK | aT 품목 코드. 표준코드의 **대분류(`gds_lclsf_cd`) + 중분류(`gds_mclsf_cd`) 4자리** (예: 깻잎 `1011`). 소분류(품종)는 품목으로 나누지 않는다. 실시간 경매 API 응답으로 확인함. 정산 API도 포털 명세상 같은 코드 필드를 쓰지만, 정산 담당자가 실제 응답으로 확인 필요 |
 | name | varchar(50) | | 품목명 |
 | category | varchar(20) | | 과일·채소 등 |
 | is_storable | boolean | | 저장 후 출하 시점을 고를 수 있는 품목 |
