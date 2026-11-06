@@ -70,6 +70,23 @@ docker compose -f infra/docker-compose.yml exec flink-jobmanager ./bin/sql-clien
 - `.env`의 `MYSQL_*` 값과 `infra/mysql/init/` 스크립트는 **DB 볼륨이 비어 있을 때(첫 실행)만** 적용된다. 바꾼 뒤에는 `down -v`로 볼륨을 지우고 다시 띄운다.
 - backend는 시작할 때 `migrate`를 먼저 실행한다.
 
+### 실시간 수집 (수집기 → Kafka → Flink → MySQL)
+
+```bash
+# 수집기 가상환경 (처음 한 번). Windows는 .venv/Scripts/python, WSL·Linux는 .venv/bin/python
+python -m venv streaming/.venv
+streaming/.venv/Scripts/python -m pip install -r streaming/requirements.txt
+
+# Flink SQL 작업 제출 (compose up 뒤 한 번. 이미 돌고 있으면 건너뛴다)
+bash streaming/flink/submit.sh weather_warning
+
+# 기상특보 수집 (최근 6일치 → weather.warning.raw). --dry-run 은 보내지 않고 출력만
+streaming/.venv/Scripts/python streaming/producers/weather_warning.py
+```
+
+- Flink SQL 파일의 `${MYSQL_...}`는 `submit.sh`가 `.env` 값으로 채운다. SQL 파일에 비밀번호를 직접 적지 않는다.
+- Kafka는 볼륨이 없어 `down` 하면 토픽과 Flink 작업이 사라진다. 다시 `up` 한 뒤 `submit.sh`부터 실행한다.
+
 ## 개발 규칙
 
 - **시간:** DB에는 UTC로 저장하고(Django `USE_TZ=True`, MySQL `default-time-zone=+00:00`), 화면·API 응답에서 Asia/Seoul로 바꿔 보여 준다. 수집기·배치도 UTC로 저장한다.

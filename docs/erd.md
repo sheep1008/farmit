@@ -319,13 +319,13 @@ erDiagram
 | 컬럼 | 타입 | 키 | 설명 |
 |---|---|---|---|
 | id | bigint | PK | 자동 증가 |
-| source_key | varchar(64) | UK | 발표 시각 + 지역 + 종류. 중복 방지 |
+| source_key | varchar(64) | UK | 발표 시각 + 지역 + 종류 + 단계. 중복 방지. 예: `202611061200_S1151100_6_0` (API `tmFc_areaCode_warnVar_warnStress`, 시각은 API 원래 값인 KST) |
 | announced_at | datetime | | 발표 시각 |
 | region_code | varchar(20) | | 특보 구역 코드 |
 | region_name | varchar(50) | | 구역명 |
-| warning_type | varchar(20) | | 폭염·호우·한파·대설·태풍 등 |
-| level | varchar(10) | | 주의보·경보 |
-| status | varchar(10) | | 발표·변경·해제 |
+| warning_type | varchar(20) | | 강풍·호우·한파·건조·폭풍해일·풍랑·태풍·대설·황사·폭염·열대야 |
+| level | varchar(10) | | 주의보·경보·중대경보 |
+| status | varchar(10) | | 발표·해제·연장·정정·변경발표·변경해제, 취소된 특보는 `취소` (알림에서 제외) |
 
 ### 2.5 운영
 
