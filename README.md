@@ -17,8 +17,8 @@ SSAFY 관통 프로젝트 · 양정호, 김기현 · 2026-10-19 ~ 2026-12-24
 ```
 backend/       Django API 서버 (config: 설정, api: health 등 공통)
 frontend/      Vue 웹
-collectors/    Open API 수집기 (aT, 기상청, KOSIS, 관세청, NCPMS 등)
-streaming/     Kafka 프로듀서, Flink 작업 (실시간 경로)
+collectors/    Open API 수집기. 수집기마다 폴더 하나 (Dockerfile·requirements.txt 포함). Kafka로 보내는 것도 여기 (auction, weather_warning)
+streaming/     Flink 작업 (flink/*.sql, submit.sh). 실시간 경로의 처리 단계
 batch/         Spark 작업, Airflow DAG (배치 경로)
 ml/            가격 예측 모델, MLflow
 rag/           재배·병해충 문서 수집, 색인, 검색
@@ -91,11 +91,13 @@ bash streaming/flink/submit.sh weather_warning
 # 로그 보기
 docker compose -f infra/docker-compose.yml logs -f weather-warning-producer alert-consumer
 
+# 수집기 테스트 (컨테이너 안에서)
+docker compose -f infra/docker-compose.yml exec weather-warning-producer python -m unittest
+
 # 호스트에서 수집기를 직접 돌릴 때 (처음 한 번 venv. Windows는 .venv/Scripts/python, WSL·Linux는 .venv/bin/python)
-python -m venv streaming/.venv
-streaming/.venv/Scripts/python -m pip install -r streaming/requirements.txt
-streaming/.venv/Scripts/python streaming/producers/weather_warning.py --dry-run   # 보내지 않고 출력만
-streaming/.venv/Scripts/python -m unittest discover streaming/producers           # 수집기 테스트
+python -m venv collectors/weather_warning/.venv
+collectors/weather_warning/.venv/Scripts/python -m pip install -r collectors/weather_warning/requirements.txt
+collectors/weather_warning/.venv/Scripts/python collectors/weather_warning/producer.py --dry-run   # 보내지 않고 출력만
 ```
 
 - Flink SQL 파일의 `${MYSQL_...}`는 `submit.sh`가 `.env` 값으로 채운다. SQL 파일에 비밀번호를 직접 적지 않는다.

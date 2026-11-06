@@ -1,7 +1,7 @@
-"""수집기 변환 테스트. 실행 (레포 루트): streaming/.venv/Scripts/python -m unittest discover streaming/producers"""
+"""수집기 변환 테스트. 실행 (레포 루트): collectors/weather_warning/.venv/Scripts/python -m unittest discover collectors/weather_warning"""
 import unittest
 
-from weather_warning import to_message
+from producer import to_message
 
 # getPwnCd 실제 응답 1행 (2026-11-06)
 ROW = {
