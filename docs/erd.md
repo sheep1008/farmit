@@ -2,8 +2,9 @@
 
 | 항목 | 내용 |
 |---|---|
-| 버전 | 0.1 (초안) |
+| 버전 | 0.2 (초안) |
 | 작성일 | 2026-10-31 |
+| 수정일 | 2026-11-06 (0.2: `warning_zone` 추가, `special_event`·`alert` 1주차로 당겨 구현, `weather_warning.source_key`에 단계 추가) |
 | DB | MySQL 8 (utf8mb4) |
 
 - **1주차 테이블**은 컬럼·키까지 확정, 나머지는 주요 컬럼만 적었다. 해당 주차에 상세화한다.
@@ -51,7 +52,7 @@ erDiagram
 
 | 영역 | 테이블 | 주차 |
 |---|---|---|
-| 코드 | `market`, `item`, `weather_station`, `item_producing_area`, `holiday`, `market_closure` | 1주차 |
+| 코드 | `market`, `item`, `weather_station`, `item_producing_area`, `holiday`, `market_closure`, `warning_zone` | 1주차 |
 | 회원 | `auth_user`, `user_profile`, `user_interest_item` | 1주차 |
 | 가격 | `settle_price`, `auction_trade` | 1주차 |
 | 가격 | `realtime_price` | 2주차 (Flink) |
@@ -59,7 +60,8 @@ erDiagram
 | 운영 | `collect_log` | 1주차 |
 | 판매 | `sale_record` | 2주차 |
 | 예측 | `forecast` | 2주차 (이전 예측으로 개발), 4주차 자동화 |
-| 특수 상황 | `special_event`, `alert`, `import_monthly`, `pest_survey`, `past_case` | 3주차 |
+| 특수 상황 | `special_event`, `alert` | 1주차 (기상특보 알림부터) |
+| 특수 상황 | `import_monthly`, `pest_survey`, `past_case` | 3주차 |
 | 채팅 | `chat_session`, `chat_message` | 4주차 |
 | 재배 | `farm_schedule` | 4주차 |
 | 선택 | `price_alert` | 12월 1주 |
@@ -249,6 +251,17 @@ erDiagram
 | closure_date | date | PK | 휴장일 |
 | reason | varchar(50) | | 사유 |
 
+**warning_zone** — 기상특보 구역. 특보(`weather_warning.region_code`)를 주산지·회원의 시도·시군구에 잇는다 (REQ-ALT-001)
+| 컬럼 | 타입 | 키 | 설명 |
+|---|---|---|---|
+| region_code | varchar(10) | PK | 특보구역 코드 (예: L1011400) |
+| name | varchar(50) | | 구역명 (가평군, 평창군평지, 강원북부앞바다 등) |
+| sido | varchar(20) | | 시도 (정식 명칭). 해상 구역은 NULL → 알림 대상 아님 |
+| sigungu | varchar(20) | | 시군구. NULL이면 시도 전체 (서울동남권 같은 광역시 권역) |
+
+- 데이터: 기상청 활용가이드 별첨 "특보구역코드안내" 엑셀 → `backend/codes/fixtures/build_warning_zone.py` → `warning_zone.json` → 마이그레이션 `codes.0007`이 넣는다 (`migrate`만 하면 채워짐)
+- 평지·산지·동부 같은 하위 구역은 상위 시군구로 묶는다 (평창군평지 → 평창군). 시도는 현재 정식 명칭으로 바꾼다 (강원도 → 강원특별자치도)
+
 ### 2.2 회원
 
 **user_profile** — `auth_user`와 1:1 (REQ-USR-003)
@@ -388,8 +401,8 @@ erDiagram
 | `realtime_price` | trade_date, market_id, item_id, avg_price_per_kg, min, max, volume_kg, trade_count, last_auction_at, updated_at | UK(trade_date, market_id, item_id). Flink가 갱신 | REQ-PRC-004 |
 | `sale_record` | user_id, sale_date, market_id, item_id, grade, volume_kg, amount_won, created_at | 평균 대비 %는 settle_price와 조인해 계산 | REQ-SAL-001~003 |
 | `forecast` | item_id, market_id, base_week(예측 기준 월요일), horizon(1~4), target_week, pred_price, lower80, upper80, last_week_price, model_version, created_at | UK(item_id, market_id, base_week, horizon). 지난 예측도 지우지 않음 | REQ-PRD-001~005 |
-| `special_event` | event_type(WARNING·IMPORT_SURGE·PEST_INCREASE·GOV_NOTICE), item_id(없으면 NULL), sido, sigungu, occurred_at, title, detail(JSON: 비교 수치 등), source_url, source_ref | 특수 상황 1건 = 1행 | REQ-ALT-001, 004~006 |
-| `alert` | user_id, special_event_id, created_at, read_at | 회원별 알림. read_at이 NULL이면 안 읽음 | REQ-ALT-003 |
+| `special_event` | event_type(WARNING·IMPORT_SURGE·PEST_INCREASE·GOV_NOTICE), item_id(없으면 NULL), sido, sigungu(NULL이면 시도 전체), occurred_at, title, detail(JSON: 비교 수치 등), source_url, source_ref | 특수 상황 1건 = 1행. UK(event_type, source_ref) `uq_special_event_source`. 기상특보는 source_ref = `source_key:status`, 상태가 발표·변경발표일 때만 만든다. **구현됨** (`alerts` 앱) | REQ-ALT-001, 004~006 |
+| `alert` | user_id, special_event_id, created_at, read_at | 회원별 알림. read_at이 NULL이면 안 읽음. UK(user_id, special_event_id) `uq_alert_user_event`. **구현됨** (`alerts` 앱) | REQ-ALT-003 |
 | `import_monthly` | item_id, hs_code, ym, import_kg, import_usd | UK(hs_code, ym) | REQ-ALT-004, REQ-HIS-001 |
 | `pest_survey` | ncpms_crop_code, sido, sigungu, survey_year, survey_round, survey_date, pest_name, value | 예찰 회차별 결과 | REQ-ALT-005, REQ-HIS-001 |
 | `past_case` | item_id, market_id, event_type, sido, event_start, event_end, base_price, change_w1, change_w2, change_w3, change_w4 | Spark 계산 결과 | REQ-HIS-001 |

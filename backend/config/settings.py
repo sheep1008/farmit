@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'weather',
     'accounts',
     'prices',
+    'alerts',
 ]
 
 MIDDLEWARE = [

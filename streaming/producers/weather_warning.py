@@ -8,6 +8,7 @@
     streaming/.venv/Scripts/python streaming/producers/weather_warning.py            # Windows
     streaming/.venv/bin/python streaming/producers/weather_warning.py                # WSL·Linux
     ... weather_warning.py --dry-run     # Kafka에 보내지 않고 변환 결과만 출력
+    ... weather_warning.py --every 600   # 10분마다 계속 (compose의 weather-warning-producer가 이렇게 돈다)
 """
 import argparse
 import json
@@ -113,37 +114,39 @@ def call_api(service_key, from_date, to_date, page, retries=3):
         time.sleep(2 * attempt)
 
 
+def kst_to_utc_iso(value):
+    """API 시각(KST, YYYYMMDDHHMM 숫자) → UTC ISO 문자열. 값이 없으면(0) None"""
+    if not value or str(value) == '0':
+        return None
+    kst = datetime.strptime(str(value), '%Y%m%d%H%M').replace(tzinfo=KST)
+    return kst.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
+
+
 def to_message(item):
-    """API 행 1개 → Kafka 메시지(dict). ERD weather_warning 컬럼과 이름을 맞춘다."""
+    """API 행 1개 → Kafka 메시지(dict). ERD weather_warning 컬럼과 이름을 맞춘다.
+    effective_at·ended_at은 weather_warning에는 저장하지 않고 알림(special_event.detail)에서 쓴다."""
     tm_fc = str(item['tmFc'])  # 발표 시각, KST, YYYYMMDDHHMM
-    announced_kst = datetime.strptime(tm_fc, '%Y%m%d%H%M').replace(tzinfo=KST)
     var, stress, command = int(item['warnVar']), int(item['warnStress']), str(item['command'])
     return {
         # 발표 시각(API 원래 값) + 구역 + 종류 + 단계. API 값 그대로라 원본과 대조하기 쉽다
         'source_key': f"{tm_fc}_{item['areaCode']}_{var}_{stress}",
         # DB는 UTC로 저장한다 (backend/config/settings.py 시간 규칙)
-        'announced_at': announced_kst.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'),
+        'announced_at': kst_to_utc_iso(tm_fc),
         'region_code': item['areaCode'],
         'region_name': item['areaName'],
         # 모르는 코드는 버리지 않고 코드값을 남긴다 (나중에 코드표를 보고 고칠 수 있게)
         'warning_type': WARN_VAR.get(var, f'코드{var}'),
         'level': WARN_STRESS.get(stress, f'코드{stress}'),
         'status': CANCELED if str(item.get('cancel')) == '1' else COMMAND.get(command, f'코드{command}'),
+        'effective_at': kst_to_utc_iso(item.get('startTime')),  # 발효 시각 (발표 때만 있음)
+        'ended_at': kst_to_utc_iso(item.get('endTime')),        # 해제 시각 (해제 때만 있음)
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(description='기상특보 → Kafka')
-    parser.add_argument('--days', type=int, default=DEFAULT_DAYS, help='오늘 포함 며칠치 (기본 6)')
-    parser.add_argument('--dry-run', action='store_true', help='Kafka에 보내지 않고 출력만')
-    args = parser.parse_args()
-
-    load_dotenv(Path(__file__).resolve().parents[2] / '.env')
-    service_key = os.environ['DATA_GO_KR_KEY']
-    bootstrap = os.environ.get('KAFKA_BOOTSTRAP_SERVERS', 'localhost:29092')
-
+def collect_once(service_key, days, producer=None):
+    """한 번 수집해서 보낸다. producer가 None이면(--dry-run) 보내지 않고 출력만 한다."""
     today = datetime.now(KST).date()
-    from_date = today - timedelta(days=args.days - 1)
+    from_date = today - timedelta(days=days - 1)
     items, pages = fetch_items(service_key, from_date, today)
 
     # API가 똑같은 행을 두 번 주는 경우가 있어 보내기 전에 한 번 거른다 (최종 중복 방지는 DB)
@@ -151,9 +154,9 @@ def main():
     for item in items:
         msg = to_message(item)
         messages[msg['source_key']] = msg
-    print(f'{from_date}~{today}: API {len(items)}행 ({pages}페이지) → 특보 {len(messages)}건')
+    log(f'{from_date}~{today}: API {len(items)}행 ({pages}페이지) → 특보 {len(messages)}건')
 
-    if args.dry_run:
+    if producer is None:
         for msg in list(messages.values())[:5]:
             print(json.dumps(msg, ensure_ascii=False))
         return
@@ -164,21 +167,56 @@ def main():
         if err is not None:
             failed.append(err)
 
-    producer = Producer({
-        'bootstrap.servers': bootstrap,
-        'acks': 'all',
-        'enable.idempotence': True,  # 재전송 때 브로커에 같은 메시지가 두 번 쌓이지 않게
-    })
     for key, msg in messages.items():
         producer.produce(TOPIC, key=key.encode(), value=json.dumps(msg, ensure_ascii=False).encode(),
                          on_delivery=on_delivery)
         producer.poll(0)
     remaining = producer.flush(30)
-
     if failed or remaining:
-        print(f'전송 실패 {len(failed)}건, 미전송 {remaining}건: {failed[:3]}', file=sys.stderr)
-        sys.exit(1)
-    print(f'{TOPIC}에 {len(messages)}건 전송 완료 ({bootstrap})')
+        raise RuntimeError(f'전송 실패 {len(failed)}건, 미전송 {remaining}건: {failed[:3]}')
+    log(f'{TOPIC}에 {len(messages)}건 전송 완료')
+
+
+def log(msg):
+    print(f"[{datetime.now(KST):%Y-%m-%d %H:%M:%S}] {msg}", flush=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description='기상특보 → Kafka')
+    parser.add_argument('--days', type=int, default=DEFAULT_DAYS, help='오늘 포함 며칠치 (기본 6)')
+    parser.add_argument('--every', type=int, default=0, metavar='SECONDS',
+                        help='이 간격(초)으로 계속 반복한다. 0이면 한 번만 (기본 0, compose에서는 600)')
+    parser.add_argument('--dry-run', action='store_true', help='Kafka에 보내지 않고 출력만')
+    args = parser.parse_args()
+
+    load_dotenv(Path(__file__).resolve().parents[2] / '.env')  # 컨테이너에서는 env_file로 이미 들어와 있다
+    service_key = os.environ['DATA_GO_KR_KEY']
+    bootstrap = os.environ.get('KAFKA_BOOTSTRAP_SERVERS', 'localhost:29092')
+
+    producer = None if args.dry_run else Producer({
+        'bootstrap.servers': bootstrap,
+        'acks': 'all',
+        'enable.idempotence': True,  # 재전송 때 브로커에 같은 메시지가 두 번 쌓이지 않게
+    })
+
+    if args.every <= 0:
+        try:
+            collect_once(service_key, args.days, producer)
+        except Exception as e:
+            log(f'실패: {e}')
+            sys.exit(1)
+        return
+
+    # 반복 모드: 한 번 실패해도 멈추지 않고 다음 주기에 다시 시도한다.
+    # 매번 최근 6일치를 받으므로 한두 번 실패해도 다음 성공 때 빠진 특보가 채워진다
+    log(f'{args.every}초마다 수집 시작 (Kafka {bootstrap})')
+    while True:
+        started = time.monotonic()
+        try:
+            collect_once(service_key, args.days, producer)
+        except Exception as e:
+            log(f'실패, 다음 주기에 다시 시도: {e}')
+        time.sleep(max(0, args.every - (time.monotonic() - started)))
 
 
 if __name__ == '__main__':

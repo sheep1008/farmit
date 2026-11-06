@@ -142,7 +142,7 @@ def main():
     call_limit = int(os.environ.get("DAILY_CALL_LIMIT", "9000"))  # 한도 10,000건보다 여유 있게 멈춘다
     client = AuctionClient(os.environ["DATA_GO_KR_KEY"])
     producer = Producer({
-        "bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP", "kafka:9092"),
+        "bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"),  # 기상특보 수집기와 같은 이름
         "acks": "all",
         "enable.idempotence": True,  # 브로커 재시도로 같은 메시지가 두 번 쓰이지 않게
     })
