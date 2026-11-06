@@ -109,3 +109,18 @@ class ItemProducingArea(models.Model):
 
     class Meta:
         db_table = 'item_producing_area'
+
+# 기상특보 구역. 특보(weather_warning.region_code)를 주산지·회원의 시도·시군구에 잇는다 (erd.md 2.1, REQ-ALT-001)
+# 데이터는 기상청 특보구역코드 엑셀로 만든 codes/fixtures/warning_zone.json을 마이그레이션 0006이 넣는다
+class WarningZone(models.Model):
+    # region_code: 특보구역 코드 (PK). 기상청 코드를 그대로 쓴다 (예: L1011400)
+    region_code = models.CharField(max_length=10, primary_key=True)
+    # name: 특보구역 이름 (예: 가평군, 평창군평지, 강원북부앞바다)
+    name = models.CharField(max_length=50)
+    # sido: 시도 (프로젝트 표기). 해상 구역은 비어 있다 → 알림 대상이 아니다
+    sido = models.CharField(max_length=20, null=True, blank=True)
+    # sigungu: 시군구. 비어 있으면 시도 전체로 본다 (서울동남권 같은 광역시 권역, 시도 단위 구역)
+    sigungu = models.CharField(max_length=20, null=True, blank=True)
+
+    class Meta:
+        db_table = 'warning_zone'
