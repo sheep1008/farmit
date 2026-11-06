@@ -48,6 +48,8 @@ curl localhost:8000/api/health
 |---|---|---|
 | backend (Django) | http://localhost:8000 | `backend/`가 마운트되어 코드 저장 시 자동 재시작 |
 | mysql 8.4 | localhost:**3307** | DB 도구로 접속할 때. 컨테이너끼리는 `mysql:3306` |
+| kafka 3.9 (KRaft) | localhost:**29092** | 내 PC에서만 열림. 컨테이너끼리는 `kafka:9092`. 볼륨이 없어 `down` 하면 토픽이 지워진다 |
+| flink 1.20 | http://localhost:8081 | 웹 UI. 내 PC에서만 열림. `streaming/`이 `/opt/farmit/streaming`에 마운트된다 |
 
 자주 쓰는 명령
 
@@ -57,6 +59,11 @@ docker compose -f infra/docker-compose.yml exec backend python manage.py test # 
 docker compose -f infra/docker-compose.yml exec backend python manage.py makemigrations
 docker compose -f infra/docker-compose.yml down                               # 종료 (DB 데이터 유지)
 docker compose -f infra/docker-compose.yml down -v                            # 종료 + DB 데이터 삭제
+
+# Kafka 토픽 목록 / Flink SQL 콘솔
+# Git Bash에서는 /opt/... 경로가 C:/Program Files/Git/opt/...로 바뀌어 실패한다. 앞에 MSYS_NO_PATHCONV=1 을 붙인다
+docker compose -f infra/docker-compose.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+docker compose -f infra/docker-compose.yml exec flink-jobmanager ./bin/sql-client.sh
 ```
 
 - `.env`의 `MYSQL_*` 값과 `infra/mysql/init/` 스크립트는 **DB 볼륨이 비어 있을 때(첫 실행)만** 적용된다. 바꾼 뒤에는 `down -v`로 볼륨을 지우고 다시 띄운다.
