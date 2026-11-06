@@ -65,6 +65,24 @@ services:
       retries: 10
       start_period: 20s
 
+  # 토픽 생성용 일회성 컨테이너. 토픽을 만들고 종료한다 (ps -a 에서 Exited (0)이면 정상)
+  # 볼륨이 없어 up 할 때마다 실행되므로 --if-not-exists 로 이미 있으면 건너뛴다
+  kafka-init:
+    image: apache/kafka:3.9.1
+    command:
+      - sh
+      - -c
+      - |
+        for t in auction.trade.raw weather.warning.raw; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+            --topic "$$t" --partitions 1 --replication-factor 1 --config retention.ms=604800000
+        done
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
   flink-jobmanager:
     build: ../streaming/flink      # Flink + Kafka·JDBC 커넥터, MySQL 드라이버
     command: jobmanager
@@ -77,8 +95,8 @@ services:
     volumes:
       - ../streaming:/opt/farmit/streaming:ro   # Flink SQL 파일을 컨테이너 안에서 바로 실행
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully   # 토픽이 만들어진 뒤 시작
       mysql:
         condition: service_healthy
 
