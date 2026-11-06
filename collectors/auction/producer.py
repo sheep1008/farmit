@@ -54,9 +54,12 @@ class State:
         rows = query(conn, "SELECT source_key FROM auction_trade WHERE auction_at >= %s AND auction_at < %s",
                      ((day - timedelta(days=1)).strftime(TIME_FMT), (day + timedelta(days=1)).strftime(TIME_FMT)))
         self.sent = {r[0] for r in rows}
-        # 오늘 이미 쓴 API 호출 수 (재시작해도 한도를 이어서 센다)
+        # 오늘(한국 날짜) 이미 쓴 API 호출 수. 한도는 실제 호출한 날 기준이므로 수집 대상 날짜가 아니라
+        # 실행 시각으로 센다 (다른 날짜를 --once로 받은 호출도 포함). 재시작해도 이어서 센다
+        today = datetime.now(KST).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
         self.calls_before = int(query(conn, "SELECT COALESCE(SUM(api_calls), 0) FROM collect_log "
-                                            "WHERE source = %s AND target_date = %s", (SOURCE, date))[0][0])
+                                            "WHERE source = %s AND started_at >= %s",
+                                      (SOURCE, today.strftime(TIME_FMT)))[0][0])
 
 
 def collect_once(conn, producer, client, topic, state, call_limit):
@@ -134,7 +137,7 @@ def main():
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    topic = os.environ.get("AUCTION_TOPIC", "auction.trades")
+    topic = os.environ.get("AUCTION_TOPIC", "auction.trade.raw")  # compose의 kafka-init이 미리 만든다
     interval = int(os.environ.get("POLL_SECONDS", "300"))
     call_limit = int(os.environ.get("DAILY_CALL_LIMIT", "9000"))  # 한도 10,000건보다 여유 있게 멈춘다
     client = AuctionClient(os.environ["DATA_GO_KR_KEY"])
