@@ -70,22 +70,33 @@ docker compose -f infra/docker-compose.yml exec flink-jobmanager ./bin/sql-clien
 - `.env`의 `MYSQL_*` 값과 `infra/mysql/init/` 스크립트는 **DB 볼륨이 비어 있을 때(첫 실행)만** 적용된다. 바꾼 뒤에는 `down -v`로 볼륨을 지우고 다시 띄운다.
 - backend는 시작할 때 `migrate`를 먼저 실행한다.
 
-### 실시간 수집 (수집기 → Kafka → Flink → MySQL)
+### 실시간 수집 (수집기 → Kafka → Flink → MySQL·알림)
+
+```
+기상청 API ─(weather-warning-producer, 10분마다)→ weather.warning.raw ─(Flink weather_warning)┬→ MySQL weather_warning (이력)
+                                                                                         └→ weather.warning.event (새로·바뀐 특보만)
+                                                                    ─(alert-consumer)→ MySQL special_event·alert (회원 알림)
+```
+
+`compose up` 하면 수집기(`weather-warning-producer`)와 알림 컨슈머(`alert-consumer`)는 자동으로 뜬다. **Flink 작업만 한 번 제출한다.**
 
 ```bash
-# 수집기 가상환경 (처음 한 번). Windows는 .venv/Scripts/python, WSL·Linux는 .venv/bin/python
-python -m venv streaming/.venv
-streaming/.venv/Scripts/python -m pip install -r streaming/requirements.txt
-
 # Flink SQL 작업 제출 (compose up 뒤 한 번. 이미 돌고 있으면 건너뛴다)
 bash streaming/flink/submit.sh weather_warning
 
-# 기상특보 수집 (최근 6일치 → weather.warning.raw). --dry-run 은 보내지 않고 출력만
-streaming/.venv/Scripts/python streaming/producers/weather_warning.py
+# 로그 보기
+docker compose -f infra/docker-compose.yml logs -f weather-warning-producer alert-consumer
+
+# 호스트에서 수집기를 직접 돌릴 때 (처음 한 번 venv. Windows는 .venv/Scripts/python, WSL·Linux는 .venv/bin/python)
+python -m venv streaming/.venv
+streaming/.venv/Scripts/python -m pip install -r streaming/requirements.txt
+streaming/.venv/Scripts/python streaming/producers/weather_warning.py --dry-run   # 보내지 않고 출력만
+streaming/.venv/Scripts/python -m unittest discover streaming/producers           # 수집기 테스트
 ```
 
 - Flink SQL 파일의 `${MYSQL_...}`는 `submit.sh`가 `.env` 값으로 채운다. SQL 파일에 비밀번호를 직접 적지 않는다.
 - Kafka는 볼륨이 없어 `down` 하면 토픽과 Flink 작업이 사라진다. 다시 `up` 한 뒤 `submit.sh`부터 실행한다.
+- Flink 작업을 새로 제출하면 "이미 본 특보" 상태가 비어 최근 6일치 이벤트가 한 번 다시 나간다. 알림은 DB UNIQUE 제약으로 중복되지 않는다.
 
 ## 개발 규칙
 
