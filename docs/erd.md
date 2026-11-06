@@ -290,19 +290,21 @@ erDiagram
 | 컬럼 | 타입 | 키 | 설명 |
 |---|---|---|---|
 | id | bigint | PK | 자동 증가 |
-| source_key | varchar(64) | UK | 원본 행을 구분하는 값(경매 번호 등). 5분마다 겹쳐 받아도 중복 방지 |
+| source_key | varchar(64) | UK | 원본 행을 구분하는 값. 5분마다 겹쳐 받아도 중복 방지. `whsl_mrkt_cd|corp_cd|trd_clcln_ymd|auctn_seq|spm_no|scsbd_dt`의 SHA-1(40자) |
 | auction_at | datetime | | 낙찰 시각 |
 | market_id | varchar(6) | FK | 시장 |
 | item_id | int | FK | 품목 |
 | corp_name | varchar(30) | | 법인명 |
-| grade | varchar(10) | | 등급 |
+| grade | varchar(10) | | 등급. 실시간 API에는 등급이 없어 빈 문자열 `''` |
 | origin | varchar(30) | | 산지 |
-| price_per_kg | decimal(10,1) | | 낙찰가 (원/kg) |
-| volume_kg | decimal(10,1) | | 물량 |
+| price_per_kg | decimal(10,1) | | 낙찰가 (원/kg) = `scsbd_prc`(단량당 낙찰가) ÷ `unit_qty`(단위물량) |
+| volume_kg | decimal(10,1) | | 물량 = `qty`(수량) × `unit_qty` |
 | collected_at | datetime | | 수집 시각 |
 
 - 인덱스: (market_id, item_id, auction_at)
-- `source_key`에 쓸 원본 필드는 실시간 API 응답을 보고 확정한다.
+- `source_key`: `auctn_seq`(경매고유번호)·`spm_no`(원표번호)만으로는 겹친다. 같은 원표가 시각을 달리해 나눠 낙찰되므로 낙찰 일시까지 합친다 (2026-11-06 실제 응답으로 확인).
+- 단위(`unit_nm`)가 kg가 아니거나 `unit_qty`가 0인 건은 환산할 수 없어 저장하지 않는다. 원본(포장 단위)은 Kafka 메시지의 `raw`에 그대로 담긴다.
+- `item`에 없는 품목(`at_code`)의 건은 저장하지 않고 프로듀서 로그에 건수를 남긴다. 품목 초기 데이터: `backend/codes/fixtures/items.json`.
 
 ### 2.4 날씨
 

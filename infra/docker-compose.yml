@@ -68,6 +68,7 @@ services:
   flink-jobmanager:
     build: ../streaming/flink      # Flink + Kafka·JDBC 커넥터, MySQL 드라이버
     command: jobmanager
+    env_file: ../.env              # MYSQL_*: run_sql.sh가 Flink SQL의 JDBC 접속 정보로 넣는다
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
@@ -90,6 +91,22 @@ services:
         taskmanager.numberOfTaskSlots: 2
     depends_on:
       - flink-jobmanager
+
+  # 실시간 경매 프로듀서: 한국 시간 00~12시에 5분마다 API → Kafka(auction.trades)
+  # 각자 인증키로 API를 부르므로 기본으로는 뜨지 않는다. 켤 때: --profile auction up -d
+  auction-producer:
+    build: ../collectors/auction
+    profiles: ["auction"]
+    env_file: ../.env              # DATA_GO_KR_KEY, MYSQL_*, DB_HOST·DB_PORT
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+    volumes:
+      - ../collectors/auction:/app # 코드 변경 후 restart만 하면 반영된다
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
 
 volumes:
   mysql-data:
