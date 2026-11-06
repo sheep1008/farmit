@@ -215,7 +215,7 @@ erDiagram
 | name | varchar(50) | | 품목명 |
 | category | varchar(20) | | 과일·채소 등 |
 | is_storable | boolean | | 저장 후 출하 시점을 고를 수 있는 품목 |
-| is_forecast | boolean | | 가격 예측 제공 여부 (현재 사과만 true) |
+| is_forecast | boolean | | 가격 예측 제공 여부. 처음엔 사과만 true로 검증하고 전 품목으로 넓힌다 (REQ-PRD-006). 예측 대상 판단은 이 값으로만 한다 (품목 이름·코드로 분기하지 않음) |
 | hs_code | varchar(10) | | 관세청 HS 코드 (수입량 알림) |
 | ncpms_crop_code | varchar(10) | | NCPMS 작물 코드 |
 | nongsaro_code | varchar(10) | | 농사로 품목 코드 |
