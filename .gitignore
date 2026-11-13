@@ -25,6 +25,7 @@ data/
 *.csv
 *.parquet
 mlruns/
+ml/outputs/
 *.pkl
 *.joblib
 
