@@ -398,7 +398,7 @@ erDiagram
 
 | 테이블 | 주요 컬럼 | 키·비고 | 관련 REQ |
 |---|---|---|---|
-| `realtime_price` | trade_date, market_id, item_id, avg_price_per_kg, min, max, volume_kg, trade_count, last_auction_at, updated_at | UK(trade_date, market_id, item_id). Flink가 갱신 | REQ-PRC-004 |
+| `realtime_price` | trade_date(정산일자. 전날 오후 경매분 포함, settle_price와 같은 기준), market_id, item_id, avg_price(물량 가중, 원/kg), min_price, max_price, volume_kg, trade_count, last_auction_at(UTC), updated_at(UTC) | UK(trade_date, market_id, item_id) `uk_realtime_price`. Flink `realtime_price` 작업이 UPSERT (`source_key`로 중복 제거 후 집계). **구현됨** (`prices` 앱) | REQ-PRC-004 |
 | `sale_record` | user_id, sale_date, market_id, item_id, grade, volume_kg, amount_won, created_at | 평균 대비 %는 settle_price와 조인해 계산 | REQ-SAL-001~003 |
 | `forecast` | item_id, market_id, base_week(예측 기준 월요일), horizon(1~4), target_week, pred_price, lower80, upper80, last_week_price, model_version, created_at | UK(item_id, market_id, base_week, horizon). 지난 예측도 지우지 않음 | REQ-PRD-001~005 |
 | `special_event` | event_type(WARNING·IMPORT_SURGE·PEST_INCREASE·GOV_NOTICE), item_id(없으면 NULL), sido, sigungu(NULL이면 시도 전체), occurred_at, title, detail(JSON: 비교 수치 등), source_url, source_ref | 특수 상황 1건 = 1행. UK(event_type, source_ref) `uq_special_event_source`. 기상특보는 source_ref = `source_key:status`, 상태가 발표·변경발표일 때만 만든다. **구현됨** (`alerts` 앱) | REQ-ALT-001, 004~006 |
