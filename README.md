@@ -11,6 +11,7 @@ SSAFY 관통 프로젝트 · 양정호, 김기현 · 2026-10-19 ~ 2026-12-24
 | [docs/screens.md](docs/screens.md) | 화면 목록 |
 | [docs/erd.md](docs/erd.md) | ERD |
 | [docs/api.md](docs/api.md) | API 명세서 |
+| [docs/ml.md](docs/ml.md) | 가격 예측 모델: 방식·결과, 사용법, 확장 방법 |
 
 ## 폴더 구조
 
@@ -20,7 +21,7 @@ frontend/      Vue 웹
 collectors/    Open API 수집기. 수집기마다 폴더 하나 (Dockerfile·requirements.txt 포함). Kafka로 보내는 것도 여기 (auction, weather_warning)
 streaming/     Flink 작업 (flink/*.sql, submit.sh). 실시간 경로의 처리 단계
 batch/         Spark 작업, Airflow DAG (배치 경로)
-ml/            가격 예측 모델, MLflow
+ml/            가격 예측 모델(farmit_ml 패키지, config/에 모델 구성), MLflow. docs/ml.md 참고
 rag/           재배·병해충 문서 수집, 색인, 검색
 infra/         docker-compose, mysql/init(DB 초기화 스크립트), Nginx 등 실행 환경
 docs/          요구사항, 화면, ERD, API 문서

@@ -1,0 +1,6 @@
+# 실험(노트북·튜닝)용. 운영 이미지에는 넣지 않는다
+-r requirements.txt
+optuna==5.0.0
+matplotlib==3.11.1
+seaborn==0.13.2
+jupyter
