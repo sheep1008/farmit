@@ -487,12 +487,17 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 | `status` | 의미 | 화면 표시 |
 |---|---|---|
-| `live` | 경매 시간(00~11시), 수집 중 | "경매 중 · 09:05 기준" |
-| `closed` | 오늘 경매 종료, 정산 전 | "오늘 경매 종료 · 확정 전" |
-| `no_trade` | 오늘 거래 없음 | "오늘 거래 없음" |
+| `live` | 경매 시간(한국 시간 12시 전), 수집 중 | "경매 중 · 09:05 기준" |
+| `closed` | 오늘 경매 종료(12시 이후), 정산 전 | "오늘 경매 종료 · 확정 전" |
+| `no_trade` | 오늘 이 시장에 거래 없음 | "오늘 거래 없음" |
 
-- 1주차에는 `auction_trade`를 바로 집계해 응답하고, 2주차에 Flink가 채우는 `realtime_price`로 바꾼다. **응답 모양은 바꾸지 않는다.**
-- 다음 날 정산이 들어오면 확정 가격은 `/api/prices/daily`에서 본다 (REQ-PRC-004).
+- Flink가 채우는 `realtime_price`에서 읽는다 (K27). `trade_date`는 **정산일자**라 전날 오후 경매분도 포함한다 (`settle_price`와 같은 기준).
+- `live`/`closed` 경계는 12시: 경매는 11시쯤 끝나지만 API 반영이 약 20분 늦어 수집기가 12시까지 돈다.
+- `market_id`가 없으면 수집 대상 시장(`market.is_collect`)을 모두 돌려주고, 거래가 없는 시장도 `status: "no_trade"`, 가격 `null`, `volume_kg: 0`, `trade_count: 0`으로 넣는다. 참고 시장(가락)은 넣지 않는다.
+- `meta.collected_at`: 오늘 정산일자로 끝난 마지막 수집 시각 (`collect_log`의 `at_auction`, 실패 제외).
+- 다음 날 정산이 들어오면 확정 가격은 `/api/prices/daily`에서 본다 (REQ-PRC-004). 이 API에는 "확정" 상태가 없다.
+
+**오류**: `400 VALIDATION_ERROR`(`item_id` 없음·숫자 아님), `404 NOT_FOUND`(없는 품목·시장), `503 DATA_NOT_READY`(오늘 정산일자로 끝난 수집이 아직 없음)
 
 ---
 
