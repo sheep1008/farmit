@@ -111,7 +111,7 @@ services:
     depends_on:
       - flink-jobmanager
 
-  # 실시간 경매 프로듀서: 한국 시간 00~12시에 5분마다 API → Kafka(auction.trade.raw)
+  # 실시간 경매 프로듀서: 한국 시간 00~12시에 2분마다(POLL_SECONDS) API → Kafka(auction.trade.raw)
   # 각자 인증키로 API를 부르므로 기본으로는 뜨지 않는다. 켤 때: --profile auction up -d
   auction-producer:
     build: ../collectors/auction

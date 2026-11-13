@@ -106,20 +106,24 @@ collectors/weather_warning/.venv/Scripts/python collectors/weather_warning/produ
 
 #### 실시간 경매 (수집기 → Kafka `auction.trade.raw` → Flink → MySQL `auction_trade`, `realtime_price`)
 
-경매 수집기는 각자 인증키로 5분마다 API를 부르므로 **기본으로는 뜨지 않는다** (`--profile auction`). 위 `loaddata markets_collect items`를 먼저 해 둔다.
+경매 수집기는 각자 인증키로 2분마다 API를 부르므로 **기본으로는 뜨지 않는다** (`--profile auction`). 위 `loaddata markets_collect items`를 먼저 해 둔다.
 
 ```bash
 # Flink 작업 제출 (compose up 뒤 한 번)
 bash streaming/flink/submit.sh auction_trade    # 낙찰 1건 = 1행
 bash streaming/flink/submit.sh realtime_price   # (정산일자, 시장, 품목)별 당일 집계
 
-# 프로듀서: 한국 시간 00~12시 5분마다 / 한 날짜 한 번 / 테스트
+# 프로듀서: 한국 시간 00~12시 2분마다 / 한 날짜 한 번 / 테스트
 docker compose -f infra/docker-compose.yml --profile auction up -d auction-producer
 docker compose -f infra/docker-compose.yml --profile auction run --rm auction-producer python producer.py --once --date 2026-11-06
 docker compose -f infra/docker-compose.yml --profile auction run --rm auction-producer python -m unittest
 ```
 
 - Flink 작업을 다시 제출해도 Kafka 오프셋을 이어서 읽고, 같은 건은 `source_key`로 UPSERT되어 행이 늘지 않는다.
+- 지연 측정(REQ-NFR-003: aT API 반영 후 5분 이내 화면 반영): 오늘 수집 기록으로 수집 주기·소요를 보고, 탐침 메시지로 Kafka→Flink→MySQL 지연을 잰 뒤 최악 지연을 더해 보여 준다. 탐침은 정산일자 2099-12-31로 보내고 끝나면 지운다.
+  ```bash
+  docker compose -f infra/docker-compose.yml exec -e KAFKA_BOOTSTRAP_SERVERS=kafka:9092 backend python manage.py measure_realtime_latency --probes 5
+  ```
 - `realtime_price`는 집계 전에 `source_key`로 중복을 걸러 같은 건이 두 번 더해지지 않는다. 다만 작업을 Cancel 후 새로 제출하면 집계 상태가 비어 그 뒤에 온 건부터 다시 센다 (당일 값이 작아질 수 있다). 당일 중에 다시 띄워야 하면 `realtime_price`의 오늘 행을 지우고 소비자 그룹 `flink-realtime-price` 오프셋을 처음으로 돌린 뒤 제출한다.
 - 제출된 작업 설정에는 DB 비밀번호가 들어 있어 Flink 웹 UI(내 PC에서만 열림)에서 보인다. 배포 설정에서는 다른 방법이 필요하다.
 

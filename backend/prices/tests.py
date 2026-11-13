@@ -1,11 +1,12 @@
 from datetime import date, datetime, timezone as dt_timezone
 from unittest import mock
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from api.models import CollectLog
 from codes.models import Item, Market
 
+from . import latency
 from .models import RealtimePrice
 
 URL = '/api/prices/realtime'
@@ -101,3 +102,27 @@ class RealtimePriceApiTest(TestCase):
     def test_없는_시장은_404(self):
         res = self.get(utc(2026, 11, 13, 0, 10), item_id=self.apple.pk, market_id='999999')
         self.assertEqual(res.status_code, 404)
+
+
+class LatencyTest(SimpleTestCase):
+    """prices/latency.py (REQ-NFR-003 지연 계산)."""
+
+    def test_percentile(self):
+        values = [5, 1, 4, 2, 3]
+        self.assertEqual(latency.percentile(values, 50), 3)
+        self.assertEqual(latency.percentile(values, 90), 5)
+        self.assertIsNone(latency.percentile([], 50))
+
+    def test_gaps는_정렬_뒤_간격(self):
+        times = [utc(2026, 11, 13, 0, 10), utc(2026, 11, 13, 0, 0), utc(2026, 11, 13, 0, 5)]
+        self.assertEqual(latency.gaps(times), [300.0, 300.0])
+        self.assertEqual(latency.gaps(times[:1]), [])
+
+    def test_summary_비어_있음(self):
+        self.assertEqual(latency.summary([]), {'count': 0, 'p50': None, 'p90': None, 'max': None})
+
+    def test_worst_case_합계와_판정(self):
+        _, total, ok = latency.worst_case(300, 20, 3, 60)
+        self.assertEqual((total, ok), (383, False))
+        _, total, ok = latency.worst_case(120, 20, 3, 60)
+        self.assertEqual((total, ok), (203, True))

@@ -303,7 +303,7 @@ erDiagram
 | 컬럼 | 타입 | 키 | 설명 |
 |---|---|---|---|
 | id | bigint | PK | 자동 증가 |
-| source_key | varchar(64) | UK | 원본 행을 구분하는 값. 5분마다 겹쳐 받아도 중복 방지. `whsl_mrkt_cd|corp_cd|trd_clcln_ymd|auctn_seq|spm_no|scsbd_dt`의 SHA-1(40자) |
+| source_key | varchar(64) | UK | 원본 행을 구분하는 값. 주기(2분)마다 겹쳐 받아도 중복 방지. `whsl_mrkt_cd|corp_cd|trd_clcln_ymd|auctn_seq|spm_no|scsbd_dt`의 SHA-1(40자) |
 | auction_at | datetime | | 낙찰 시각 |
 | market_id | varchar(6) | FK | 시장 |
 | item_id | int | FK | 품목 |

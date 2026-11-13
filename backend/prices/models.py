@@ -32,7 +32,7 @@ class SettlePrice(models.Model):
 
 # 실시간 경매 낙찰 건 원본 (erd.md 2.3, REQ-COL-002)
 class AuctionTrade(models.Model):
-    # source_key: 원본 행을 구분하는 값. 5분마다 겹쳐 받아도 같은 건이 두 번 저장되지 않게 막는다 (중복 불가)
+    # source_key: 원본 행을 구분하는 값. 주기마다 겹쳐 받아도 같은 건이 두 번 저장되지 않게 막는다 (중복 불가)
     #   무엇을 합쳐서 만들지는 실시간 API 응답을 보고 확정한다
     source_key = models.CharField(max_length=64, unique=True)
     # auction_at: 낙찰 시각 (UTC)

@@ -61,7 +61,7 @@ CREATE TABLE realtime_price_sink (
   'sink.buffer-flush.interval' = '2s'
 );
 
--- 1) 중복 제거: 프로듀서는 5분마다 겹치는 구간을 다시 보내므로 같은 낙찰 건(source_key)이 여러 번 온다.
+-- 1) 중복 제거: 프로듀서는 2분마다 겹치는 구간을 다시 보내므로 같은 낙찰 건(source_key)이 여러 번 온다.
 --    auction_trade는 UPSERT라 괜찮지만, 집계는 그대로 두면 물량·건수가 두 번 더해진다.
 --    source_key별로 처음 들어온 1건만 남긴다 (Flink가 "첫 건 유지" 중복 제거로 인식해 추가만 있는 스트림이 된다)
 CREATE TEMPORARY VIEW auction_dedup AS
