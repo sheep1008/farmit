@@ -2,6 +2,5 @@
 data/
 outputs/
 mlruns/
-notebooks/
 **/__pycache__/
 .pytest_cache/

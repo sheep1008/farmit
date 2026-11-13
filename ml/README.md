@@ -14,3 +14,5 @@ python -m farmit_ml.forecast          # 주간 예측 16행 → outputs/forecast
 python -m farmit_ml.evaluate          # 테스트 평가 (v3 + 후처리 NMAE: Windows 0.0984, Linux·Docker 0.0982)
 python -m pytest -q                   # 단위 테스트 (가짜 데이터)
 ```
+
+전국·저장성 품목 확장 실험은 [experiments/](experiments/README.md)에 있다 (결과: docs/ml.md 7장).
