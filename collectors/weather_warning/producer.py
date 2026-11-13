@@ -4,11 +4,10 @@
 저장과 중복 방지는 Flink(streaming/flink/weather_warning.sql)가 source_key 기준으로 한다.
 그래서 같은 기간을 여러 번 수집해도 MySQL에는 한 번만 남는다.
 
-실행 (레포 루트에서):
-    streaming/.venv/Scripts/python streaming/producers/weather_warning.py            # Windows
-    streaming/.venv/bin/python streaming/producers/weather_warning.py                # WSL·Linux
-    ... weather_warning.py --dry-run     # Kafka에 보내지 않고 변환 결과만 출력
-    ... weather_warning.py --every 600   # 10분마다 계속 (compose의 weather-warning-producer가 이렇게 돈다)
+실행 (레포 루트에서. Windows는 .venv/Scripts/python, WSL·Linux는 .venv/bin/python):
+    collectors/weather_warning/.venv/Scripts/python collectors/weather_warning/producer.py
+    ... producer.py --dry-run     # Kafka에 보내지 않고 변환 결과만 출력
+    ... producer.py --every 600   # 10분마다 계속 (compose의 weather-warning-producer가 이렇게 돈다)
 """
 import argparse
 import json
@@ -189,7 +188,11 @@ def main():
     parser.add_argument('--dry-run', action='store_true', help='Kafka에 보내지 않고 출력만')
     args = parser.parse_args()
 
-    load_dotenv(Path(__file__).resolve().parents[2] / '.env')  # 컨테이너에서는 env_file로 이미 들어와 있다
+    # 호스트에서 실행할 때는 레포 루트의 .env를 읽는다 (collectors/weather_warning/의 두 단계 위).
+    # 컨테이너(/app/producer.py)에는 그 위치가 없고, compose env_file로 이미 환경 변수가 들어와 있다
+    env_file = Path(__file__).resolve().parent.parent.parent / '.env'
+    if env_file.is_file():
+        load_dotenv(env_file)
     service_key = os.environ['DATA_GO_KR_KEY']
     bootstrap = os.environ.get('KAFKA_BOOTSTRAP_SERVERS', 'localhost:29092')
 

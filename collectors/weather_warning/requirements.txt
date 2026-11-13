@@ -1,0 +1,4 @@
+# 기상특보 수집기 의존성. 설치: pip install -r collectors/weather_warning/requirements.txt
+requests==2.32.5
+confluent-kafka==2.12.2
+python-dotenv==1.2.1

@@ -106,7 +106,8 @@ services:
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
-        taskmanager.numberOfTaskSlots: 2
+        # Flink 작업 1개가 슬롯 1개를 쓴다. 지금 2개(weather_warning, auction_trade) + 2주차 realtime_price 등 여유
+        taskmanager.numberOfTaskSlots: 4
     depends_on:
       - flink-jobmanager
 
@@ -128,13 +129,13 @@ services:
 
   # 기상특보 수집기: 10분마다 최근 6일치를 weather.warning.raw로 보낸다 (REQ-COL-004, REQ-ALT-001)
   weather-warning-producer:
-    build:
-      context: ../streaming
-      dockerfile: producers/Dockerfile
-    command: python producers/weather_warning.py --every 600
+    build: ../collectors/weather_warning
+    command: python producer.py --every 600
     env_file: ../.env                # DATA_GO_KR_KEY
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092   # .env의 localhost:29092(호스트용)보다 우선한다
+    volumes:
+      - ../collectors/weather_warning:/app  # 코드 변경 후 restart만 하면 반영된다 (auction-producer와 같게)
     restart: unless-stopped
     depends_on:
       kafka-init:

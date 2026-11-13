@@ -1,5 +1,0 @@
-# 프로듀서 이미지(빌드 컨텍스트 streaming/)에 넣지 않을 것
-.venv/
-__pycache__/
-*.pyc
-flink/
