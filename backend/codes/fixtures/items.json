@@ -7,7 +7,8 @@
       "name": "콩",
       "category": "두류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "ncpms_crop_code": "FC030301"
     }
   },
   {
@@ -106,7 +107,9 @@
       "name": "사과",
       "category": "과실류",
       "is_storable": true,
-      "is_forecast": true
+      "is_forecast": true,
+      "hs_code": "080810",
+      "ncpms_crop_code": "FT010601"
     }
   },
   {
@@ -117,7 +120,8 @@
       "name": "배",
       "category": "과실류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "ncpms_crop_code": "FT010602"
     }
   },
   {
@@ -128,7 +132,9 @@
       "name": "포도",
       "category": "과실류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "hs_code": "080610",
+      "ncpms_crop_code": "FT040603"
     }
   },
   {
@@ -139,7 +145,8 @@
       "name": "복숭아",
       "category": "과실류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "ncpms_crop_code": "FT020604"
     }
   },
   {
@@ -150,7 +157,8 @@
       "name": "단감",
       "category": "과실류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "ncpms_crop_code": "FT060605"
     }
   },
   {
@@ -161,7 +169,8 @@
       "name": "떫은감",
       "category": "과실류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "ncpms_crop_code": "FT060605"
     }
   },
   {
@@ -194,7 +203,8 @@
       "name": "참다래(키위)",
       "category": "과실류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "hs_code": "081050"
     }
   },
   {
@@ -227,7 +237,8 @@
       "name": "감귤",
       "category": "과실류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "ncpms_crop_code": "FT060614"
     }
   },
   {
@@ -502,7 +513,8 @@
       "name": "배추",
       "category": "엽경채류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "ncpms_crop_code": "VC021001"
     }
   },
   {
@@ -953,7 +965,8 @@
       "name": "무",
       "category": "근채류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "ncpms_crop_code": "VC031101"
     }
   },
   {
@@ -975,7 +988,8 @@
       "name": "당근",
       "category": "근채류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "hs_code": "070610"
     }
   },
   {
@@ -1019,7 +1033,9 @@
       "name": "양파",
       "category": "조미채소류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "hs_code": "070310",
+      "ncpms_crop_code": "VC041201"
     }
   },
   {
@@ -1063,7 +1079,8 @@
       "name": "풋고추",
       "category": "조미채소류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "ncpms_crop_code": "VC011205"
     }
   },
   {
@@ -1085,7 +1102,8 @@
       "name": "건고추",
       "category": "조미채소류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "ncpms_crop_code": "VC011205"
     }
   },
   {
@@ -1096,7 +1114,8 @@
       "name": "홍고추",
       "category": "조미채소류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "ncpms_crop_code": "VC011205"
     }
   },
   {
@@ -1107,7 +1126,9 @@
       "name": "마늘",
       "category": "조미채소류",
       "is_storable": false,
-      "is_forecast": false
+      "is_forecast": false,
+      "hs_code": "070320",
+      "ncpms_crop_code": "VC041209"
     }
   },
   {

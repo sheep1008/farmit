@@ -12,6 +12,8 @@
 | 기상청 ASOS 일자료 | `DATA_GO_KR_KEY` | `weather_daily` |
 | 한국천문연구원 특일 정보 | `DATA_GO_KR_KEY` | `holiday` |
 | KOSIS 과실생산량 | `KOSIS_API_KEY` | `crop_production`, 예측 피처(선택) |
+| 관세청 품목별 국가별 수출입실적 | `DATA_GO_KR_KEY` | `import_monthly` (K16, 7절) |
+| NCPMS 병해충 예찰 | `NCPMS_API_KEY` | `pest_survey` (K16, 8절) |
 
 ---
 
@@ -156,6 +158,8 @@
 | ASOS | 마이페이지 활용신청 현황에서 확인 필요 | 관측소 수 × 1 | 관측소 수 × 9년 (예: 53곳 → 477건. `ml/experiments`는 530건을 하루에 받았다) |
 | 특일 | 마이페이지 활용신청 현황에서 확인 필요 | 연 1회 1건 (`solMonth` 생략) | 2018~2027 = 10건 |
 | KOSIS | 제한 미공개 | 연 1회 | 1~3건 |
+| NCPMS 예찰 | 제한 미공개 (호출 수를 `collect_log`에 남김) | 목록 페이지 수 + 새 회차·최근 30일 회차 × (1 + 시도 수) | 회차 × (1 + 시도 약 8) (8절) |
+| 관세청 수출입실적 | data.go.kr 개발계정 (10,000건 가정) | 월 1회, 품목 수 × 2년 | 품목 수 × 연도 (6품목 × 2018~2026 = 54건) |
 
 **aT 정산 하루 행 수 (2026-10-30, 금):** 서울가락 5,895 · 대전오정 1,555 · 대전노은 1,350 · 청주 864 · 천안 460 = **5개 시장 합계 10,124행**. 모두 1페이지(10,000행) 안에 들어간다.
 
@@ -167,3 +171,54 @@
 - **B를 권한다.** 호출 수는 "받는 날 수"가 아니라 "받는 행 수"에 비례하게 된다. 다만 한 번에 너무 긴 범위를 잡으면 실패했을 때 다시 받는 양이 커지므로 시장별로 **한 달씩** 끊는다 (월 단위 조회는 `ml/experiments`에서 써 본 방식이다).
 - 하루치 표본 하나로 계산한 값이다. 명절 전처럼 물량이 많은 날, 과거 연도는 행 수가 다를 수 있다. 적재하면서 `collect_log.api_calls`로 실제 값을 남긴다.
 - 품목 조건을 붙이면 품목 수만큼 호출이 늘어나므로, 전 품목을 받은 뒤 `item` 테이블에 있는 품목만 남긴다.
+
+---
+
+## 7. 관세청 품목별 국가별 수출입실적
+
+`GET https://apis.data.go.kr/1220000/nitemtrade/getNitemtradeList` — HS 코드별·나라별 월 수출입 (2026-11-14 확인, K16)
+
+| 파라미터 | 값 | 주의 |
+|---|---|---|
+| `serviceKey` | 인증키 | 활용신청을 따로 해야 한다 (안 하면 403 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`) |
+| `strtYymm`, `endYymm` | `YYYYMM` | **1년 이내만.** 넘으면 `resultCode 99` "조회기간은 1년이내" |
+| `hsSgn` | HS 코드 2·4·6·10자리 | 6자리로 주면 그 아래 10자리 코드들이 모두 온다 |
+
+- 비슷한 이름의 `Itemtrade/getItemtradeList`(품목별, 나라 구분 없음)는 활용신청이 따로라 쓰지 않았다.
+- **응답은 XML만** 온다. `response.header.resultCode` 정상은 `00`. `totalCount`·페이지가 없고 한 번에 다 온다 (포도 1년 213행).
+- 첫 행은 `year=총계`(조회 기간 전체 합)다. 나머지는 `year=2025.03`, `hsCd`(10자리), `statCd`·`statCdCntnKor1`(나라), `impWgt`(kg), `impDlr`(USD), `expWgt`, `expDlr`, `balPayments`.
+- **거래가 없는 달·나라는 행이 없다.** 사과(신선, 0808.10)는 검역 때문에 수입이 거의 없다 (2022·2023년 0kg, 다른 해 수 kg). 그래서 수입량 급증 알림은 사과 외에 수입이 많은 품목에도 HS 코드를 넣었다.
+- 저장: `import_monthly` (`erd.md` 3절). 나라·10자리 코드를 달마다 더하고, 값이 없는 달은 0으로 넣는다. 아직 공표되지 않은 달까지 0이 되지 않게 그 실행에서 어느 품목이든 값이 온 마지막 달까지만 채운다 (`collectors/imports/customs.py`). 2026-11-14 기준 10월분까지 공표됐다.
+
+| 품목 (`item.hs_code`) | HS | 2025년 수입 | 6자리에 함께 들어가는 것 |
+|---|---|---|---|
+| 사과 | 080810 | 8kg | |
+| 양파 | 070310 | 139,518톤 | 깐 양파, 샬롯 |
+| 마늘 | 070320 | 1,510톤 | 깐 마늘 (냉동·건조 마늘은 다른 코드라 빠진다) |
+| 당근 | 070610 | 112,949톤 | 순무 |
+| 포도 | 080610 | 31,260톤 | |
+| 참다래(키위) | 081050 | 48,695톤 | |
+
+---
+
+## 8. NCPMS 병해충 예찰
+
+`GET https://ncpms.rda.go.kr/npmsAPI/service` — 농촌진흥청 국가농작물병해충관리시스템. 예찰 관찰포 조사 결과 (2026-11-14 확인, K16)
+
+- **키:** NCPMS 사이트에서 따로 받는다 (`apiKey`). 키가 틀려도 **HTTP 200**에 `{"service": {"errorCode": "ERR_101", ...}}`가 온다. 오류는 항상 `errorCode`로 판단한다.
+- `serviceType=AA003`이면 JSON. HTTP·HTTPS 모두 되지만 키가 URL에 들어가므로 HTTPS를 쓴다.
+- 하루 한도는 공개되지 않았다 (`requirements.md` REQ-NFR-009). 응답은 0.2초 안팎.
+
+| serviceCode | 파라미터 | 돌려주는 것 |
+|---|---|---|
+| `SVC51` 조사 회차 목록 | `searchKncrCode`(작물), `searchExaminYear`, `displayCount`(**최대 50**), `startPoint`(1부터) | `totalCount`, `list[]`: `insectKey`, `kncrCode`·`kncrNm`, `examinYear`, `examinTmrd`(회차), `inputStdrDatetm`(기준일 YYYYMMDD), `examinSpchcknNm`(조사 종류), `predictnSpchcknNm`(관찰포 등). 최신순 |
+| `SVC52` 시도별 결과 | `insectKey` | `structList[]`: `sidoCode`, `sidoNm`, `dbyhsNm`(항목), `inqireCnClCode`, `inqireValue` |
+| `SVC53` 시군별 결과 | `insectKey`, `sidoCode` | `structList[]`: `sigunguCode`(4자리), `sigunguNm`, 항목·값. **`sidoCode`가 없으면 `ERR_901`** |
+
+- 파라미터 이름이 틀려도 오류 없이 무시된다 (`kncrCode=`로 주면 전체 목록이 온다). 필터는 `search...`로 시작한다.
+- 전체 1,075회차 (2026-11 기준). 작물 14개: 사과 FT010601, 배 FT010602, 복숭아 FT020604, 포도 FT040603, 감 FT060605, 감귤 FT060614, 고추 VC011205, 배추 VC021001, 무 VC031101, 양파 VC041201, 마늘 VC041209, 콩 FC030301, 논벼 FC010101, 보리 FC020201.
+- **조사 종류마다 회차가 따로다.** 고추는 노지고추·시설고추, 배추·무는 여름·가을, 마늘은 난지형·한지형. 그래서 회차 구분은 `insectKey`(연도+종류+작물+회차)로 한다.
+- **회차 번호의 날짜가 해마다 같지 않다.** 사과는 2015~2021년 1회차가 4/1(15회), 2022년부터 5/16(10회). 해마다 같은 시기를 비교할 때는 회차 번호가 아니라 `inputStdrDatetm`(조사 기준일)을 쓴다.
+- 값 이름(`dbyhsNm`)의 괄호 안이 단위다: `탄저병(피해과율)`, `응애류(밀도)`, `복숭아순나방(트랩마리수)`. 배추·무는 `가을배추 - 무름병(피해주율)`처럼 앞에 종류가 붙는다.
+- 저장: `pest_survey` (`erd.md` 3절). 시군 단위(SVC53)만 저장한다. 시도는 SVC52로 조사한 시도를 알아내는 데만 쓴다. 받을 회차는 DB에 없는 회차 + 기준일이 최근 30일 안인 회차다 (`collectors/pests/ncpms.py`). 품목과는 `item.ncpms_crop_code`로 잇는다 (단감·떫은감 → 감, 풋고추·건고추·홍고추 → 고추).
+
