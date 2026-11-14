@@ -499,6 +499,28 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 **오류**: `400 VALIDATION_ERROR`(`item_id` 없음·숫자 아님), `404 NOT_FOUND`(없는 품목·시장), `503 DATA_NOT_READY`(오늘 정산일자로 끝난 수집이 아직 없음)
 
+### 2.4 알림 (회원 전용)
+
+세 API 모두 로그인 필요(`401 NOT_AUTHENTICATED`). **남의 알림은 403이 아니라 `404 NOT_FOUND`**.
+
+#### `GET /api/alerts` — 알림 목록
+쿼리: `unread=true`(안 읽은 것만, 기본 false), `page`, `size`(1.3절). 최신 발생순. 값이 잘못되면 `400 INVALID_PARAMETER`.
+```json
+{ "data": [ { "id": 7, "event_type": "WARNING", "title": "가평군 한파주의보 발표",
+  "sido": "경기도", "sigungu": "가평군", "occurred_at": "2026-11-06T02:00:00Z",
+  "created_at": "2026-11-06T02:00:05Z", "read_at": null, "is_read": false } ],
+  "meta": { "page": 1, "size": 20, "total": 1 } }
+```
+
+#### `GET /api/alerts/{id}` — 알림 상세 + 대응 체크리스트
+목록 항목의 필드에 `item_id`, `detail`(상황별 상세 JSON), `source_url`(출처 링크), `checklist`를 더한다. 상세를 열기만 해서는 읽음 처리되지 않는다.
+`checklist`: `{"before": [사전 대비...], "after": [사후 조치...], "sources": [{"name": "기상청 특보별 행동요령"}, ...]}`. 체크리스트가 없는 종류(수입량 급증·정부 발표)는 `null`. 특보 유형(한파·호우·태풍 등)별 내용은 코드 상수(`alerts/checklists.py`)이고, 모르는 유형은 일반 체크리스트.
+**오류**: `404 NOT_FOUND`
+
+#### `PATCH /api/alerts/{id}/read` — 읽음 처리
+본문 없음. `200`, `data`는 목록 항목과 같은 모양(`read_at` 채워짐). 이미 읽은 알림은 처음 읽은 시각을 유지한다.
+**오류**: `404 NOT_FOUND`
+
 ---
 
 ## 3. 2주차 이후 API (주소 목록)
