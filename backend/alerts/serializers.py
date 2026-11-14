@@ -1,8 +1,15 @@
+from zoneinfo import ZoneInfo
+
+from django.utils import timezone
+
 from .checklists import checklist_for
+
+KST = ZoneInfo('Asia/Seoul')
 
 
 def iso(dt):
-    return dt.isoformat().replace('+00:00', 'Z') if dt else None
+    """UTC로 저장된 일시를 한국 시간 ISO 8601로 (api.md 1.1, prices와 같은 형식)"""
+    return timezone.localtime(dt, KST).isoformat() if dt else None
 
 
 def alert_item(alert):

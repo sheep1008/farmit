@@ -15,9 +15,11 @@ def positive_int(value, default, maximum=None):
     """쿼리 값을 양의 정수로. 잘못되면 None"""
     if value is None:
         return default
-    if not value.isdigit() or int(value) < 1 or (maximum and int(value) > maximum):
+    # isdigit()는 '²' 같은 유니코드 숫자도 통과시켜 int()에서 500이 난다 → 아스키 숫자만
+    if not (value.isascii() and value.isdecimal()) or len(value) > 9:
         return None
-    return int(value)
+    n = int(value)
+    return n if n >= 1 and (not maximum or n <= maximum) else None
 
 
 def get_my_alert(user, alert_id):
@@ -41,6 +43,8 @@ def alert_list(request):
         qs = qs.filter(read_at__isnull=True)
     total = qs.count()
     start = (page - 1) * size
+    if start >= total:   # 범위를 넘은 페이지는 DB에 물어보지 않고 빈 배열
+        return ok([], {'page': page, 'size': size, 'total': total})
     rows = qs.order_by('-special_event__occurred_at', '-id')[start:start + size]
     return ok([alert_item(a) for a in rows], {'page': page, 'size': size, 'total': total})
 
@@ -64,7 +68,7 @@ def alert_read(request, alert_id):
     alert = get_my_alert(request.user, alert_id)
     if alert is None:
         return error(404, 'NOT_FOUND', '없는 알림입니다.')
-    if alert.read_at is None:
-        alert.read_at = timezone.now()
-        alert.save(update_fields=['read_at'])
+    # 조건부 UPDATE: 동시에 두 번 눌려도 처음 읽은 시각이 유지된다
+    Alert.objects.filter(pk=alert.pk, read_at__isnull=True).update(read_at=timezone.now())
+    alert.refresh_from_db()
     return ok(alert_item(alert))

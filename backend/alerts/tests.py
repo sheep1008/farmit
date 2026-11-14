@@ -139,7 +139,7 @@ class AlertApiTests(TestCase):
 
     def test_잘못된_쿼리는_400(self):
         self.login()
-        for q in ['size=500', 'page=0', 'page=abc', 'unread=maybe']:
+        for q in ['size=500', 'page=0', 'page=abc', 'page=²', 'page=99999999999999999999', 'unread=maybe']:
             res = self.client.get(f'/api/alerts?{q}')
             self.assertEqual((res.status_code, res.json()['error']['code']), (400, 'INVALID_PARAMETER'), q)
 
@@ -192,3 +192,40 @@ class AlertApiTests(TestCase):
         alert = Alert.objects.create(user=self.me, special_event=self.weird)
         generic = self.client.get(f'/api/alerts/{alert.id}').json()['data']['checklist']
         self.assertEqual(generic['before'], GENERIC['before'])
+
+    def test_알림이_없으면_200과_빈_배열(self):
+        self.client.force_login(self.other)
+        Alert.objects.filter(user=self.other).delete()
+        res = self.client.get('/api/alerts')
+        self.assertEqual((res.status_code, res.json()['data'], res.json()['meta']['total']), (200, [], 0))
+        self.login()
+        Alert.objects.filter(user=self.me).update(read_at=self.cold.occurred_at)
+        self.assertEqual(self.client.get('/api/alerts?unread=true').json()['data'], [])
+
+    def test_특보가_아닌_알림은_체크리스트가_null(self):
+        from datetime import datetime, timezone as tz
+        notice = SpecialEvent.objects.create(
+            event_type='GOV_NOTICE', sido='전국', occurred_at=datetime(2026, 11, 7, tzinfo=tz.utc),
+            title='정부 발표', detail={}, source_url='https://www.mafra.go.kr', source_ref='n1')
+        alert = Alert.objects.create(user=self.me, special_event=notice)
+        self.login()
+        res = self.client.get(f'/api/alerts/{alert.id}')
+        self.assertEqual((res.status_code, res.json()['data']['checklist']), (200, None))
+
+    def test_읽음_처리에_CSRF_토큰이_없으면_403(self):
+        from rest_framework.test import APIClient
+        client = APIClient(enforce_csrf_checks=True)
+        client.force_login(self.me)
+        res = client.patch(f'/api/alerts/{self.mine_cold.id}/read')
+        self.assertEqual((res.status_code, res.json()['error']['code']), (403, 'CSRF_FAILED'))
+
+    def test_일시는_한국_시간_ISO(self):
+        self.login()
+        # 2026-11-06T02:00Z = 한국 11:00 (api.md 1.1)
+        data = self.client.get(f'/api/alerts/{self.mine_cold.id}').json()['data']
+        self.assertEqual(data['occurred_at'], '2026-11-06T11:00:00+09:00')
+
+    def test_범위를_넘은_페이지는_빈_배열(self):
+        self.login()
+        res = self.client.get('/api/alerts?page=99')
+        self.assertEqual((res.status_code, res.json()['data'], res.json()['meta']['total']), (200, [], 2))
