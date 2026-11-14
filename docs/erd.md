@@ -374,7 +374,7 @@ erDiagram
 **삭제 규칙 (`on_delete`).** DB의 FK 제약이 아니라 Django가 처리한다 (2.2절 마지막 문단 참고).
 | 규칙 | 해당 | 의미 |
 |---|---|---|
-| `PROTECT` | `settle_price`·`auction_trade`의 `market`, `item`, `item_producing_area.station` | 가격 이력이 있는 시장·품목, 주산지가 쓰는 관측소는 지울 수 없다 |
+| `PROTECT` | `settle_price`·`auction_trade`의 `market`, `item`, `crop_production.item`, `item_producing_area.station` | 가격 이력이 있는 시장·품목, 주산지가 쓰는 관측소는 지울 수 없다 |
 | `CASCADE` | `user_interest_item`(`user`, `item`), `user_profile.user`, `market_closure.market`, `item_producing_area.item`, `weather_daily.station` | 부모를 지우면 함께 지운다 |
 
 **기본값.** `default`는 Django가 값을 채울 때만 적용되고 DB에는 기본값이 없다. SQL로 직접 INSERT하는 수집기는 값을 직접 넣어야 한다. DB에도 기본값을 심을지(`db_default`)는 수집기를 만들 때 정한다.
@@ -403,6 +403,7 @@ erDiagram
 | `forecast` | item_id, market_id, base_week(예측 기준 월요일), horizon(1~4), target_week, pred_price, lower80, upper80, last_week_price, model_version, created_at | UK(item_id, market_id, base_week, horizon). 지난 예측도 지우지 않음 | REQ-PRD-001~005 |
 | `special_event` | event_type(WARNING·IMPORT_SURGE·PEST_INCREASE·GOV_NOTICE), item_id(없으면 NULL), sido, sigungu(NULL이면 시도 전체), occurred_at, title, detail(JSON: 비교 수치 등), source_url, source_ref | 특수 상황 1건 = 1행. UK(event_type, source_ref) `uq_special_event_source`. 기상특보는 source_ref = `source_key:status`, 상태가 발표·변경발표일 때만 만든다. **구현됨** (`alerts` 앱) | REQ-ALT-001, 004~006 |
 | `alert` | user_id, special_event_id, created_at, read_at | 회원별 알림. read_at이 NULL이면 안 읽음. UK(user_id, special_event_id) `uq_alert_user_event`. **구현됨** (`alerts` 앱) | REQ-ALT-003 |
+| `crop_production` | item_id, year, area_ha(ha), production_kg(KOSIS 톤 × 1000), yield_kg_10a(10a당 kg), kosis_updated_on(KOSIS 최종 수정일 `LST_CHN_DE`) | UK(item_id, year) `uk_crop_production`. KOSIS 과실생산량(DT_1ET0292) **전국·연** 단위. item 이름과 정확히 같은 과일만 저장(`기타`처럼 item에 이름이 둘이면 제외). 값 3개는 KOSIS에 없을 수 있어 NULL 허용. 예측은 `kosis_updated_on` 뒤에만 그해 값을 쓴다(공표 전 값 누수 방지). `collectors/weather/kosis.py`가 UPSERT. **구현됨** (`prices` 앱) | REQ-COL-003 |
 | `import_monthly` | item_id, hs_code, ym, import_kg, import_usd | UK(hs_code, ym) | REQ-ALT-004, REQ-HIS-001 |
 | `pest_survey` | ncpms_crop_code, sido, sigungu, survey_year, survey_round, survey_date, pest_name, value | 예찰 회차별 결과 | REQ-ALT-005, REQ-HIS-001 |
 | `past_case` | item_id, market_id, event_type, sido, event_start, event_end, base_price, change_w1, change_w2, change_w3, change_w4 | Spark 계산 결과 | REQ-HIS-001 |
