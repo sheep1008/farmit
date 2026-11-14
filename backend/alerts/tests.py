@@ -89,3 +89,143 @@ class WarningAlertTests(TestCase):
         result, users = handle_warning_event(warning_msg('L1031200', '당진시'))
         self.assertEqual(users, 0)
         self.assertEqual(SpecialEvent.objects.count(), 1)
+
+
+class AlertApiTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import datetime, timezone as tz
+        User = get_user_model()
+        cls.me = User.objects.create_user('me00')
+        cls.other = User.objects.create_user('other')
+
+        def event(ref, wtype, hour):
+            return SpecialEvent.objects.create(
+                event_type='WARNING', sido='경기도', sigungu='가평군',
+                occurred_at=datetime(2026, 11, 6, hour, tzinfo=tz.utc),
+                title=f'가평군 {wtype}주의보 발표', detail={'warning_type': wtype},
+                source_url='https://www.weather.go.kr', source_ref=ref)
+
+        cls.cold = event('a', '한파', 2)
+        cls.rain = event('b', '호우', 3)
+        cls.weird = event('c', '없는유형', 4)
+        cls.mine_cold = Alert.objects.create(user=cls.me, special_event=cls.cold)
+        cls.mine_rain = Alert.objects.create(user=cls.me, special_event=cls.rain)
+        cls.others = Alert.objects.create(user=cls.other, special_event=cls.cold)
+
+    def login(self):
+        self.client.force_login(self.me)
+
+    def test_로그인_없으면_401(self):
+        for method, url in [('get', '/api/alerts'), ('get', f'/api/alerts/{self.mine_cold.id}'),
+                            ('patch', f'/api/alerts/{self.mine_cold.id}/read')]:
+            res = getattr(self.client, method)(url)
+            self.assertEqual((res.status_code, res.json()['error']['code']), (401, 'NOT_AUTHENTICATED'))
+
+    def test_목록은_내_알림만_최신순(self):
+        self.login()
+        res = self.client.get('/api/alerts')
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual([a['id'] for a in body['data']], [self.mine_rain.id, self.mine_cold.id])
+        self.assertEqual(body['meta'], {'page': 1, 'size': 20, 'total': 2})
+        self.assertFalse(body['data'][0]['is_read'])
+
+    def test_페이지_나눔(self):
+        self.login()
+        body = self.client.get('/api/alerts?page=2&size=1').json()
+        self.assertEqual([a['id'] for a in body['data']], [self.mine_cold.id])
+        self.assertEqual(body['meta']['total'], 2)
+
+    def test_잘못된_쿼리는_400(self):
+        self.login()
+        for q in ['size=500', 'page=0', 'page=abc', 'page=²', 'page=99999999999999999999', 'unread=maybe']:
+            res = self.client.get(f'/api/alerts?{q}')
+            self.assertEqual((res.status_code, res.json()['error']['code']), (400, 'INVALID_PARAMETER'), q)
+
+    def test_unread_필터(self):
+        self.login()
+        self.client.patch(f'/api/alerts/{self.mine_rain.id}/read')
+        body = self.client.get('/api/alerts?unread=true').json()
+        self.assertEqual([a['id'] for a in body['data']], [self.mine_cold.id])
+        self.assertEqual(body['meta']['total'], 1)
+
+    def test_남의_알림은_404(self):
+        self.login()
+        for method, url in [('get', f'/api/alerts/{self.others.id}'), ('patch', f'/api/alerts/{self.others.id}/read'),
+                            ('get', '/api/alerts/999999')]:
+            res = getattr(self.client, method)(url)
+            self.assertEqual((res.status_code, res.json()['error']['code']), (404, 'NOT_FOUND'))
+        self.others.refresh_from_db()
+        self.assertIsNone(self.others.read_at)
+
+    def test_읽음_처리하면_read_at이_채워지고_다시_해도_유지(self):
+        self.login()
+        res = self.client.patch(f'/api/alerts/{self.mine_cold.id}/read')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()['data']['is_read'])
+        self.mine_cold.refresh_from_db()
+        first = self.mine_cold.read_at
+        self.assertIsNotNone(first)
+        self.client.patch(f'/api/alerts/{self.mine_cold.id}/read')
+        self.mine_cold.refresh_from_db()
+        self.assertEqual(self.mine_cold.read_at, first)
+
+    def test_상세에_체크리스트와_출처가_있다(self):
+        self.login()
+        data = self.client.get(f'/api/alerts/{self.mine_cold.id}').json()['data']
+        self.assertEqual(data['title'], '가평군 한파주의보 발표')
+        self.assertEqual(data['source_url'], 'https://www.weather.go.kr')
+        cl = data['checklist']
+        self.assertTrue(cl['before'] and cl['after'] and cl['sources'])
+        self.assertTrue(all(s['name'] for s in cl['sources']))
+        # 상세를 열기만 해서는 읽음 처리되지 않는다
+        self.mine_cold.refresh_from_db()
+        self.assertIsNone(self.mine_cold.read_at)
+
+    def test_유형별로_다른_체크리스트_모르는_유형은_일반(self):
+        from .checklists import GENERIC
+        self.login()
+        rain = self.client.get(f'/api/alerts/{self.mine_rain.id}').json()['data']['checklist']
+        cold = self.client.get(f'/api/alerts/{self.mine_cold.id}').json()['data']['checklist']
+        self.assertNotEqual(rain['before'], cold['before'])
+        alert = Alert.objects.create(user=self.me, special_event=self.weird)
+        generic = self.client.get(f'/api/alerts/{alert.id}').json()['data']['checklist']
+        self.assertEqual(generic['before'], GENERIC['before'])
+
+    def test_알림이_없으면_200과_빈_배열(self):
+        self.client.force_login(self.other)
+        Alert.objects.filter(user=self.other).delete()
+        res = self.client.get('/api/alerts')
+        self.assertEqual((res.status_code, res.json()['data'], res.json()['meta']['total']), (200, [], 0))
+        self.login()
+        Alert.objects.filter(user=self.me).update(read_at=self.cold.occurred_at)
+        self.assertEqual(self.client.get('/api/alerts?unread=true').json()['data'], [])
+
+    def test_특보가_아닌_알림은_체크리스트가_null(self):
+        from datetime import datetime, timezone as tz
+        notice = SpecialEvent.objects.create(
+            event_type='GOV_NOTICE', sido='전국', occurred_at=datetime(2026, 11, 7, tzinfo=tz.utc),
+            title='정부 발표', detail={}, source_url='https://www.mafra.go.kr', source_ref='n1')
+        alert = Alert.objects.create(user=self.me, special_event=notice)
+        self.login()
+        res = self.client.get(f'/api/alerts/{alert.id}')
+        self.assertEqual((res.status_code, res.json()['data']['checklist']), (200, None))
+
+    def test_읽음_처리에_CSRF_토큰이_없으면_403(self):
+        from rest_framework.test import APIClient
+        client = APIClient(enforce_csrf_checks=True)
+        client.force_login(self.me)
+        res = client.patch(f'/api/alerts/{self.mine_cold.id}/read')
+        self.assertEqual((res.status_code, res.json()['error']['code']), (403, 'CSRF_FAILED'))
+
+    def test_일시는_한국_시간_ISO(self):
+        self.login()
+        # 2026-11-06T02:00Z = 한국 11:00 (api.md 1.1)
+        data = self.client.get(f'/api/alerts/{self.mine_cold.id}').json()['data']
+        self.assertEqual(data['occurred_at'], '2026-11-06T11:00:00+09:00')
+
+    def test_범위를_넘은_페이지는_빈_배열(self):
+        self.login()
+        res = self.client.get('/api/alerts?page=99')
+        self.assertEqual((res.status_code, res.json()['data'], res.json()['meta']['total']), (200, [], 2))
