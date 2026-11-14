@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-// 화면 아래에 잠깐 떴다 사라지는 알림. 모양은 K07 공통 레이아웃에서 다듬는다.
+// 화면 아래에 잠깐 떴다 사라지는 알림. 모양은 components/ToastList.vue.
 const SHOW_MS = 4000
 
 export const useToastStore = defineStore('toast', () => {
