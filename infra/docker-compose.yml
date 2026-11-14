@@ -36,6 +36,20 @@ services:
       mysql:
         condition: service_healthy # mysql healthcheck가 통과한 뒤 시작
 
+  # Vue 3 + Vite dev server. /api 요청은 Vite 프록시가 backend:8000 으로 넘긴다 (K05)
+  frontend:
+    build: ../frontend
+    environment:
+      API_PROXY_TARGET: http://backend:8000
+      VITE_USE_POLLING: "true"     # Windows 바인드 마운트는 파일 변경 알림이 안 와서 폴링으로 감지한다
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../frontend:/app           # 코드 저장 시 화면이 자동 새로고침된다 (HMR)
+      - frontend-node-modules:/app/node_modules   # node_modules는 이미지 것을 쓴다 (내 PC 폴더로 덮이지 않게)
+    depends_on:
+      - backend
+
   # ── 실시간 경로: 수집기 → Kafka → Flink → MySQL ──────────────────────────
   kafka:
     image: apache/kafka:3.9.1      # KRaft 모드(ZooKeeper 없음), 브로커+컨트롤러 1대
@@ -173,3 +187,4 @@ services:
 
 volumes:
   mysql-data:
+  frontend-node-modules:
