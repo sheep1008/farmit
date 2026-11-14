@@ -1,0 +1,5 @@
+# auction·weather_warning은 각자 이미지가 있고, explore는 일회성 스크립트라 이 이미지에 넣지 않는다
+auction/
+weather_warning/
+explore/
+**/__pycache__/
