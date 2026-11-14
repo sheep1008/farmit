@@ -141,6 +141,18 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
+  # 배치 수집기 실행 환경: collectors/common(공통 모듈)을 쓰는 수집기를 python -m 으로 한 번씩 실행한다 (K03)
+  # 계속 떠 있는 서비스가 아니라서 기본으로는 뜨지 않는다. 실행: --profile collect run --rm collectors python -m <모듈>
+  collectors:
+    build: ../collectors
+    profiles: ["collect"]
+    env_file: ../.env              # MYSQL_*, DB_HOST·DB_PORT, API 키
+    volumes:
+      - ../collectors:/app         # 코드 변경이 다시 빌드하지 않아도 반영된다
+    depends_on:
+      mysql:
+        condition: service_healthy
+
   # 기상특보 알림: weather.warning.event를 읽어 special_event·alert를 만든다 (REQ-ALT-001)
   # backend 이미지·코드를 그대로 쓴다. 테이블은 backend가 시작할 때 migrate로 만든다
   alert-consumer:

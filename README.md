@@ -18,7 +18,7 @@ SSAFY 관통 프로젝트 · 양정호, 김기현 · 2026-10-19 ~ 2026-12-24
 ```
 backend/       Django API 서버 (config: 설정, api: health 등 공통)
 frontend/      Vue 웹
-collectors/    Open API 수집기. 수집기마다 폴더 하나 (Dockerfile·requirements.txt 포함). Kafka로 보내는 것도 여기 (auction, weather_warning)
+collectors/    Open API 수집기. 실시간(Kafka로 보냄)은 수집기마다 폴더 하나 (auction, weather_warning). 배치 수집기는 common/(DB·UPSERT·재시도·collect_log)을 같이 쓴다
 streaming/     Flink 작업 (flink/*.sql, submit.sh). 실시간 경로의 처리 단계
 batch/         Spark 작업, Airflow DAG (배치 경로)
 ml/            가격 예측 (farmit_ml 운영 패키지, config/ 모델 구성, experiments/ 전국 확장 실험). docs/ml.md 참고
@@ -74,6 +74,25 @@ docker compose -f infra/docker-compose.yml exec backend python manage.py loaddat
 - `markets_collect.json`의 시장 위도·경도는 `0`(임시)이다. 실제 좌표는 Y01(시장 33곳 초기 데이터)에서 채운다.
 - `.env`의 `MYSQL_*` 값과 `infra/mysql/init/` 스크립트는 **DB 볼륨이 비어 있을 때(첫 실행)만** 적용된다. 바꾼 뒤에는 `down -v`로 볼륨을 지우고 다시 띄운다.
 - backend는 시작할 때 `migrate`를 먼저 실행한다.
+
+### 배치 수집기 (수집기 → MySQL, `collectors/common` 사용)
+
+정산·날씨 등 하루 단위 수집기는 `collectors` 서비스에서 `python -m`으로 한 번씩 실행한다. 계속 떠 있지 않으므로 `--profile collect`로만 뜬다.
+
+```bash
+# 공통 모듈 테스트 (DB 테스트는 test_<DB이름> DB에서 돌고 끝나면 지운다. manage.py test와 동시에 돌리지 않는다)
+docker compose -f infra/docker-compose.yml --profile collect run --rm collectors python -m unittest -v
+
+# 수집기 실행 (모듈 이름은 수집기를 만들 때 정한다)
+docker compose -f infra/docker-compose.yml --profile collect run --rm collectors python -m <모듈> ...
+
+# 수집 기록 보기
+docker compose -f infra/docker-compose.yml exec mysql sh -c 'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e "SELECT * FROM collect_log ORDER BY id DESC LIMIT 10"'
+```
+
+- 수집 함수에 `@collect_run("출처", daily_limit=...)`를 붙이면 성공·부분 실패·실패와 상관없이 `collect_log`에 한 줄 남는다. API는 `run.get()`으로 불러야 호출 수가 쌓이고 한도 전에 멈춘다.
+- 저장은 `upsert()`(INSERT … ON DUPLICATE KEY UPDATE)로 한다. 같은 날짜를 다시 돌려도 테이블의 UNIQUE 키 때문에 행이 늘지 않는다.
+- `requirements.txt`·`Dockerfile`을 바꾸면 `run` 앞에 `build collectors`를 한 번 한다.
 
 ### 실시간 수집 (수집기 → Kafka → Flink → MySQL·알림)
 

@@ -1,0 +1,5 @@
+# 수집기 공통 모듈(collectors/common)과 이것을 쓰는 배치 수집기 의존성
+# (auction·weather_warning은 각자 requirements.txt가 있다)
+PyMySQL==1.1.1
+# MySQL 8.4 기본 인증(caching_sha2_password)을 PyMySQL로 접속할 때 필요
+cryptography==43.0.3
