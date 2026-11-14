@@ -48,6 +48,7 @@ curl localhost:8000/api/health
 
 | 서비스 | 주소 | 비고 |
 |---|---|---|
+| frontend (Vue 3 + Vite) | http://localhost:5173 | `frontend/`가 마운트되어 저장 시 자동 새로고침. `/api`는 backend로 프록시. 패키지를 바꾸면 `up --build -V frontend` (node_modules 볼륨을 새로 만든다) |
 | backend (Django) | http://localhost:8000 | `backend/`가 마운트되어 코드 저장 시 자동 재시작 |
 | mysql 8.4 | localhost:**3307** | DB 도구로 접속할 때. 컨테이너끼리는 `mysql:3306` |
 | kafka 3.9 (KRaft) | localhost:**29092** | 내 PC에서만 열림. 컨테이너끼리는 `kafka:9092`. 볼륨이 없어 `down` 하면 토픽이 지워진다 |
