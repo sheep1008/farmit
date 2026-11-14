@@ -1,7 +1,8 @@
 @import './base.css';
 
+/* 헤더·본문·푸터를 세로로 쌓고, 본문이 짧아도 푸터가 화면 아래에 붙게 한다 */
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }

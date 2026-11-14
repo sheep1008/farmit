@@ -1,52 +1,65 @@
-/* color palette from <https://github.com/vuejs/theme> */
+/*
+ * 팜잇 디자인 변수 (K07). 화면·컴포넌트에서는 색·글꼴 값을 직접 쓰지 말고 아래 변수를 쓴다.
+ * 다크 모드는 운영체제 설정(prefers-color-scheme)을 따른다 → 색 변수만 바꾸면 모든 화면이 같이 바뀐다.
+ */
 :root {
-  --vt-c-white: #ffffff;
-  --vt-c-white-soft: #f8f8f8;
-  --vt-c-white-mute: #f2f2f2;
+  /* 바탕·선 */
+  --color-background: #ffffff;
+  --color-background-soft: #f8f8f8; /* 카드·입력칸 바탕 */
+  --color-background-mute: #f0f0f0; /* 마우스를 올렸을 때 */
+  --color-border: rgba(60, 60, 60, 0.12);
+  --color-border-hover: rgba(60, 60, 60, 0.29);
 
-  --vt-c-black: #181818;
-  --vt-c-black-soft: #222222;
-  --vt-c-black-mute: #282828;
+  /* 글자 */
+  --color-heading: #1f2d3a;
+  --color-text: #2c3e50;
+  --color-text-muted: rgba(60, 60, 60, 0.66); /* 보조 설명, 빈 상태 문구 */
 
-  --vt-c-indigo: #2c3e50;
+  /* 강조(팜잇 초록)·상태 */
+  --color-primary: #2e7d32;
+  --color-primary-hover: #1b5e20;
+  --color-on-primary: #ffffff; /* 강조색 위 글자 */
+  --color-danger: #d32f2f; /* 입력 오류, 삭제, 알림 숫자 */
+  --color-on-danger: #ffffff;
+  --color-toast-background: #323232;
+  --color-toast-text: #ffffff;
 
-  --vt-c-divider-light-1: rgba(60, 60, 60, 0.29);
-  --vt-c-divider-light-2: rgba(60, 60, 60, 0.12);
-  --vt-c-divider-dark-1: rgba(84, 84, 84, 0.65);
-  --vt-c-divider-dark-2: rgba(84, 84, 84, 0.48);
+  /* 글꼴 */
+  --font-sans:
+    Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, -apple-system,
+    'Segoe UI', Roboto, sans-serif;
+  --font-size-sm: 0.85rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
 
-  --vt-c-text-light-1: var(--vt-c-indigo);
-  --vt-c-text-light-2: rgba(60, 60, 60, 0.66);
-  --vt-c-text-dark-1: var(--vt-c-white);
-  --vt-c-text-dark-2: rgba(235, 235, 235, 0.64);
-}
-
-/* semantic color variables for this project */
-:root {
-  --color-background: var(--vt-c-white);
-  --color-background-soft: var(--vt-c-white-soft);
-  --color-background-mute: var(--vt-c-white-mute);
-
-  --color-border: var(--vt-c-divider-light-2);
-  --color-border-hover: var(--vt-c-divider-light-1);
-
-  --color-heading: var(--vt-c-text-light-1);
-  --color-text: var(--vt-c-text-light-1);
-
-  --section-gap: 160px;
+  /* 모양 */
+  --radius: 6px;
+  --focus-ring: 0 0 0 3px rgba(46, 125, 50, 0.35);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-background: var(--vt-c-black);
-    --color-background-soft: var(--vt-c-black-soft);
-    --color-background-mute: var(--vt-c-black-mute);
+    --color-background: #181818;
+    --color-background-soft: #222222;
+    --color-background-mute: #2c2c2c;
+    --color-border: rgba(84, 84, 84, 0.48);
+    --color-border-hover: rgba(84, 84, 84, 0.65);
 
-    --color-border: var(--vt-c-divider-dark-2);
-    --color-border-hover: var(--vt-c-divider-dark-1);
+    --color-heading: #ffffff;
+    --color-text: rgba(235, 235, 235, 0.86);
+    --color-text-muted: rgba(235, 235, 235, 0.6);
 
-    --color-heading: var(--vt-c-text-dark-1);
-    --color-text: var(--vt-c-text-dark-2);
+    /* 어두운 바탕에서는 밝은 초록 + 어두운 글자로 대비를 맞춘다 */
+    --color-primary: #66bb6a;
+    --color-primary-hover: #81c784;
+    --color-on-primary: #0d1f0e;
+    --color-danger: #ef5350;
+    --color-on-danger: #1a0000;
+    --color-toast-background: #e0e0e0;
+    --color-toast-text: #181818;
+
+    --focus-ring: 0 0 0 3px rgba(102, 187, 106, 0.4);
   }
 }
 
@@ -66,21 +79,24 @@ body {
     color 0.5s,
     background-color 0.5s;
   line-height: 1.6;
-  font-family:
-    Inter,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    'Fira Sans',
-    'Droid Sans',
-    'Helvetica Neue',
-    sans-serif;
+  font-family: var(--font-sans);
   font-size: 15px;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--color-heading);
+}
+
+/* 버튼·입력칸은 브라우저 기본 글꼴 대신 본문 글꼴을 쓴다 */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
 }

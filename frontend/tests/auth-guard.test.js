@@ -19,6 +19,7 @@ function makeRouter() {
       { path: '/', name: 'home', component: Empty },
       { path: '/login', name: 'login', component: Empty },
       { path: '/mypage', name: 'mypage', component: Empty, meta: { requiresAuth: true } },
+      { path: '/error/:kind', name: 'error', component: Empty },
     ],
   })
   router.beforeEach(requireAuth)
@@ -31,14 +32,15 @@ beforeEach(() => {
 })
 
 describe('로그인 상태 스토어 + 라우터 가드', () => {
-  it('비로그인(/users/me 401)이면 회원 전용 화면에서 로그인으로 보낸다', async () => {
+  it('비로그인(/users/me 401)이면 회원 전용 화면에서 로그인 필요 안내(SCR-017)로 보낸다', async () => {
     http.get.mockImplementation(async (url) => {
       if (url === '/users/me') throw unauthorized()
     })
     const router = makeRouter()
-    await router.push('/mypage')
-    expect(router.currentRoute.value.name).toBe('login')
-    expect(router.currentRoute.value.query.next).toBe('/mypage')
+    await router.push('/mypage?tab=1')
+    expect(router.currentRoute.value.name).toBe('error')
+    expect(router.currentRoute.value.params.kind).toBe('login-required')
+    expect(router.currentRoute.value.query.next).toBe('/mypage?tab=1') // 로그인 뒤 돌아올 주소(쿼리 포함)
   })
 
   it('로그인 상태면 회원 전용 화면에 들어간다', async () => {
@@ -59,11 +61,11 @@ describe('로그인 상태 스토어 + 라우터 가드', () => {
     expect(http.get.mock.calls[1][1]).toEqual({ skipAuthRedirect: true })
   })
 
-  it('백엔드가 꺼져 있으면 비로그인으로 보고 로그인으로 보낸다', async () => {
+  it('백엔드가 꺼져 있으면 비로그인으로 보고 로그인 필요 안내로 보낸다', async () => {
     http.get.mockRejectedValue(new Error('Network Error'))
     const router = makeRouter()
     await router.push('/mypage')
-    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.params.kind).toBe('login-required')
     expect(useAuthStore().isLoggedIn).toBe(false)
   })
 
