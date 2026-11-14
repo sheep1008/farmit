@@ -284,7 +284,7 @@ erDiagram
 
 ### 2.3 가격
 
-**settle_price** — 정산 확정 가격. 원본을 Spark로 시장·품목·등급별로 모은 값 (REQ-PRC-001)
+**settle_price** — 정산 확정 가격. 원본을 수집기(`collectors/settle`)가 시장·품목·등급별로 모은 값 (REQ-PRC-001)
 | 컬럼 | 타입 | 키 | 설명 |
 |---|---|---|---|
 | id | bigint | PK | 자동 증가 |
