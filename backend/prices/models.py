@@ -90,3 +90,23 @@ class RealtimePrice(models.Model):
         constraints = [models.UniqueConstraint(fields=['trade_date', 'market', 'item'], name='uk_realtime_price')]
         # API는 품목으로 찾고 날짜로 거른다 (품목 → 날짜 순서)
         indexes = [models.Index(fields=['item', 'trade_date'], name='idx_realtime_item_date')]
+
+# 과실 생산량. KOSIS 과실생산량(DT_1ET0292) 전국·연 단위. 예측 피처용 (erd.md 3절, REQ-COL-003)
+class CropProduction(models.Model):
+    # item: 품목 FK. 생산량 이력이 있는 품목은 지울 수 없게 막는다 (PROTECT, DB 컬럼은 item_id)
+    item = models.ForeignKey(Item, on_delete=models.PROTECT)
+    # year: 연도 (KOSIS PRD_DE)
+    year = models.SmallIntegerField()
+    # area_ha: 재배면적 (ha). KOSIS에 값이 없는 해가 있을 수 있어 비어도 된다
+    area_ha = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # production_kg: 생산량 (kg). KOSIS 단위는 톤이라 1000을 곱해 저장한다 (CLAUDE.md 단위 규칙)
+    production_kg = models.BigIntegerField(null=True, blank=True)
+    # yield_kg_10a: 10a당 생산량 (kg)
+    yield_kg_10a = models.DecimalField(max_digits=8, decimal_places=1, null=True, blank=True)
+    # kosis_updated_on: KOSIS 최종 수정일 (LST_CHN_DE). 예측은 이 날짜 뒤에만 그해 값을 쓴다 (공표 전 값 누수 방지)
+    kosis_updated_on = models.DateField()
+
+    class Meta:
+        db_table = 'crop_production'
+        # 같은 해를 다시 수집해도 (품목, 연도) 행이 두 번 저장되지 않게 막는다 (UPSERT 기준)
+        constraints = [models.UniqueConstraint(fields=['item', 'year'], name='uk_crop_production')]
