@@ -13,7 +13,7 @@ from decimal import Decimal as D
 from unittest import mock
 
 from common import datagokr, db
-from weather import asos, check, holiday, kosis
+from weather import asos, check, holiday, kosis, producing_area
 
 
 def body(code="00", items=None):
@@ -260,3 +260,91 @@ class CheckDbTest(DbTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProducingAreaUnitTest(unittest.TestCase):
+    def test_area(self):
+        f = producing_area.area
+        self.assertEqual(f("경상북도 영주시"), ("경상북도", "영주시"))
+        self.assertEqual(f("(산지)강원특별자치도 평창군 대관령면"), ("강원특별자치도", "평창군"))
+        self.assertEqual(f("경기도 수원시권선구 고색동"), ("경기도", "수원시"))   # 구는 시로 묶는다
+        self.assertEqual(f("전남광주통합특별시 무안군    "), ("전라남도", "무안군"))  # 통합 시도는 옛 표기로
+        self.assertEqual(f("전남광주통합특별시 북구 운암동"), ("광주광역시", "북구"))
+        self.assertIsNone(f("미국"))
+        self.assertIsNone(f("경상북도"))
+
+    def test_pick_cover_and_min_share(self):
+        vol = {("경북", "영주시"): D(50), ("경북", "안동시"): D(20), ("충북", "충주시"): D(15),
+               ("전북", "무주군"): D(13), ("경기", "용인시"): D(2)}
+        # 50 → 70 → 85(80 넘음)에서 멈춘다. 무주군은 고르지 않는다
+        self.assertEqual([(a, b) for a, b, _ in producing_area.pick(vol)],
+                         [("경북", "영주시"), ("경북", "안동시"), ("충북", "충주시")])
+        self.assertEqual(producing_area.pick({("경북", "영주시"): D(98), ("경기", "용인시"): D(2)})[-1][1], "영주시")
+        self.assertEqual(producing_area.pick({}), [])
+
+    def test_nearest(self):
+        stations = [(136, 36.57, 128.71), (133, 36.37, 127.37)]   # 안동, 대전
+        sid, dist = producing_area.nearest((36.80, 128.62), stations)   # 영주 부근
+        self.assertEqual(sid, 136)
+        self.assertLess(dist, 30)
+
+
+def settle_body(rows):
+    return json.dumps({"response": {"header": {"resultCode": "0"},
+                                    "body": {"totalCount": len(rows), "items": {"item": rows}}}})
+
+
+def stn_text(lines):
+    """기상청 API허브 지점정보 모양. 한 줄: 번호 경도 위도 … 예보구역 법정동코드 수계 주소"""
+    head = ["#START7777", "# STN LON LAT ..."]
+    return "\n".join(head + [f"  {n}  {lon:.8f}  {lat:.8f} 35100  1.0  1.0  1.0  1.0  1.0  {n} 이름 Name "
+                              f"11D20401 5182033035 ---- {addr}" for n, lon, lat, addr in lines] + ["#7777END"])
+
+
+class ProducingAreaDbTest(DbTestCase):
+    """완료 기준: 주산지를 계산해 가장 가까운 관측소와 잇고, 다시 돌려도 행이 늘지 않으며, 빠진 시군구는 지운다."""
+
+    TABLES = ["collect_log", "item_producing_area", "market", "item", "weather_station"]
+
+    def setUp(self):
+        super().setUp()
+        env = mock.patch.dict(os.environ, {"KMA_APIHUB_KEY": "TESTKEY"})
+        env.start()
+        self.addCleanup(env.stop)
+        self.sql("INSERT INTO market (market_id, name, sido, lat, lng, is_collect, is_reference) "
+                 "VALUES ('110001', '서울가락', '서울', 37.5, 127.1, 0, 1)")
+        self.sql("INSERT INTO item (item_id, name, at_code, category, is_storable, is_forecast) "
+                 "VALUES (10, '사과', '0601', '과일', 1, 1)")
+        self.sql("INSERT INTO weather_station (station_id, name, sido, lat, lng) VALUES "
+                 "(136, '안동', '경상북도', 36.57, 128.71), (131, '청주', '충청북도', 36.64, 127.44)")
+        self.stn = stn_text([(273, 128.62, 36.80, "경상북도 영주시 풍기읍"), (999, 127.93, 36.97, "충청북도 충주시 안림동")])
+
+    def run_with(self, settle_rows):
+        def respond(params):
+            return self.stn if "inf" in params else settle_body(settle_rows)
+        with self.fake_get(respond):
+            return producing_area.collect(["사과"], conn=self.conn)
+
+    def test_run_twice_and_drop(self):
+        rows = [{"unit_nm": "kg", "unit_tot_qty": "70", "plor_nm": "경상북도 영주시"},
+                {"unit_nm": "kg", "unit_tot_qty": "30", "plor_nm": "충청북도 충주시"},
+                {"unit_nm": "상자", "unit_tot_qty": "999", "plor_nm": "경기도 용인시"}]   # kg 아님 → 뺀다
+        self.run_with(rows)
+        run = self.run_with(rows)
+        self.assertEqual(self.sql("SELECT sido, sigungu, station_id, volume_share FROM item_producing_area ORDER BY sigungu"),
+                         (("경상북도", "영주시", 136, D("70.00")), ("충청북도", "충주시", 131, D("30.00"))))
+        self.assertEqual(run.errors, [])
+        # 충주 물량이 거의 없어지면(3% 미만) 그 주산지는 지운다
+        self.run_with([rows[0], {"unit_nm": "kg", "unit_tot_qty": "1", "plor_nm": "충청북도 충주시"}])
+        self.assertEqual(self.sql("SELECT sigungu FROM item_producing_area"), (("영주시",),))
+        self.assertEqual({r[0] for r in self.sql("SELECT status FROM collect_log")}, {"success"})
+
+    def test_area_without_station_is_partial(self):
+        self.run_with([{"unit_nm": "kg", "unit_tot_qty": "100", "plor_nm": "경상북도 청송군"}])
+        (status, msg), = self.sql("SELECT status, error_msg FROM collect_log")
+        self.assertEqual(status, "partial")
+        self.assertIn("청송군", msg)
+
+    def test_unknown_item_fails(self):
+        with self.assertRaisesRegex(RuntimeError, "배"):
+            producing_area.collect(["배"], conn=self.conn)
