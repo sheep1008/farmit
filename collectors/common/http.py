@@ -19,13 +19,14 @@ def mask(text):
     return _KEY_RE.sub(r"\1=***", str(text))
 
 
-def get(url, params, key=None, retries=3, backoff=1.0, timeout=30, on_call=None):
+def get(url, params, key=None, retries=3, backoff=1.0, timeout=30, on_call=None, encoding="utf-8"):
     """GET 해서 본문 문자열을 돌려준다. JSON·XML 해석은 부르는 쪽이 한다.
 
     key=(파라미터 이름, 값)은 urlencode를 거치지 않고 붙인다. data.go.kr의 Encoding 키(%가 들어 있음)가
     두 번 인코딩되지 않게 하려는 것으로, collectors/auction·explore와 같은 방식이다.
     실패하면 backoff, 2×backoff, 4×backoff초 … 쉬고 다시 한다 (지수 백오프).
     on_call은 실제 요청을 보내기 직전마다 불린다 (호출 수 세기·한도 확인용, 재시도도 1건으로 센다).
+    encoding: 응답 본문 인코딩. 기상청 API허브는 euc-kr이다.
     """
     query = urllib.parse.urlencode(params)
     full = f"{url}?{key[0]}={key[1]}&{query}" if key else f"{url}?{query}"
@@ -34,7 +35,7 @@ def get(url, params, key=None, retries=3, backoff=1.0, timeout=30, on_call=None)
             on_call()
         try:
             with urllib.request.urlopen(full, timeout=timeout) as resp:
-                return resp.read().decode("utf-8")
+                return resp.read().decode(encoding)
         except urllib.error.HTTPError as e:
             if e.code not in RETRY_STATUS or attempt == retries - 1:
                 # from None: 원래 예외(URL 전체를 들고 있다)를 연결하지 않아 트레이스백에도 키가 남지 않는다

@@ -81,3 +81,38 @@ class CodeAdminAccessTest(TestCase):
         res = self.client.get(reverse('admin:codes_market_change', args=['990002']))
         self.assertEqual(res.status_code, 200)
         self.assertNotContains(res, 'name="market_id"')
+
+
+class WeatherStationFixtureTest(TestCase):
+    """REQ-COL-003: ASOS 관측소 목록(weather_station)은 migrate로 채워지고, 생성 스크립트가 응답을 바르게 읽는다."""
+
+    def test_migration_loads_stations(self):
+        # 0008 마이그레이션이 fixtures/weather_station.json을 넣는다 (테스트 DB에도 들어간다)
+        self.assertGreater(WeatherStation.objects.count(), 90)
+        seoul = WeatherStation.objects.get(station_id=108)
+        self.assertEqual((seoul.name, seoul.sido), ('서울', '서울특별시'))
+
+    def test_parse(self):
+        from codes.fixtures.build_weather_station import parse
+
+        # 실제 응답 줄 모양 (영문 이름·주소에 공백, (산지) 접두어, 통합 시도 이름)
+        text = '\n'.join([
+            '# STN LON LAT ...',
+            '  100  128.71834000   37.67713000 35400       772.43    773.43      1.70     10.00      1.40 100 '
+            '대관령               Daegwallyeong        11D20201 5176038024 ---- (산지)강원특별자치도 평창군 대관령면 횡계리   ',
+            '  156  126.89156000   35.17294000 11F20501   72.38     73.88      1.70     10.00      1.40 156 '
+            '광주                 Gwangju              11F20501 1230010900 ---- 전남광주통합특별시 북구 운암동',
+            '  259  126.76151000   34.62881000 11F20303   12.50     13.69      1.60     10.00      1.20 165 '
+            '강진군               Gangjin Gun          11F20303 1278031022 ---- 전남광주통합특별시 강진군 군동면 호계리',
+            '#7777END',
+        ])
+        rows = parse(text)
+        self.assertEqual([(r['station_id'], r['name'], r['sido']) for r in rows],
+                         [(100, '대관령', '강원특별자치도'), (156, '광주', '광주광역시'), (259, '강진군', '전라남도')])
+        self.assertEqual(rows[0]['lat'], '37.677130')
+
+    def test_parse_stops_on_unknown_line(self):
+        from codes.fixtures.build_weather_station import parse
+
+        with self.assertRaises(ValueError):
+            parse('이상한 줄')

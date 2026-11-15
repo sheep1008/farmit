@@ -112,6 +112,24 @@
 | `rain_mm` | `sumRn` | 빈 값이 올 수 있다 (`ml/experiments/weather.py`가 0으로 채우는 이유). `erd.md`대로 DB에는 0으로 채우지 않고 NULL로 둔다 |
 | `humidity` | `avgRhm` | % |
 
+### 3.1 관측소 목록 (기상청 API허브 지점정보)
+
+`GET https://apihub.kma.go.kr/api/typ01/url/stn_inf.php?inf=SFC&stn=&tm=YYYYMMDDHHMM&authKey=...` — `tm` 시각에 운영 중인 지상(ASOS) 지점
+
+- 인증키는 공공데이터포털과 따로다 (`KMA_APIHUB_KEY`, API허브 회원가입 → "지상관측 지점정보 조회 > 지상" 활용신청).
+- 응답은 **EUC-KR 텍스트**다. `#`으로 시작하는 줄은 설명이고, 한 줄이 지점 하나다 (공백으로 나뉜 칸: 지점번호·경도·위도·…·지점명·영문명·예보구역·법정동코드·수계·법정동주소). 영문명·주소에 공백이 있다.
+- 2026-11-15 기준 97곳. 주소의 시도가 `전남광주통합특별시`로 오므로, 특보구역(`warning_zone`)과 같은 옛 표기로 나눠 저장한다 (구 → 광주광역시, 시·군 → 전라남도).
+- 수집기가 아니라 `backend/codes/fixtures/build_weather_station.py`가 `weather_station.json`을 만들고, 마이그레이션 `codes.0008`이 넣는다. 그래서 키가 없어도 `migrate`만 하면 채워진다.
+
+### 3.2 주산지 (`item_producing_area`)
+
+`python -m weather.producing_area [--items 사과 …]` (K29). 키 두 개(`DATA_GO_KR_KEY`, `KMA_APIHUB_KEY`)가 필요하다.
+
+- 원산지: aT 정산(2절)을 최근 1년, 수집 대상 시장마다 다시 받는다. `settle_price`는 원산지를 저장하지 않기 때문이다. `plor_nm`은 `"경상북도 영주시"`처럼 시도·시군구로 오고, 통합 시도(`전남광주통합특별시 …`)도 섞여 온다. kg 단위 행만 더한다.
+- 고르는 기준: 시군구 물량 비중이 큰 순서로 누적 80%까지, 한 곳이 3% 미만이면 거기서 멈춘다. 2026-11-15 사과: 원산지 102곳 중 8곳(합계 약 70%), 정산 호출 70건.
+- 관측소 연결: 시군구 위치 = 그 시군구 안 기상청 지점(ASOS+AWS, 3.1절 API의 `inf=SFC`·`inf=AWS`)의 평균 위경도. 가장 가까운 `weather_station`을 잇는다 (사과 8곳 모두 30km 이내).
+- 다시 돌리면 그 품목의 주산지를 이번 결과로 바꾼다 (빠진 시군구는 지운다).
+
 ## 4. 한국천문연구원 특일 정보 (공휴일)
 
 `GET https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo`
