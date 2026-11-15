@@ -250,6 +250,31 @@ def daily(request):
                      'last_updated': _kst_iso(last_log.finished_at) if last_log else None})
 
 
+def market_prices(item, grade, day=None):
+    """같은 날 수집 대상 시장의 정산 가격 (compare와 판매 추천의 시장 비교가 함께 쓴다).
+
+    day가 없으면 그 품목·등급의 가장 최근 정산일. 돌려주는 값: (시장별 행 목록, 쓴 날짜 또는 None).
+    """
+    # 참고 시장(가락)은 비교에 넣지 않는다 (api.md 2.3). is_collect 값에만 기대지 않고 명시한다
+    markets = list(Market.objects.filter(is_collect=True, is_reference=False).order_by('market_id'))
+    if day is None:
+        # 가장 최근 정산일 = 이 품목·등급의 가장 늦은 거래정산일자
+        day = (SettlePrice.objects.filter(item=item, grade=grade, market__in=markets)
+               .aggregate(latest=Max('trade_date'))['latest'])
+    rows = {}
+    if day is not None:
+        rows = {r.market_id: r for r in SettlePrice.objects.filter(
+            item=item, grade=grade, trade_date=day, market__in=markets)}
+
+    data = []
+    for market in markets:
+        row = rows.get(market.market_id)
+        data.append({'market_id': market.market_id, 'market_name': market.name,
+                     'avg_price': _price(row.avg_price) if row else None,
+                     'volume_kg': _price(row.volume_kg) if row else 0.0})
+    return data, day
+
+
 @api_view(['GET'])
 @authentication_classes([])
 @permission_classes([])
@@ -269,22 +294,6 @@ def compare(request):
         return error(404, 'NOT_FOUND', '없는 품목입니다.')
 
     grade = params.get('grade', 'ALL')
-    # 참고 시장(가락)은 비교에 넣지 않는다 (api.md 2.3). is_collect 값에만 기대지 않고 명시한다
-    markets = list(Market.objects.filter(is_collect=True, is_reference=False).order_by('market_id'))
-    if day is None:
-        # 가장 최근 정산일 = 이 품목·등급의 가장 늦은 거래정산일자
-        day = (SettlePrice.objects.filter(item=item, grade=grade, market__in=markets)
-               .aggregate(latest=Max('trade_date'))['latest'])
-    rows = {}
-    if day is not None:
-        rows = {r.market_id: r for r in SettlePrice.objects.filter(
-            item=item, grade=grade, trade_date=day, market__in=markets)}
-
-    data = []
-    for market in markets:
-        row = rows.get(market.market_id)
-        data.append({'market_id': market.market_id, 'market_name': market.name,
-                     'avg_price': _price(row.avg_price) if row else None,
-                     'volume_kg': _price(row.volume_kg) if row else 0.0})
+    data, day = market_prices(item, grade, day)
     return ok(data, {'item_id': item.item_id, 'date': day.isoformat() if day else None,
                      'grade': grade, 'price_unit': '원/kg'})
