@@ -191,6 +191,89 @@ services:
       mysql:
         condition: service_healthy
 
+  # ── 배치 경로: Airflow가 collectors/ 수집기를 스케줄대로 실행한다 (K11) ──────────
+  # 각자 인증키로 API를 부르므로 기본으로는 뜨지 않는다. 켤 때: --profile airflow up -d
+  # 구성: 메타DB(Postgres) + 초기화(1회) + api-server(관리 화면) + scheduler(태스크 실행) + dag-processor(DAG 파일 읽기)
+  # LocalExecutor라 태스크는 scheduler 컨테이너 안에서 실행된다. Redis·Celery worker·triggerer는 쓰지 않는다 (메모리 절약)
+  airflow-db:
+    image: postgres:16.10-alpine
+    profiles: ["airflow"]
+    env_file: ../.env              # POSTGRES_PASSWORD
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_DB: airflow
+    # ports 없음: Airflow 컨테이너끼리만 접속한다
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 10
+
+  # 메타DB 테이블을 만들거나 올린다. 끝나면 종료한다 (ps -a 에서 Exited (0)이면 정상)
+  airflow-init:
+    <<: &airflow-common
+      build: ../batch/airflow
+      image: farmit-airflow:3.3.2  # 네 서비스가 이미지 하나를 같이 쓴다 (서비스마다 따로 빌드하지 않게)
+      env_file: ../.env            # AIRFLOW__DATABASE__SQL_ALCHEMY_CONN, AIRFLOW__API_AUTH__JWT_SECRET, AIRFLOW__CORE__FERNET_KEY
+      environment:
+        AIRFLOW__CORE__EXECUTOR: LocalExecutor
+        AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+        AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"   # 새 DAG는 화면에서 켜야 돈다
+        AIRFLOW__CORE__DEFAULT_TIMEZONE: utc                 # 스케줄은 UTC 기준 (CLAUDE.md 2절)
+        AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+        # 로그인 없이 모두 관리자. 포트를 127.0.0.1에만 열기 때문에 로컬 개발용으로만 쓴다
+        AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
+        PYTHONDONTWRITEBYTECODE: "1"   # 읽기 전용 collectors/ 에 .pyc를 쓰려 하지 않게
+      volumes:
+        - ../batch/dags:/opt/airflow/dags
+        - ../collectors:/opt/farmit/collectors:ro   # 태스크가 cd 해서 python -m <모듈> 로 실행
+        - airflow-logs:/opt/airflow/logs
+      depends_on:
+        airflow-db:
+          condition: service_healthy
+    profiles: ["airflow"]
+    command: db migrate
+    restart: "no"
+
+  airflow-apiserver:
+    <<: *airflow-common
+    profiles: ["airflow"]
+    command: api-server
+    ports:
+      # 관리 화면은 내 PC에서만 접속한다 (REQ-NFR-005). 배포 서버에서는 이 ports 줄을 지우고 SSH 터널로 본다
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    profiles: ["airflow"]
+    command: scheduler
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy   # 수집 태스크가 MySQL에 쓴다
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    profiles: ["airflow"]
+    command: dag-processor
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
   # 기상특보 알림: weather.warning.event를 읽어 special_event·alert를 만든다 (REQ-ALT-001)
   # backend 이미지·코드를 그대로 쓴다. 테이블은 backend가 시작할 때 migrate로 만든다
   alert-consumer:
@@ -212,5 +295,7 @@ services:
 volumes:
   mysql-data:
   frontend-node-modules:
+  airflow-db-data:
+  airflow-logs:
   es-data:
   model-cache:
