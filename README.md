@@ -12,6 +12,7 @@ SSAFY 관통 프로젝트 · 양정호, 김기현 · 2026-10-19 ~ 2026-12-24
 | [docs/erd.md](docs/erd.md) | ERD |
 | [docs/api.md](docs/api.md) | API 명세서 |
 | [docs/ml.md](docs/ml.md) | 가격 예측: 현재 모델(사과 v3), 사용법, 전국·저장성 품목 확장 검토 |
+| [docs/infra-memory.md](docs/infra-memory.md) | 컨테이너 메모리 측정, 서버 사양 판단 |
 
 ## 폴더 구조
 
@@ -95,6 +96,26 @@ docker compose -f infra/docker-compose.yml exec mysql sh -c 'mysql -u"$MYSQL_USE
 - 수집 함수에 `@collect_run("출처", daily_limit=...)`를 붙이면 성공·부분 실패·실패와 상관없이 `collect_log`에 한 줄 남는다. API는 `run.get()`으로 불러야 호출 수가 쌓이고 한도 전에 멈춘다.
 - 저장은 `upsert()`(INSERT … ON DUPLICATE KEY UPDATE)로 한다. 같은 날짜를 다시 돌려도 테이블의 UNIQUE 키 때문에 행이 늘지 않는다.
 - `requirements.txt`·`Dockerfile`을 바꾸면 `run` 앞에 `build collectors`를 한 번 한다.
+
+#### 자동 실행 (Airflow, `batch/dags/collect.py`)
+
+위 수집기를 Airflow가 스케줄대로 실행한다. 각자 인증키로 API를 부르므로 **기본으로는 뜨지 않는다** (`--profile airflow`). `.env`의 Airflow 키 4개(`POSTGRES_PASSWORD`, `AIRFLOW__DATABASE__SQL_ALCHEMY_CONN`, `AIRFLOW__API_AUTH__JWT_SECRET`, `AIRFLOW__CORE__FERNET_KEY`)를 먼저 채운다.
+
+| DAG | 스케줄 (UTC) | 하는 일 |
+|---|---|---|
+| `collect_daily` | 매일 22:00 (한국 07:00) | 어제 정산·ASOS → 남은 한도로 과거 적재 이어 받기 |
+| `collect_customs_monthly` | 매월 14일 22:00 | 관세청 수입량 (작년·올해) |
+| `collect_ncpms_weekly` | 매주 화 22:00 | NCPMS 예찰 |
+
+```bash
+docker compose -f infra/docker-compose.yml --profile airflow up --build -d
+# 관리 화면: http://localhost:8080 (로그인 없음, 내 PC에서만 열린다). 새 DAG는 꺼져 있으니 화면에서 켠다
+# 과거 적재가 어디까지 왔는지 (다음에 받을 날짜. 없으면 처음부터)
+docker compose -f infra/docker-compose.yml exec airflow-scheduler airflow variables get backfill_next_at_settle
+```
+
+- 태스크가 실패하면 5분 간격으로 3번 다시 돈다. 시도마다 `collect_log`에 한 줄 남는다.
+- DAG를 켜면 가장 최근에 놓친 스케줄 1회가 바로 돈다 (그보다 앞은 돌지 않는다. 빈 날짜는 과거 적재가 채운다).
 
 ### 실시간 수집 (수집기 → Kafka → Flink → MySQL·알림)
 
