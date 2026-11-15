@@ -192,6 +192,8 @@ services:
         condition: service_healthy
 
   # ── 배치 경로: Airflow가 collectors/ 수집기를 스케줄대로 실행한다 (K11) ──────────
+  # Spark 작업(batch/spark, K12)도 따로 Spark 서비스를 띄우지 않고 Airflow 컨테이너 안에서 local 모드로 돈다.
+  # 손으로 실행: --profile airflow exec airflow-scheduler sh -c "cd /opt/farmit/spark && python -m <모듈>"
   # 각자 인증키로 API를 부르므로 기본으로는 뜨지 않는다. 켤 때: --profile airflow up -d
   # 구성: 메타DB(Postgres) + 초기화(1회) + api-server(관리 화면) + scheduler(태스크 실행) + dag-processor(DAG 파일 읽기)
   # LocalExecutor라 태스크는 scheduler 컨테이너 안에서 실행된다. Redis·Celery worker·triggerer는 쓰지 않는다 (메모리 절약)
@@ -228,6 +230,8 @@ services:
       volumes:
         - ../batch/dags:/opt/airflow/dags
         - ../collectors:/opt/farmit/collectors:ro   # 태스크가 cd 해서 python -m <모듈> 로 실행
+        - ../batch/spark:/opt/farmit/spark:ro       # Spark 작업(K12). 이미지 안의 pyspark가 local 모드로 실행
+        - ../ml/data:/opt/farmit/ml-data            # Spark가 만든 피처 CSV를 ml/farmit_ml이 읽는 곳 (커밋 제외)
         - airflow-logs:/opt/airflow/logs
       depends_on:
         airflow-db:

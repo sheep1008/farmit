@@ -106,6 +106,7 @@ docker compose -f infra/docker-compose.yml exec mysql sh -c 'mysql -u"$MYSQL_USE
 | `collect_daily` | 매일 22:00 (한국 07:00) | 어제 정산·ASOS → 남은 한도로 과거 적재 이어 받기 |
 | `collect_customs_monthly` | 매월 14일 22:00 | 관세청 수입량 (작년·올해) |
 | `collect_ncpms_weekly` | 매주 화 22:00 | NCPMS 예찰 |
+| `build_features_weekly` | 매주 일 23:00 (한국 월 08:00) | Spark로 예측 피처 테이블 → `ml/data/weekly_<품목코드>.csv` (`batch/dags/features.py`, `batch/spark/`) |
 
 ```bash
 docker compose -f infra/docker-compose.yml --profile airflow up --build -d
@@ -116,6 +117,8 @@ docker compose -f infra/docker-compose.yml exec airflow-scheduler airflow variab
 
 - 태스크가 실패하면 5분 간격으로 3번 다시 돈다. 시도마다 `collect_log`에 한 줄 남는다.
 - DAG를 켜면 가장 최근에 놓친 스케줄 1회가 바로 돈다 (그보다 앞은 돌지 않는다. 빈 날짜는 과거 적재가 채운다).
+- Spark 작업은 따로 Spark 서버 없이 scheduler 컨테이너 안에서 local 모드로 돈다. 손으로 실행:
+  `docker compose -f infra/docker-compose.yml exec airflow-scheduler sh -c "cd /opt/farmit/spark && python -m features"`
 
 ### 실시간 수집 (수집기 → Kafka → Flink → MySQL·알림)
 

@@ -113,6 +113,10 @@ flowchart LR
 | `config/preprocess.json`의 피처 | 트리 77개 + LSTM 71개 (겹침 포함) |
 
 - **이 데이터셋은 레포에 없다.** 실험 저장소의 `scripts/run_all.py`(수집) → `build_dataset.py`(통합·누수 검사)로 만든다. 운영에서는 `batch/`로 옮겨야 한다 ([8장](#8-다음-단계)).
+- **옮기는 중 (K12, 2026-11-15):** `batch/spark/features.py`(Airflow `build_features_weekly`, 매주 일 23:00 UTC)가 MySQL에서 읽어
+  `ml/data/weekly_<품목코드>.csv`(사과 `weekly_0601.csv`)를 만든다. 지금은 필요한 컬럼 89개 중 54개만 있어 `check_columns()`를 통과하지 못한다.
+  나머지는 실험 저장소 정의를 확인하거나(24개), DB에 원천이 없거나(8개: 품종 비중·`n_records`·일조·면적 3종), 생산량을 몇 년도 값으로 붙일지 정해야 한다(3개).
+  완성되면 `--data ml/data/weekly_0601.csv` 또는 `FARMIT_ML_DATA`로 넘긴다.
 - 단위 테스트(`pytest`)는 가짜 데이터를 쓰므로 이 파일 없이도 돈다.
 
 ---
