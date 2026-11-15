@@ -253,3 +253,125 @@ class CsrfTests(AccountTestBase):
             self.assertEqual(res.data['error']['code'], 'CSRF_FAILED')
         res = self.client.patch(ME_URL, {'sigungu': '청주시'}, format='json', HTTP_X_CSRFTOKEN=self.token())
         self.assertEqual(res.status_code, 200)
+
+
+class ErrorShapeTests(AccountTestBase):
+    """Y02 보강: 어떤 오류든 docs/api.md 1.2절 모양({"error": {"code", "message"}})으로 나간다."""
+
+    def assert_error(self, res, status, code):
+        self.assertEqual(res.status_code, status)
+        self.assertEqual(res.json()['error']['code'], code)
+        self.assertIn('message', res.json()['error'])
+        self.assertNotIn('detail', res.json())
+
+    def test_405_uses_error_shape(self):
+        self.assert_error(self.client.get(LOGIN_URL), 405, 'METHOD_NOT_ALLOWED')
+
+    def test_415_uses_error_shape(self):
+        res = self.client.post(LOGIN_URL, 'a=b', content_type='text/plain')
+        self.assert_error(res, 415, 'UNSUPPORTED_MEDIA_TYPE')
+
+    def test_malformed_json_is_400_validation_error(self):
+        res = self.client.post(LOGIN_URL, '{"username": ', content_type='application/json')
+        self.assert_error(res, 400, 'VALIDATION_ERROR')
+
+    def test_unexpected_exception_is_500_internal_error(self):
+        from unittest import mock
+        with mock.patch('accounts.views.authenticate', side_effect=RuntimeError('boom')), \
+                self.assertLogs('api.exceptions', 'ERROR') as logs:  # 로그가 남는지도 확인하고 출력 잡음도 막는다
+            res = self.client.post(LOGIN_URL, {'username': 'farmer01', 'password': 'apple2026'}, format='json')
+        self.assertIn('POST /api/auth/login', logs.output[0])
+        self.assert_error(res, 500, 'INTERNAL_ERROR')
+        self.assertNotIn('boom', res.content.decode())  # 내부 오류 내용은 밖으로 내보내지 않는다
+
+    def test_array_body_is_400_not_500(self):
+        self.assert_error(self.client.post(LOGIN_URL, [1, 2], format='json'), 400, 'VALIDATION_ERROR')
+
+    def test_lock_response_has_retry_after_header(self):
+        self.signup()
+        self.client.post(LOGOUT_URL)
+        for _ in range(5):
+            self.client.post(LOGIN_URL, {'username': 'farmer01', 'password': 'wrong1234'}, format='json')
+        res = self.client.post(LOGIN_URL, {'username': 'farmer01', 'password': 'apple2026'}, format='json')
+        self.assert_error(res, 429, 'TOO_MANY_LOGIN_ATTEMPTS')
+        self.assertEqual(res['Retry-After'], '600')
+
+    def test_array_body_on_signup_and_me_is_400(self):
+        self.assert_error(self.client.post(SIGNUP_URL, [1, 2], format='json'), 400, 'VALIDATION_ERROR')
+        self.signup()
+        self.assert_error(self.client.patch(ME_URL, [1, 2], format='json'), 400, 'VALIDATION_ERROR')
+
+    def test_array_body_on_delete_me_is_401_not_500(self):
+        self.signup()
+        self.assert_error(self.client.delete(ME_URL, [1, 2], format='json'), 401, 'INVALID_CREDENTIALS')
+
+    def test_throttled_has_retry_after_header(self):
+        from rest_framework.exceptions import Throttled
+        from api.exceptions import custom_exception_handler
+        res = custom_exception_handler(Throttled(wait=30), {})
+        self.assertEqual(res.status_code, 429)
+        self.assertEqual(res.data['error']['code'], 'RATE_LIMITED')
+        self.assertEqual(res['Retry-After'], '30')
+
+    def test_http404_and_django_permission_denied_use_error_shape(self):
+        from django.core.exceptions import PermissionDenied
+        from django.http import Http404
+        from api.exceptions import custom_exception_handler
+        self.assertEqual(custom_exception_handler(Http404(), {}).data['error']['code'], 'NOT_FOUND')
+        self.assertEqual(custom_exception_handler(PermissionDenied(), {}).data['error']['code'], 'FORBIDDEN')
+
+    def test_unknown_url_is_json_404(self):
+        self.assert_error(self.client.get('/api/no-such-path'), 404, 'NOT_FOUND')
+
+    def test_validation_error_keeps_details(self):
+        from rest_framework.exceptions import ValidationError
+        from api.exceptions import custom_exception_handler
+        res = custom_exception_handler(ValidationError({'size': ['너무 큽니다.']}), {})
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.data['error']['details'], {'size': ['너무 큽니다.']})
+
+    def test_unlisted_4xx_does_not_become_internal_error(self):
+        res = self.client.get('/api/auth/csrf', HTTP_ACCEPT='application/xml')
+        self.assertEqual(res.status_code, 406)
+        self.assertNotEqual(res.json()['error']['code'], 'INTERNAL_ERROR')
+
+    def test_throttled_rounds_up_and_has_details(self):
+        from rest_framework.exceptions import Throttled
+        from api.exceptions import custom_exception_handler
+        res = custom_exception_handler(Throttled(wait=0.4), {})
+        self.assertEqual(res['Retry-After'], '1')
+        self.assertEqual(res.data['error']['details']['retry_after_seconds'], 1)
+
+    def test_server_error_handler_returns_json_500(self):
+        from api.exceptions import server_error_handler
+        res = server_error_handler(None)
+        self.assertEqual(res.status_code, 500)
+        self.assertEqual(res['Content-Type'], 'application/json')
+        self.assertIn(b'INTERNAL_ERROR', res.content)
+
+    def test_non_dict_validation_error_goes_to_non_field_errors(self):
+        from rest_framework.exceptions import ValidationError
+        from api.exceptions import custom_exception_handler
+        res = custom_exception_handler(ValidationError(['x']), {})
+        self.assertEqual(res.data['error']['details'], {'non_field_errors': ['x']})
+
+    def test_unlisted_5xx_is_internal_error_and_406_is_validation_error(self):
+        from rest_framework.exceptions import APIException, NotAcceptable
+        from api.exceptions import custom_exception_handler
+
+        class NotImplementedYet(APIException):
+            status_code = 501
+
+        class Unavailable(APIException):
+            status_code = 503
+
+        self.assertEqual(custom_exception_handler(NotImplementedYet(), {}).data['error']['code'], 'INTERNAL_ERROR')
+        self.assertEqual(custom_exception_handler(Unavailable(), {}).data['error']['code'], 'SERVICE_UNAVAILABLE')
+        self.assertEqual(custom_exception_handler(NotAcceptable(), {}).data['error']['code'], 'VALIDATION_ERROR')
+
+    def test_throttled_without_wait_has_no_retry_after(self):
+        from rest_framework.exceptions import Throttled
+        from api.exceptions import custom_exception_handler
+        res = custom_exception_handler(Throttled(), {})
+        self.assertEqual(res.data['error']['code'], 'RATE_LIMITED')
+        self.assertFalse(res.has_header('Retry-After'))

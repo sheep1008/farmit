@@ -66,14 +66,18 @@ def signup(request):
 @permission_classes([])
 def login_view(request):
     """로그인. 같은 아이디로 5회 연속 실패하면 10분간 잠근다."""
+    if not isinstance(request.data, dict):  # 본문이 배열 등이면 .get에서 500이 나므로 먼저 거른다
+        return error(400, 'VALIDATION_ERROR', '입력값을 확인해 주세요.')
     username = str(request.data.get('username', ''))
     password = str(request.data.get('password', ''))
     fail_key = f'login_fail:{username}'
 
     # 잠금 확인이 먼저다. 잠긴 아이디는 비밀번호가 맞아도 막는다.
     if cache.get(fail_key, 0) >= MAX_LOGIN_FAILS:
-        return error(429, 'TOO_MANY_LOGIN_ATTEMPTS', '로그인 시도가 너무 많습니다. 10분 후 다시 시도해 주세요.',
-                     {'retry_after_seconds': LOCK_SECONDS})
+        res = error(429, 'TOO_MANY_LOGIN_ATTEMPTS', '로그인 시도가 너무 많습니다. 10분 후 다시 시도해 주세요.',
+                    {'retry_after_seconds': LOCK_SECONDS})
+        res['Retry-After'] = str(LOCK_SECONDS)  # docs/api.md 1.5절: 헤더도 같이 보낸다
+        return res
 
     user = authenticate(request, username=username, password=password)
     if user is None:
@@ -116,8 +120,9 @@ def update_me(request):
 
 def delete_me(request):
     user = request.user
+    password = request.data.get('password', '') if isinstance(request.data, dict) else ''
     # 실수 방지를 위해 비밀번호를 다시 확인한다
-    if not user.check_password(str(request.data.get('password', ''))):
+    if not user.check_password(str(password)):
         return error(401, 'INVALID_CREDENTIALS', '비밀번호가 맞지 않습니다.')
     # 프로필·관심 품목·알림은 CASCADE로 함께 삭제된다 (DB가 아니라 Django ORM이 처리하므로 ORM으로 지운다)
     with transaction.atomic():
