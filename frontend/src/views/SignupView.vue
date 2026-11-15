@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import http from '@/api/http'
 import BaseButton from '@/components/common/BaseButton.vue'
 import BaseInput from '@/components/common/BaseInput.vue'
+import ItemPicker from '@/components/common/ItemPicker.vue'
 import { fieldErrors } from '@/api/interceptors'
 import { REGIONS } from '@/constants/regions'
 import { safeNext } from '@/router/next'
@@ -82,45 +83,8 @@ watch(
   },
 )
 
-// ── 관심 품목 (GET /api/items?q=) ───────────────────
-const itemQuery = ref('')
-const itemResults = ref([])
+// ── 관심 품목 (ItemPicker가 GET /api/items?q= 검색) ───
 const selectedItems = ref([]) // [{ item_id, name }]
-let searchTimer = null
-let searchSeq = 0 // 늦게 도착한 이전 검색 결과가 최신 결과를 덮지 않게
-
-watch(itemQuery, (q) => {
-  clearTimeout(searchTimer)
-  const keyword = q.trim()
-  if (!keyword) {
-    itemResults.value = []
-    return
-  }
-  // 글자마다 요청하지 않도록 입력이 300ms 멈추면 검색한다
-  searchTimer = setTimeout(async () => {
-    const seq = ++searchSeq
-    try {
-      const res = await http.get('/items', { params: { q: keyword } })
-      if (seq === searchSeq) itemResults.value = res.data.data
-    } catch {
-      // 5xx·네트워크 오류 토스트는 인터셉터가 띄운다
-    }
-  }, 300)
-})
-
-const selectableResults = computed(() =>
-  itemResults.value.filter((it) => !selectedItems.value.some((s) => s.item_id === it.item_id)),
-)
-
-function addItem(item) {
-  if (selectedItems.value.length >= MAX_ITEMS) return
-  selectedItems.value.push({ item_id: item.item_id, name: item.name })
-  itemQuery.value = ''
-}
-
-function removeItem(id) {
-  selectedItems.value = selectedItems.value.filter((s) => s.item_id !== id)
-}
 
 // ── 가입 ──────────────────────────────────────────
 const canSubmit = computed(() => form.value.agree_terms && form.value.agree_privacy && !confirmError.value)
@@ -204,32 +168,7 @@ const first = (field) => errors.value[field]?.[0] ?? ''
         <p v-if="first('sido') || first('sigungu')" class="msg error">{{ first('sido') || first('sigungu') }}</p>
       </fieldset>
 
-      <fieldset>
-        <legend>관심 품목 (선택, 최대 {{ MAX_ITEMS }}개)</legend>
-        <ul v-if="selectedItems.length" class="chips">
-          <li v-for="s in selectedItems" :key="s.item_id">
-            {{ s.name }}
-            <button type="button" :aria-label="`${s.name} 빼기`" @click="removeItem(s.item_id)">×</button>
-          </li>
-        </ul>
-        <input
-          v-model="itemQuery"
-          type="search"
-          class="search"
-          placeholder="품목 이름 검색 (예: 사과)"
-          aria-label="관심 품목 검색"
-          :disabled="selectedItems.length >= MAX_ITEMS"
-        />
-        <ul v-if="selectableResults.length" class="results">
-          <li v-for="it in selectableResults" :key="it.item_id">
-            <button type="button" @click="addItem(it)">
-              {{ it.name }} <span class="category">{{ it.category }}</span>
-            </button>
-          </li>
-        </ul>
-        <p v-else-if="itemQuery.trim() && !itemResults.length" class="msg">검색 결과가 없습니다.</p>
-        <p v-if="first('interest_item_ids')" class="msg error">{{ first('interest_item_ids') }}</p>
-      </fieldset>
+      <ItemPicker v-model="selectedItems" :max="MAX_ITEMS" :error="first('interest_item_ids')" />
 
       <fieldset class="agree">
         <legend>약관 동의</legend>
@@ -305,8 +244,7 @@ legend {
   display: flex;
   gap: 8px;
 }
-select,
-.search {
+select {
   flex: 1;
   min-width: 0;
   min-height: 40px;
@@ -317,8 +255,7 @@ select,
   color: var(--color-text);
   font: inherit;
 }
-select:focus,
-.search:focus {
+select:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: var(--focus-ring);
@@ -332,57 +269,6 @@ select.invalid {
 }
 .msg.error {
   color: var(--color-danger);
-}
-.chips {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.chips li {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 4px 2px 10px;
-  border-radius: 999px;
-  background: var(--color-background-mute);
-}
-.chips button {
-  border: 0;
-  background: none;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-md);
-  line-height: 1;
-  padding: 4px 6px;
-  cursor: pointer;
-}
-.results {
-  list-style: none;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  max-height: 200px;
-  overflow-y: auto;
-}
-.results button {
-  width: 100%;
-  text-align: left;
-  padding: 8px 12px;
-  border: 0;
-  background: none;
-  color: var(--color-text);
-  font: inherit;
-  cursor: pointer;
-}
-.results button:hover,
-.results button:focus-visible {
-  background: var(--color-background-mute);
-  outline: none;
-}
-.category {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
 }
 .agree label {
   display: flex;
