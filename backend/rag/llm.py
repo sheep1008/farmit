@@ -20,7 +20,7 @@ _client = None
 
 
 class LlmError(Exception):
-    """LLM 호출 실패. kind: rate_limit(잠시 후 재시도) | unavailable(키·네트워크·서버) | bad_request"""
+    """LLM 호출 실패. kind: rate_limit(잠시 후 재시도) | timeout | unavailable(키·네트워크·서버) | bad_request"""
 
     def __init__(self, kind, message):
         super().__init__(message)
@@ -42,7 +42,7 @@ class LlmResult:
 def get_client():
     global _client
     if _client is None:
-        _client = anthropic.Anthropic(timeout=settings.LLM_TIMEOUT_SECONDS, max_retries=2)
+        _client = anthropic.Anthropic(timeout=settings.LLM_TIMEOUT_SECONDS, max_retries=1)
     return _client
 
 
@@ -102,6 +102,8 @@ def _wrap(exc):
         return LlmError('bad_request', 'LLM 요청 형식 오류')
     if isinstance(exc, anthropic.APIStatusError):
         return LlmError('unavailable', f'LLM 서버 오류 {exc.status_code}')
+    if isinstance(exc, anthropic.APITimeoutError):  # APIConnectionError의 하위 클래스라 먼저 본다
+        return LlmError('timeout', 'LLM 응답 시간 초과')
     if isinstance(exc, anthropic.APIConnectionError):
         return LlmError('unavailable', 'LLM 서버 접속 실패')
     return LlmError('unavailable', f'LLM 호출 실패 {type(exc).__name__}')

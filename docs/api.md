@@ -287,6 +287,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 }
 ```
 - 앱 시작 시 호출해서 `200`이면 로그인 상태, `401`이면 비로그인으로 판단한다.
+- `chat_remaining_today`: 오늘(한국 시간) 남은 채팅 질문 수 = 하루 한도(20) − 오늘 보낸 질문 수 (REQ-NFR-008).
 
 ---
 
@@ -660,6 +661,74 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 ---
 
+### 2.7 채팅 (회원 전용)
+
+세 API 모두 로그인 필요(`401 NOT_AUTHENTICATED`). 남의 대화는 `404 NOT_FOUND`. 역할(`intent`)은 `판매`·`병해충`·`날씨재해`·`재배`·`범위밖` 중 하나이고, 화면에는 `intent_label`(예: "병해충 상담")을 보여 준다.
+
+#### `POST /api/chat/messages` — 질문 보내기 (SSE 스트리밍)
+| 인증 | 화면 | REQ |
+|---|---|---|
+| 회원 (CSRF 필요) | SCR-011 | REQ-CHT-001~005, REQ-NFR-002, 008 |
+
+**요청**
+```json
+{ "message": "사과 열매에 둥근 반점이 생겨요", "item_id": 10, "session_id": 3 }
+```
+| 필드 | 필수 | 설명 |
+|---|---|---|
+| `message` | O | 질문 1~1000자 |
+| `item_id` | X | 선택 품목. 있으면 그 작물 자료만 근거로 쓰고, 다른 작물을 물으면 품목 변경을 안내한다 |
+| `session_id` | X | 이어서 묻는 대화. 없으면 새 대화를 만든다 (제목 = 질문 앞 40자) |
+
+**요청 단계 오류 (스트림을 열기 전, 일반 JSON 오류)**: `400 VALIDATION_ERROR`, `401`, `403 CSRF_FAILED`, `404 NOT_FOUND`(없는·남의 대화, 없는 품목), `429 CHAT_DAILY_LIMIT`(오늘 질문 20회 사용, `details.retry_after_seconds` = 한국 시간 자정까지 초, `Retry-After` 헤더)
+
+**200** `Content-Type: text/event-stream`. 이벤트는 `event: 이름` + `data: JSON` 한 쌍씩 온다. 순서:
+- 보통: `session` → `status`(classify) → `intent` → `status`(search·recommend·answer, 0개 이상) → `delta`(1개 이상) → `sources` → `done`
+- 규칙 안내(범위 밖·다른 품목)와 캐시 답: `session` → `intent` → `delta` → `sources` → `done` (`status` 없음)
+- 실패: 어느 시점에서든 `error`로 끝난다 (`done` 없음)
+
+| 이벤트 | data | 설명 |
+|---|---|---|
+| `session` | `{"session_id": 3, "remaining_today": 17}` | 질문을 저장한 직후 바로 온다. 남은 질문 수는 이번 질문을 뺀 값 |
+| `status` (0번 이상) | `{"step": "classify"\|"search"\|"recommend"\|"answer", "message": "농촌진흥청 자료를 찾는 중"}` | 진행 상태 (REQ-CHT-006) |
+| `intent` | `{"intent": "병해충", "intent_label": "병해충 상담"}` | 판단된 역할 (REQ-CHT-001) |
+| `delta` (1번 이상) | `{"text": "..."}` | 답변 조각. 줄 단위로 약제 사용량 치환·없는 근거 번호 제거를 마친 뒤 보낸다 |
+| `sources` | `{"sources": [{"n": 1, "title": "사과 탄저병 (병)", "source_label": "농촌진흥청 ...", "url": "", "source_type": "ncpms_pest"}]}` | 답변에 **인용된** 근거만 (REQ-CHT-003). 안내 문구는 `[]` |
+| `done` | 아래 | 최종 답변. 화면은 delta로 그린 글을 `answer`로 바꿔 쓴다 (면책 문구 포함) |
+| `error` | `{"code": "UPSTREAM_ERROR"\|"UPSTREAM_TIMEOUT"\|"SERVICE_UNAVAILABLE"\|"INTERNAL_ERROR", "message": "..."}` | 스트림 도중 실패 (LLM·검색 저장소·서버 오류). 질문은 이미 저장돼 한도에 들어간다 |
+
+`done`의 data:
+```json
+{
+  "message_id": 12, "session_id": 3, "intent": "병해충", "intent_label": "병해충 상담",
+  "answer": "탄저병일 수 있습니다.[근거 1] ...\n\n이 답변은 공개된 농업기술 자료와 ... 문의하세요.",
+  "sources": [ ... ], "remaining_today": 17, "cached": false,
+  "recommendation": { "item_id": 10, "volume_kg": 500, "top": [ ... ] }
+}
+```
+- `recommendation`은 판매 상담에서 추천을 계산했을 때만 있다 (`top` = `/api/recommendations` 결과 상위 3행).
+- `cached: true`면 같은 품목·같은 질문(새 대화의 첫 질문)의 저장된 답이다 (하루 보관, REQ-NFR-002).
+
+**흐름**
+1. 질문에 선택 품목이 아닌 작물이 나오거나 범위 밖 말(보조금·대출·요리 등)이 있으면 **LLM 없이** 안내한다 (REQ-CHT-004).
+2. LLM이 역할·검색어·판매 정보(작물, 물량 kg, 희망 날짜)를 뽑는다. 이전 대화 4개 메시지를 함께 본다.
+3. `범위밖` → 안내만. `판매` → 품목·물량이 없으면 되묻고(REQ-CHT-002), 있으면 `/api/recommendations`와 같은 계산 결과를 설명한다. 예측이 없으면 안내만.
+4. 그 밖 → RAG 검색(선택 작물, 근거 최대 6개) → 근거만으로 답변. 근거가 없으면 "제공된 자료에서 확인되지 않습니다".
+5. 답변 끝에 면책 문구 (REQ-CHT-005). 안내 문구에는 붙이지 않는다.
+
+#### `GET /api/chat/sessions` — 이전 대화 목록
+최근 순, 페이지(1.3절). **200**
+```json
+{ "data": [ { "id": 3, "title": "사과 열매에 둥근 반점이 생겨요", "created_at": "2026-11-15T21:00:00+09:00" } ],
+  "meta": { "page": 1, "size": 20, "total": 1 } }
+```
+**오류**: `400 INVALID_PARAMETER`(page·size 범위), `401`
+
+#### `GET /api/chat/sessions/{id}` — 대화 내용
+**200** `data` = `{id, title, created_at, messages: [{id, role("user"·"assistant"), content, intent, intent_label, sources, created_at}]}` (오래된 순). **오류**: `401`, `404`(없는·남의 대화)
+
+---
+
 ## 3. 2주차 이후 API (주소 목록)
 
 상세는 해당 주차 시작 전에 이 문서에 추가한다.
@@ -678,9 +747,9 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | GET | `/api/cases` | 전체 | 과거 사례 (item_id, event_type) | SCR-010 | REQ-HIS-001, 002 | 3 |
 | GET | `/api/search` | 전체 | 통합 검색 (`type`: item·market·press) | SCR-014 | REQ-SRC-001, 002 | 3 |
 | GET | `/api/notices` | 전체 | 시장 공지 (선택) | SCR-014 | REQ-SRC-003 | 3 |
-| POST | `/api/chat/messages` | 회원 | 질문 보내기 → 스트리밍 응답(SSE: 진행 상태 → 답변 → 출처) | SCR-011 | REQ-CHT-001~007 | 4 |
-| GET | `/api/chat/sessions` | 회원 | 이전 대화 목록 | SCR-011 | REQ-CHT-008 | 4 |
-| GET | `/api/chat/sessions/{id}` | 회원 | 대화 내용 | SCR-011 | REQ-CHT-008 | 4 |
+| POST | `/api/chat/messages` | 회원 | **(2.7에 상세)** 질문 보내기 → 스트리밍 응답(SSE: 진행 상태 → 답변 → 출처) | SCR-011 | REQ-CHT-001~007 | 4 |
+| GET | `/api/chat/sessions` | 회원 | **(2.7에 상세)** 이전 대화 목록 | SCR-011 | REQ-CHT-008 | 4 |
+| GET | `/api/chat/sessions/{id}` | 회원 | **(2.7에 상세)** 대화 내용 | SCR-011 | REQ-CHT-008 | 4 |
 | GET | `/api/farming/monthly` | 전체 | 이번 달 할 일 (item_id, month) | SCR-003, 012 | REQ-RAG-002 | 4 |
 | GET | `/api/farming/calendar` | 전체 | 연간 작업 일정 | SCR-012 | REQ-RAG-003 | 4 |
 | GET | `/api/farming/summary` | 전체 | 품목 요약 | SCR-012 | REQ-RAG-006 | 4 |

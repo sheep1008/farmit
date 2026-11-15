@@ -12,4 +12,5 @@ urlpatterns = [
     path('api/', include('api.urls')),
     path('api/', include('accounts.urls')),
     path('api/', include('alerts.urls')),
+    path('api/chat/', include('chat.urls')),
 ]

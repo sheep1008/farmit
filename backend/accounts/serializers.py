@@ -5,15 +5,13 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
 
+from chat.limits import remaining_today
 from codes.models import Item
 
 from .models import UserInterestItem, UserProfile
 from .validators import is_valid_username
 
 User = get_user_model()
-
-# 채팅 하루 한도. 채팅 기능(Y13)이 생기면 사용량을 빼서 계산한다. 지금은 한도 그대로 돌려준다.
-CHAT_DAILY_LIMIT = 20
 
 
 def validate_item_ids(value):
@@ -144,6 +142,6 @@ def me_data(user):
         'transport_cost_per_km': profile.transport_cost_per_km,
         'storage_cost_per_week': profile.storage_cost_per_week,
         'loss_rate': float(profile.loss_rate),
-        'chat_remaining_today': CHAT_DAILY_LIMIT,
+        'chat_remaining_today': remaining_today(user),
     })
     return data

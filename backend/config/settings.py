@@ -147,7 +147,8 @@ REST_FRAMEWORK = {
 # LLM 호출은 rag/llm.py 한 곳에서 한다. 모델은 설정값으로만 바꾼다 (REQ-NFR-011)
 LLM_MODEL = os.environ.get('LLM_MODEL', 'claude-haiku-5-5')
 LLM_DAILY_LIMIT = int(os.environ.get('LLM_DAILY_LIMIT', '20'))  # 회원별 하루 질문 수 (REQ-NFR-008)
-LLM_TIMEOUT_SECONDS = float(os.environ.get('LLM_TIMEOUT_SECONDS', '60'))
+# 채팅은 사람이 기다리므로 짧게. 재시도 1번까지 최악 약 60초 (rag/llm.py)
+LLM_TIMEOUT_SECONDS = float(os.environ.get('LLM_TIMEOUT_SECONDS', '30'))
 
 RAG_ES_URL = os.environ.get('ES_URL', 'http://elasticsearch:9200')
 RAG_INDEX = os.environ.get('RAG_INDEX', 'rag_docs')
