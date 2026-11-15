@@ -64,6 +64,12 @@ const router = createRouter({
       meta: { title: '로그인' },
     },
     {
+      path: '/signup', // SCR-002
+      name: 'signup',
+      component: () => import('../views/SignupView.vue'),
+      meta: { title: '회원가입' },
+    },
+    {
       // SCR-017 오류·안내. 화면에서 보낼 때: router.push({ name: 'error', params: { kind: 'chat-limit' } })
       path: '/error/:kind(login-required|server-error|chat-limit)',
       name: 'error',

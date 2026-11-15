@@ -38,5 +38,21 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = data
   }
 
-  return { user, isLoggedIn, init, fetchMe, setUser }
+  // 로그인 (SCR-001, docs/api.md 2.1). 실패하면 오류를 그대로 던진다 → 화면이 err.apiError.code로 안내 문구를 고른다.
+  async function login(username, password) {
+    const res = await http.post('/auth/login', { username, password })
+    user.value = res.data.data // users/me와 같은 모양
+  }
+
+  // 로그아웃. 요청이 실패해도(백엔드 꺼짐 등) 화면에서는 비로그인으로 둔다. 토스트는 인터셉터가 띄운다.
+  async function logout() {
+    try {
+      await http.post('/auth/logout')
+    } catch {
+      // 무시: 서버 세션이 남아 있어도 새로고침하면 /users/me로 다시 맞춰진다
+    }
+    user.value = null
+  }
+
+  return { user, isLoggedIn, init, fetchMe, setUser, login, logout }
 })
