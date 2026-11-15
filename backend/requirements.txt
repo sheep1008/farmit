@@ -2,3 +2,6 @@ Django==5.2.18
 djangorestframework==3.18.3
 mysqlclient==2.3.0
 confluent-kafka==2.12.2
+anthropic==2.8.0
+elasticsearch==8.19.3
+fastembed==0.9.1

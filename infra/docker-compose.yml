@@ -27,14 +27,38 @@ services:
   backend:
     build: ../backend
     env_file: ../.env
+    environment:
+      ES_URL: http://elasticsearch:9200   # RAG 문서 검색 (rag_docs 인덱스)
+      FASTEMBED_CACHE_PATH: /models       # 임베딩 모델 파일. 볼륨에 두어 다시 받지 않는다
     command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     ports:
       - "8000:8000"
     volumes:
       - ../backend:/app            # 코드 변경이 바로 반영된다 (runserver 자동 재시작)
+      - model-cache:/models        # 임베딩 모델 (multilingual-e5-small, 약 470MB)
     depends_on:
       mysql:
         condition: service_healthy # mysql healthcheck가 통과한 뒤 시작
+      # ES는 기다리지 않는다. ES가 없으면 채팅만 503이고 나머지 API는 동작한다
+
+  # 검색 저장소: RAG 문서 조각 + 벡터 (Y12), 보도자료 (Y10). 한국어 형태소 분석기 nori 포함
+  # 보안(xpack)은 끄고 내 PC에서만 접속한다 (REQ-NFR-005: 관리 포트는 외부에 열지 않는다)
+  elasticsearch:
+    build: ./elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m   # WSL 메모리가 작아 힙을 512MB로 묶는다
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
 
   # Vue 3 + Vite dev server. /api 요청은 Vite 프록시가 backend:8000 으로 넘긴다 (K05)
   frontend:
@@ -273,3 +297,5 @@ volumes:
   frontend-node-modules:
   airflow-db-data:
   airflow-logs:
+  es-data:
+  model-cache:

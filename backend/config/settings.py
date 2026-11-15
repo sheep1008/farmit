@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'accounts',
     'prices',
     'alerts',
+    'chat',
 ]
 
 MIDDLEWARE = [
@@ -140,3 +141,18 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'api.exceptions.custom_exception_handler',
 }
+
+
+# ── RAG·LLM (Y12) ──────────────────────────────────────────────
+# LLM 호출은 rag/llm.py 한 곳에서 한다. 모델은 설정값으로만 바꾼다 (REQ-NFR-011)
+LLM_MODEL = os.environ.get('LLM_MODEL', 'claude-haiku-5-5')
+LLM_DAILY_LIMIT = int(os.environ.get('LLM_DAILY_LIMIT', '20'))  # 회원별 하루 질문 수 (REQ-NFR-008)
+LLM_TIMEOUT_SECONDS = float(os.environ.get('LLM_TIMEOUT_SECONDS', '60'))
+
+RAG_ES_URL = os.environ.get('ES_URL', 'http://elasticsearch:9200')
+RAG_INDEX = os.environ.get('RAG_INDEX', 'rag_docs')
+# 로컬 임베딩 모델 (결정 0011). 바꾸면 rag_index --recreate로 다시 색인한다
+RAG_EMBED_MODEL = os.environ.get('RAG_EMBED_MODEL', 'intfloat/multilingual-e5-small')
+RAG_EMBED_DIM = 384
+# 수집 원본 캐시·문서 파일 (git 제외 data/)
+RAG_DATA_DIR = BASE_DIR / 'data' / 'rag'
