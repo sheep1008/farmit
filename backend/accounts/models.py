@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
 
-from codes.models import Item
+from codes.models import Item, Market
 
 
 # 관심 품목. 회원 : 품목 = N : M 을 잇는 중간 테이블 (erd.md 2.2)
@@ -38,3 +38,28 @@ class UserProfile(models.Model):
 
     class Meta:
         db_table = 'user_profile'
+
+# 판매 기록. 회원이 직접 입력한 판매 결과 (erd.md 3절, REQ-SAL-001~002)
+#   평균 대비 %는 저장하지 않고 조회할 때 settle_price와 맞춰 계산한다
+class SaleRecord(models.Model):
+    # user: 회원 FK. 회원을 삭제하면 판매 기록도 함께 삭제된다 (DB 컬럼은 user_id)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    # sale_date: 판매한 날
+    sale_date = models.DateField()
+    # market: 시장 FK. 판매 기록이 있는 시장은 지울 수 없게 막는다 (PROTECT, DB 컬럼은 market_id)
+    market = models.ForeignKey(Market, on_delete=models.PROTECT)
+    # item: 품목 FK. 판매 기록이 있는 품목은 지울 수 없게 막는다 (PROTECT, DB 컬럼은 item_id)
+    item = models.ForeignKey(Item, on_delete=models.PROTECT)
+    # grade: 등급. 모르면 전 등급 평균과 비교하는 'ALL' (settle_price.grade와 같은 값)
+    grade = models.CharField(max_length=10, default='ALL')
+    # volume_kg: 판매 물량 (kg)
+    volume_kg = models.DecimalField(max_digits=12, decimal_places=1)
+    # amount_won: 받은 금액 (원, 총액)
+    amount_won = models.BigIntegerField()
+    # created_at: 기록한 시각 (UTC)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'sale_record'
+        # 내 기록을 날짜순으로 보는 목록용
+        indexes = [models.Index(fields=['user', 'sale_date'], name='idx_sale_user_date')]
