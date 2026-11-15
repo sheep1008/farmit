@@ -51,8 +51,26 @@ AWS EC2 서버 사양을 정하기 위한 자료다. 서비스가 늘면(Spark, 
 | Airflow 큰 작업 여유 | +400 | scheduler 실행 중 최대 − 평균 (과거 적재는 한 번이면 끝난다) |
 | OS·Docker 자체 | +500 | 가정 |
 | **지금 기준 필요** | **약 4,500** | |
-| 앞으로 추가 (아직 없음) | Spark(K12), Elasticsearch·Kibana, ML 예측 | 재지 않음. 특히 Elasticsearch는 JVM 힙을 따로 잡는다 |
+| Spark 실행 중 (K12) | +1,100 | 주 1회 몇십 초. 5절 |
+| 앞으로 추가 (아직 없음) | Elasticsearch·Kibana, ML 예측 | 재지 않음. 특히 Elasticsearch는 JVM 힙을 따로 잡는다 |
 
 - 지금 구성만이면 **메모리 8 GiB 서버**에 들어간다 (여유 약 3.5 GiB).
 - Spark·Elasticsearch까지 한 대에 올리면 8 GiB로는 빠듯할 가능성이 크다. 그 서비스가 들어오면 이 문서에 다시 재서 16 GiB로 올릴지,
   JVM 힙을 줄일지(Kafka·Flink·ES), Airflow를 줄일지(scheduler 재시작 주기, 병렬 수) 정한다.
+
+## 5. Spark 추가 (K12, 2026-11-15)
+
+- Spark는 따로 컨테이너를 띄우지 않는다. Airflow 태스크가 scheduler 컨테이너 안에서 pyspark를 local 모드로 실행한다
+  (`spark.driver.memory` 1g, `batch/spark/common.py`). 그래서 상시 메모리는 늘지 않고, 태스크가 도는 동안만 늘어난다.
+- 측정: `airflow dags test build_features_weekly`(피처 테이블, 사과 4개 시장 × 463주)를 실행하면서 2초 간격으로 `docker stats`를 40번 쟀다.
+  같은 날 컴퓨터를 다시 켠 뒤라 scheduler 기준값이 2절(713 MiB)보다 작다.
+
+| 시점 | airflow-scheduler (MiB) |
+|---|---:|
+| 실행 전 | 440 |
+| Spark 실행 중 최대 | 1,574 |
+| 끝난 뒤 | 404 |
+
+- 늘어나는 양은 약 1.1 GiB(JVM 드라이버 힙 1g + 파이썬)이고, 매주 한 번 약 40초다. 끝나면 JVM 프로세스가 종료돼 메모리를 돌려준다.
+- 4절 기준(약 4.5 GiB)에 더하면 실행 중 약 5.6 GiB라 8 GiB 서버에 아직 들어간다. 피처(일 23:00 UTC)는 하루 수집(22:00 UTC) 한 시간 뒤라
+  보통 겹치지 않는다. 과거 적재가 남아 있으면 그 태스크가 몇 시간 돌아 겹칠 수 있다 (지금은 과거 적재가 끝나 바로 끝난다).
