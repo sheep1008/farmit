@@ -16,6 +16,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 OUT = Path(os.environ.get("OUT_DIR", "data/explore"))
@@ -34,16 +35,20 @@ def data_go_kr_key():
     return k if "%" in k else urllib.parse.quote(k, safe="")
 
 
-def get(url, key_param, key_value, params):
+def get_text(url, key_param, key_value, params):
     """키는 urlencode를 거치지 않고 붙인다 (이미 인코딩된 키가 두 번 인코딩되지 않게)."""
     full = f"{url}?{key_param}={key_value}&{urllib.parse.urlencode(params)}"
     try:
         with urllib.request.urlopen(full, timeout=60) as resp:
-            text = resp.read().decode("utf-8")
+            return resp.read().decode("utf-8")
     except urllib.error.HTTPError as e:
         sys.exit(f"HTTP {e.code}")  # URL에 키가 있으므로 상태 코드만 남긴다
     except urllib.error.URLError as e:
         sys.exit(f"접속 실패: {type(e.reason).__name__}")
+
+
+def get(url, key_param, key_value, params):
+    text = get_text(url, key_param, key_value, params)
     try:
         return json.loads(text)
     except ValueError:
@@ -101,15 +106,33 @@ def kosis():
     return d, "ok", len(d), d
 
 
-APIS = {"settle": settle, "asos": asos, "holiday": holiday, "kosis": kosis}
+def xml_items(text):
+    """data.go.kr XML 응답(response/header, body/items/item)에서 (결과코드, 전체 건수, 행 목록)."""
+    root = ET.fromstring(text)
+    rows = [{c.tag: (c.text or "").strip() for c in it} for it in root.iter("item")]
+    return (f"{root.findtext('.//resultCode')} {root.findtext('.//resultMsg')}",
+            root.findtext(".//totalCount"), rows)
+
+
+def customs():
+    # 관세청 품목별 국가별 수출입실적. 사과(신선) HS 0808.10, 2025년 1년 (조회 기간은 1년 이내)
+    text = get_text("https://apis.data.go.kr/1220000/nitemtrade/getNitemtradeList", "serviceKey", data_go_kr_key(),
+                    {"strtYymm": "202501", "endYymm": "202512", "hsSgn": "080810"})
+    return text, *xml_items(text)
+
+
+APIS = {"settle": settle, "asos": asos, "holiday": holiday, "kosis": kosis, "customs": customs}
 
 
 def main(names):
     OUT.mkdir(parents=True, exist_ok=True)
     for name in names:
         raw, result, total, rows = APIS[name]()
-        (OUT / f"{name}.json").write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"\n== {name}: 결과={result} 전체 건수={total} 받은 행={len(rows)} → {OUT / (name + '.json')}")
+        # XML로만 응답하는 API(관세청)는 원문 그대로 .xml로 저장한다
+        path = OUT / (f"{name}.xml" if isinstance(raw, str) else f"{name}.json")
+        path.write_text(raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False, indent=2),
+                        encoding="utf-8")
+        print(f"\n== {name}: 결과={result} 전체 건수={total} 받은 행={len(rows)} → {path}")
         if rows:
             for field, value in rows[0].items():  # 첫 행의 필드와 예시 값
                 print(f"  {field:24} {str(value)[:50]}")
