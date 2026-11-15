@@ -110,3 +110,35 @@ class CropProduction(models.Model):
         db_table = 'crop_production'
         # 같은 해를 다시 수집해도 (품목, 연도) 행이 두 번 저장되지 않게 막는다 (UPSERT 기준)
         constraints = [models.UniqueConstraint(fields=['item', 'year'], name='uk_crop_production')]
+
+
+# 주간 가격 예측. 김기현의 ml/ 예측 작업이 매주 월요일 시장 × h(1~4) 행을 넣는다 (erd.md 3절, REQ-PRD-001~005)
+#   Django는 테이블 구조와 조회 API를 소유한다. 지난 예측도 지우지 않는다 (REQ-PRD-005)
+class Forecast(models.Model):
+    # item: 품목 FK (DB 컬럼은 item_id). 예측 이력이 있는 품목은 지울 수 없게 막는다
+    item = models.ForeignKey(Item, on_delete=models.PROTECT)
+    # market: 시장 FK (DB 컬럼은 market_id)
+    market = models.ForeignKey(Market, on_delete=models.PROTECT)
+    # base_week: 예측 기준 월요일. h1의 대상 주가 이 주 (이번 주)
+    base_week = models.DateField()
+    # horizon: 몇 주 앞인지 (1~4). 대상 주 = base_week + (horizon-1)주
+    horizon = models.SmallIntegerField()
+    # target_week: 예측 대상 주의 월요일
+    target_week = models.DateField()
+    # pred_price: 예측 주평균 가격 (원/kg)
+    pred_price = models.DecimalField(max_digits=10, decimal_places=1)
+    # lower80, upper80: 80% 예측 구간 (원/kg)
+    lower80 = models.DecimalField(max_digits=10, decimal_places=1)
+    upper80 = models.DecimalField(max_digits=10, decimal_places=1)
+    # last_week_price: 기준 시점의 지난주 실제 주평균 가격 (원/kg). 비어도 된다
+    last_week_price = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True)
+    # model_version: 쓴 모델 버전 (MLflow, REQ-PRD-004)
+    model_version = models.CharField(max_length=50)
+    # created_at: 예측을 만든 시각 (UTC)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        db_table = 'forecast'
+        # 같은 기준 주를 다시 돌려도 행이 두 번 저장되지 않게 막는다
+        constraints = [models.UniqueConstraint(
+            fields=['item', 'market', 'base_week', 'horizon'], name='uk_forecast')]

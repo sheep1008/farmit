@@ -537,6 +537,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 ---
 
+<<<<<<< HEAD
 ### 2.6 판매 기록 (회원 전용)
 
 네 API 모두 로그인 필요(`401 NOT_AUTHENTICATED`), 쓰기는 CSRF 필요. **남의 기록은 403이 아니라 `404 NOT_FOUND`**.
@@ -576,6 +577,86 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 #### `DELETE /api/sales/{id}` — 삭제
 **204**. **오류**: `404`
+=======
+### 2.5 예측·판매 추천
+
+#### `GET /api/forecasts` — 주간 가격 예측
+| 인증 | 화면 | REQ |
+|---|---|---|
+| 전체 | SCR-003, SCR-005 | REQ-PRD-001~003 |
+
+| 쿼리 | 필수 | 설명 |
+|---|---|---|
+| `item_id` | O | 품목 |
+| `market_id` | X | 없으면 예측이 있는 모든 시장 |
+
+가장 최근 기준 주(`base_week`)의 행만 돌려준다 (지난 예측은 DB에 남는다). 시장·`horizon` 순.
+
+**200**
+```json
+{
+  "data": [
+    { "market_id": "250001", "market_name": "대전오정", "horizon": 1, "target_week": "2026-11-09",
+      "pred_price": 3100.0, "lower80": 2800.0, "upper80": 3400.0, "last_week_price": 3000.0,
+      "holiday_notice": null }
+  ],
+  "meta": { "item_id": 1, "forecast_available": true, "base_week": "2026-11-09", "model_version": "v3",
+            "created_at": "2026-11-09T10:00:00+09:00", "is_stale": false, "price_unit": "원/kg" }
+}
+```
+- `is_stale`: 기준 주가 이번 주 월요일보다 이르면 `true` (이번 주 예측 작업이 아직 안 돎).
+- 품목의 예측은 있지만 요청한 `market_id`의 예측만 없으면(참고 시장 등) `200` + `data: []`.
+- `horizon` 1 = 이번 주, 4 = 3주 후. `target_week`는 그 주 월요일.
+- `holiday_notice`: 대상 주가 명절(설날·추석)에서 21일 이내이면 주의 문구, 아니면 `null` (REQ-PRD-003).
+- 예측 대상이 아닌 품목(`is_forecast` false): `200`, `data: []`, `meta.forecast_available: false`, `meta.message`.
+
+**오류**: `400 VALIDATION_ERROR`(`item_id` 필수·숫자), `404 NOT_FOUND`(없는 품목·시장), `503 DATA_NOT_READY`(예측 대상인데 예측 행이 아직 없음)
+
+#### `POST /api/recommendations` — 판매 추천 계산
+| 인증 | 화면 | REQ |
+|---|---|---|
+| 회원 (CSRF 필요) | SCR-005 | REQ-REC-001~003, 005 |
+
+| 본문 | 필수 | 설명 |
+|---|---|---|
+| `item_id` | O | 품목 |
+| `volume_kg` | O | 물량 (kg, 0.1 이상) |
+| `desired_week` | X | 희망 시기. 그 날짜가 든 시점 행에 `is_desired: true` (순위는 바꾸지 않음) |
+| `loss_rate` | X | 감모율 % (0~100). 없으면 내 정보 값, 그것도 없으면 0 |
+| `transport_cost_per_km` | X | 운송비 원/km. 없으면 내 정보 값, 없으면 0 |
+| `storage_cost_per_week` | X | 보관비 원/주. 없으면 내 정보 값, 없으면 0 |
+| `commission_rate` | X | 수수료율 % (0~100). 기본 0 |
+
+계산: `예측가 × (물량 × (1 − 감모율)) − 수수료 − 운송비 − 보관비`. 운송비는 내 위치(시군 중심)에서 시장까지 직선거리(km) × 단가를 한 번 곱한다. 보관비는 `주당 보관비 × (horizon − 1)`. `net_low_won`·`net_high_won`은 같은 식에 80% 구간 하한·상한을 넣은 값. 금액은 원 단위 사사오입.
+
+**200**
+```json
+{
+  "data": {
+    "forecast_available": true,
+    "results": [
+      { "rank": 1, "market_id": "340101", "market_name": "천안", "horizon": 4, "target_week": "2026-11-30",
+        "is_desired": false, "pred_price": 3900.0, "lower80": 3600.0, "upper80": 4200.0, "last_week_price": 3500.0,
+        "distance_km": 111.2, "sellable_kg": 100.0, "revenue_won": 390000, "commission_won": 0,
+        "transport_won": 0, "storage_won": 0, "net_won": 390000, "net_low_won": 360000, "net_high_won": 420000,
+        "is_closed": false, "closed_dates": [], "holiday_notice": null }
+    ]
+  },
+  "meta": { "item_id": 1, "volume_kg": 100.0, "base_week": "2026-11-09", "model_version": "v3",
+            "created_at": "2026-11-09T10:00:00+09:00", "price_unit": "원/kg",
+            "costs": { "loss_rate": 0.0, "transport_cost_per_km": 0, "storage_cost_per_week": 0,
+                       "commission_rate": 0.0, "transport_applied": true } }
+}
+```
+- `results`는 `net_won` 큰 순서. 같으면 시장 코드·`horizon` 순.
+- `is_closed`: 그 시장의 휴장일(`market_closure`)이 대상 주(월~일)에 들어 있음 (REQ-REC-005). 순위에서 빼지 않고 표시만 한다.
+- `distance_km`: 내 정보에 위치(`lat`·`lng`)가 없으면 `null`, 운송비는 0, `meta.costs.transport_applied: false`.
+- 이미 지난 주(`target_week`+6일 < 오늘)는 결과에서 뺀다. 남는 행이 없으면 `503 DATA_NOT_READY`.
+- 예측 대상이 아닌 품목: `meta`는 `item_id`·`date`(정산일)·`price_unit`만. `200`, `data.forecast_available: false`, `data.message`, `data.results: []`, `data.market_comparison`(`/api/prices/compare`와 같은 행, 가장 최근 정산일).
+- 수확 시기(REQ-REC-006)·근거의 특수 상황(REQ-REC-004)은 이 응답에 아직 없다 (결정 0009).
+
+**오류**: `400 VALIDATION_ERROR`, `401 NOT_AUTHENTICATED`, `403 CSRF_FAILED`, `404 NOT_FOUND`(없는 품목), `503 DATA_NOT_READY`
+>>>>>>> origin/develop
 
 ---
 
@@ -585,12 +666,21 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 | 메서드 | 주소 | 인증 | 설명 | 화면 | REQ | 주차 |
 |---|---|---|---|---|---|---|
+<<<<<<< HEAD
 | GET | `/api/sales` | 회원 | **(2.6에 상세)** 판매 기록 목록 (기간 필터, 평균 대비 %) | SCR-006 | REQ-SAL-001, 002 | 2 |
 | POST | `/api/sales` | 회원 | **(2.6에 상세)** 판매 기록 추가 | SCR-007 | REQ-SAL-001 | 2 |
 | PATCH | `/api/sales/{id}` | 회원 | **(2.6에 상세)** 판매 기록 수정 | SCR-007 | REQ-SAL-001 | 2 |
 | DELETE | `/api/sales/{id}` | 회원 | **(2.6에 상세)** 판매 기록 삭제 | SCR-007 | REQ-SAL-001 | 2 |
 | GET | `/api/forecasts` | 전체 | 주간 예측 (item_id, market_id) — 예측값·80% 구간·명절 주의 | SCR-003, 005 | REQ-PRD-001~003 | 2 |
 | POST | `/api/recommendations` | 회원 | 판매 추천 계산 (품목·물량·시기·비용) | SCR-005 | REQ-REC-001~006 | 2 |
+=======
+| GET | `/api/sales` | 회원 | 판매 기록 목록 (기간 필터, 평균 대비 %) | SCR-006 | REQ-SAL-001, 002 | 2 |
+| POST | `/api/sales` | 회원 | 판매 기록 추가 | SCR-007 | REQ-SAL-001 | 2 |
+| PATCH | `/api/sales/{id}` | 회원 | 판매 기록 수정 | SCR-007 | REQ-SAL-001 | 2 |
+| DELETE | `/api/sales/{id}` | 회원 | 판매 기록 삭제 | SCR-007 | REQ-SAL-001 | 2 |
+| GET | `/api/forecasts` | 전체 | **(2.5에 상세)** 주간 예측 (item_id, market_id) — 예측값·80% 구간·명절 주의 | SCR-003, 005 | REQ-PRD-001~003 | 2 |
+| POST | `/api/recommendations` | 회원 | **(2.5에 상세)** 판매 추천 계산 (품목·물량·시기·비용) | SCR-005 | REQ-REC-001~006 | 2 |
+>>>>>>> origin/develop
 | GET | `/api/alerts` | 회원 | 알림 목록 (`unread=true` 필터) | SCR-003, 008 | REQ-ALT-003 | 3 |
 | GET | `/api/alerts/{id}` | 회원 | 알림 상세 + 대응 체크리스트 | SCR-009 | REQ-ALT-002 | 3 |
 | PATCH | `/api/alerts/{id}/read` | 회원 | 읽음 처리 | SCR-009 | REQ-ALT-003 | 3 |
