@@ -27,7 +27,7 @@ const router = createRouter({
     {
       path: '/sales', // SCR-006
       name: 'sales',
-      component: Placeholder,
+      component: () => import('../views/SalesView.vue'),
       meta: { title: '판매 기록', requiresAuth: true },
     },
     { path: '/farming', name: 'farming', component: Placeholder, meta: { title: '재배 정보' } }, // SCR-012
@@ -47,7 +47,7 @@ const router = createRouter({
     {
       path: '/mypage', // SCR-015
       name: 'mypage',
-      component: Placeholder,
+      component: () => import('../views/MyPageView.vue'),
       meta: { title: '내 정보', requiresAuth: true },
     },
     {

@@ -54,5 +54,12 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
   }
 
-  return { user, isLoggedIn, init, fetchMe, setUser, login, logout }
+  // 회원 탈퇴 (SCR-015, docs/api.md 2.1 DELETE /users/me). 실수 방지로 비밀번호를 다시 받는다.
+  // 실패(401 INVALID_CREDENTIALS 등)는 그대로 던지고 로그인 상태를 유지한다 → 화면이 안내한다.
+  async function withdraw(password) {
+    await http.delete('/users/me', { data: { password } })
+    user.value = null // 204: 서버가 계정·개인 데이터를 지우고 세션을 끝냈다
+  }
+
+  return { user, isLoggedIn, init, fetchMe, setUser, login, logout, withdraw }
 })

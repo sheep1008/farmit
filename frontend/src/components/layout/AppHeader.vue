@@ -24,7 +24,7 @@ const isMemberOnly = (name) => !!router.resolve({ name }).meta.requiresAuth
 const visibleMenu = computed(() => MENU.filter((m) => auth.isLoggedIn || !isMemberOnly(m.name)))
 
 // 로그아웃 뒤에는 회원 전용 화면에 남아 있으면 안 되므로 로그인 화면으로 보낸다.
-// (로그아웃 버튼은 SCR-015 내 정보에도 생긴다. K14)
+// 로그아웃 버튼은 SCR-015 내 정보에도 있다. 어느 화면에서든 바로 나갈 수 있게 헤더에도 둔다 (K14에서 둘 다 두기로 함)
 async function logout() {
   await auth.logout()
   router.push({ name: 'login' })
