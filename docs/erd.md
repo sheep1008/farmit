@@ -376,7 +376,7 @@ erDiagram
 | 규칙 | 해당 | 의미 |
 |---|---|---|
 | `PROTECT` | `settle_price`·`auction_trade`의 `market`, `item`, `crop_production.item`, `sale_record`의 `market`, `item`, `forecast`의 `market`, `item`, `item_producing_area.station` | 가격 이력이 있는 시장·품목, 주산지가 쓰는 관측소는 지울 수 없다 |
-| `CASCADE` | `user_interest_item`(`user`, `item`), `user_profile.user`, `sale_record.user`, `market_closure.market`, `item_producing_area.item`, `weather_daily.station` | 부모를 지우면 함께 지운다 |
+| `CASCADE` | `user_interest_item`(`user`, `item`), `user_profile.user`, `sale_record.user`, `chat_session.user`, `chat_message.session`, `market_closure.market`, `item_producing_area.item`, `weather_daily.station` | 부모를 지우면 함께 지운다 |
 
 **기본값.** `default`는 Django가 값을 채울 때만 적용되고 DB에는 기본값이 없다. SQL로 직접 INSERT하는 수집기는 값을 직접 넣어야 한다. DB에도 기본값을 심을지(`db_default`)는 수집기를 만들 때 정한다.
 | 테이블 | 컬럼 | 기본값 |
@@ -409,8 +409,8 @@ erDiagram
 | `import_monthly` | item_id, hs_code(item.hs_code 그대로. 6자리면 아래 10자리 합), ym(그달 1일), import_kg(kg), import_usd(USD) | UK(hs_code, ym) `uk_import_monthly`. 관세청 나라별 행을 달마다 더함. 거래 없는 달도 0으로 저장(공표된 마지막 달까지). `collectors/imports/customs.py`가 UPSERT. **구현됨** (`alerts` 앱) | REQ-ALT-004, REQ-HIS-001 |
 | `pest_survey` | ncpms_crop_code, insect_key(NCPMS 회차 키), survey_type(기본조사·노지고추 등), survey_year, survey_round, survey_date(조사 기준일), sido, sigungu, sigungu_code, pest_code(inqireCnClCode), pest_name, value(decimal 12,3) | 시군·항목 하나 = 1행. UK(insect_key, sigungu_code, pest_code) `uk_pest_survey`, 인덱스(ncpms_crop_code, survey_date). 회차 번호의 날짜가 해마다 달라 같은 시기 비교는 survey_date로 한다. 품목과는 `item.ncpms_crop_code`로 잇는다. `collectors/pests/ncpms.py`가 UPSERT. **구현됨** (`alerts` 앱) | REQ-ALT-005, REQ-HIS-001 |
 | `past_case` | item_id, market_id, event_type, sido, event_start, event_end, base_price, change_w1, change_w2, change_w3, change_w4 | Spark 계산 결과 | REQ-HIS-001 |
-| `chat_session` | user_id, title, created_at | | REQ-CHT-008 |
-| `chat_message` | session_id, role(user·assistant), content, intent(판매·병해충·날씨재해·재배), sources(JSON), input_tokens, output_tokens, latency_ms, created_at | 하루 질문 수 제한과 비용·응답 시간 측정에 사용 | REQ-CHT-001~008, REQ-NFR-002, 008 |
+| `chat_session` | user_id, title(첫 질문 앞 40자), created_at | 인덱스 `idx_chat_session_user`(user_id, created_at). user CASCADE. **구현됨** (`chat` 앱) | REQ-CHT-008 |
+| `chat_message` | session_id, role(user·assistant), content, intent(판매·병해충·날씨재해·재배·범위밖, 사용자 메시지는 NULL), sources(JSON, 인용된 근거만), input_tokens, output_tokens(그 답변의 LLM 호출 합계), latency_ms(NULL 허용), created_at | 하루 질문 수(role=user, 한국 시간 오늘) 제한과 비용·응답 시간 측정에 사용. 인덱스 `idx_chat_message_session`(session_id, created_at). session CASCADE. **구현됨** (`chat` 앱) | REQ-CHT-001~008, REQ-NFR-002, 008 |
 | `farm_schedule` | item_id, task_name, stage, start_month, start_period(상·중·하), end_month, end_period | 농사로 농작업일정. 이번 달 할 일·연간 일정 | REQ-RAG-002, 003 |
 | `price_alert` (선택) | user_id, item_id, market_id, target_price, is_active, notified_at | | REQ-ALT-007 |
 

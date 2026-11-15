@@ -160,25 +160,35 @@ def recommendations(request):
     item = Item.objects.filter(pk=v['item_id']).first()
     if item is None:
         return error(404, 'NOT_FOUND', '없는 품목입니다.')
+    status, data, meta = compute_recommendation(request.user, item, v)
+    if status != 200:
+        return error(503, 'DATA_NOT_READY', '이번 주 가격 예측이 아직 준비되지 않았습니다.')
+    return ok(data, meta)
 
+
+def compute_recommendation(user, item, v):
+    """추천 계산 본체. API와 채팅 판매 상담(Y13)이 함께 쓴다.
+
+    v: 검증된 입력 dict (volume_kg 필수, desired_week·비용 값은 선택). 반환: (200, data, meta) 또는 (503, None, None)
+    """
     if not item.is_forecast:
         comparison, day = market_prices(item, 'ALL')
-        return ok({'forecast_available': False, 'message': NO_FORECAST_NOTICE, 'results': [],
-                   'market_comparison': comparison},
-                  {'item_id': item.item_id, 'date': day.isoformat() if day else None, 'price_unit': '원/kg'})
+        return 200, {'forecast_available': False, 'message': NO_FORECAST_NOTICE, 'results': [],
+                     'market_comparison': comparison}, \
+            {'item_id': item.item_id, 'date': day.isoformat() if day else None, 'price_unit': '원/kg'}
 
     rows = Forecast.objects.filter(item=item)
     base_week = rows.order_by('-base_week').values_list('base_week', flat=True).first()
     if base_week is None:
-        return error(503, 'DATA_NOT_READY', '이번 주 가격 예측이 아직 준비되지 않았습니다.')
+        return 503, None, None
     today = _today_kst()
     # 이미 지난 주는 추천하지 않는다 (이번 주 예측 작업이 안 돌아 지난주 예측이 남아 있을 때)
     rows = [r for r in rows.filter(base_week=base_week).select_related('market')
             if r.target_week + timedelta(days=6) >= today]
     if not rows:
-        return error(503, 'DATA_NOT_READY', '이번 주 가격 예측이 아직 준비되지 않았습니다.')
+        return 503, None, None
 
-    profile = getattr(request.user, 'userprofile', None)
+    profile = getattr(user, 'userprofile', None)
     use_profile = profile is not None
 
     def pick(name, default):
@@ -225,10 +235,10 @@ def recommendations(request):
         row['rank'] = rank
 
     first = rows[0]
-    return ok({'forecast_available': True, 'results': results},
-              {'item_id': item.item_id, 'volume_kg': float(volume), 'base_week': base_week.isoformat(),
-               'model_version': first.model_version, 'created_at': _kst_iso(first.created_at),
-               'price_unit': '원/kg',
-               'costs': {'loss_rate': float(loss_rate), 'transport_cost_per_km': int(per_km),
-                         'storage_cost_per_week': int(per_week), 'commission_rate': float(commission_rate),
-                         'transport_applied': has_location}})
+    meta = {'item_id': item.item_id, 'volume_kg': float(volume), 'base_week': base_week.isoformat(),
+            'model_version': first.model_version, 'created_at': _kst_iso(first.created_at),
+            'price_unit': '원/kg',
+            'costs': {'loss_rate': float(loss_rate), 'transport_cost_per_km': int(per_km),
+                      'storage_cost_per_week': int(per_week), 'commission_rate': float(commission_rate),
+                      'transport_applied': has_location}}
+    return 200, {'forecast_available': True, 'results': results}, meta
