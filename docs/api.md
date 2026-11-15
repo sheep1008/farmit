@@ -113,8 +113,10 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | `403` | `CSRF_FAILED` | CSRF 토큰 없음·불일치 | 헤더 누락 | `/api/auth/csrf` 다시 호출 후 재시도 |
 | `403` | `FORBIDDEN` | 로그인은 했지만 권한 없음 | 남의 판매 기록 수정 | 안내 문구 |
 | `404` | `NOT_FOUND` | 대상이 없음 | 없는 시장 코드, 지워진 판매 기록 | 안내 문구 또는 오류 화면(SCR-017) |
+| `405` | `METHOD_NOT_ALLOWED` | 그 주소에서 허용하지 않는 HTTP 메서드 | 로그인 주소를 GET으로 호출 | 개발 중 버그로 보고 수정 |
 | `409` | `DUPLICATE_USERNAME` | 이미 있는 아이디 | 회원가입 | 아이디 칸에 표시 |
 | `409` | `CONFLICT` | 이미 처리된 상태와 충돌 | 같은 기록 두 번 저장 | 목록 새로고침 |
+| `415` | `UNSUPPORTED_MEDIA_TYPE` | 본문이 JSON이 아님 | `Content-Type`이 `text/plain` | 개발 중 버그로 보고 수정 |
 | `429` | `TOO_MANY_LOGIN_ATTEMPTS` | 로그인 5회 연속 실패 → 10분 잠금 | 로그인 | `retry_after_seconds`만큼 기다리라고 안내 |
 | `429` | `CHAT_DAILY_LIMIT` | 오늘 채팅 질문 20회 초과 (REQ-NFR-008) | 채팅·증상 진단 | "내일 다시 이용" 안내 (SCR-017) |
 | `429` | `RATE_LIMITED` | 짧은 시간에 요청이 너무 많음 | 같은 API 연속 호출 | `retry_after_seconds` 후 재시도 |
@@ -140,6 +142,8 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | 로그인 안 함 | `401` | 누구인지 모름 |
 | 로그인했지만 남의 데이터 | `403` (또는 존재를 숨기려면 `404`) | 누구인지 알지만 권한 없음. 판매 기록은 `404`로 응답해 존재 여부를 숨긴다 |
 | 형식은 맞는데 값이 틀림 (`from > to`) | `400 VALIDATION_ERROR` | 사용자가 고칠 수 있음 |
+
+표에 없는 4xx(예: 406)는 원래 상태 코드를 유지하고 오류 코드는 `VALIDATION_ERROR`로 보낸다.
 
 `429` 응답에는 `details.retry_after_seconds`를 넣고, HTTP 헤더 `Retry-After`도 같이 보낸다.
 
