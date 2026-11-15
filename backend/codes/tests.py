@@ -13,19 +13,13 @@ from .models import (
     WeatherStation,
 )
 
-ADMIN_MODELS = [
-    Market, Item, WeatherStation, Holiday, WarningZone,
-    MarketClosure, ItemProducingArea,
-]
-READ_ONLY_MODELS = [MarketClosure, ItemProducingArea]
+ADMIN_MODELS = [Market, Item, WeatherStation, Holiday, WarningZone]
+# 복합 PK 모델은 Django 5.2 admin이 등록을 거부한다 (codes/admin.py 주석)
+COMPOSITE_PK_MODELS = [MarketClosure, ItemProducingArea]
 
 
 def changelist_url(model):
     return reverse(f'admin:codes_{model._meta.model_name}_changelist')
-
-
-def add_url(model):
-    return reverse(f'admin:codes_{model._meta.model_name}_add')
 
 
 class CodeAdminAccessTest(TestCase):
@@ -65,8 +59,25 @@ class CodeAdminAccessTest(TestCase):
         res = self.client.get(changelist_url(Market), {'q': '테스트도매', 'is_collect__exact': '1'})
         self.assertContains(res, '테스트도매')
 
-    def test_composite_pk_models_are_read_only(self):
+    def test_composite_pk_models_are_not_registered(self):
+        for model in COMPOSITE_PK_MODELS:
+            self.assertFalse(admin.site.is_registered(model), model.__name__)
+
+    def test_delete_is_blocked_for_code_tables(self):
+        # 관측소·품목을 지우면 CASCADE로 수집 데이터가 같이 지워지므로 admin에서 삭제를 막는다
+        item = Item.objects.create(at_code='ADM01', name='관리테스트', category='과일')
+        station = WeatherStation.objects.create(station_id=99901, name='테스트관측소', sido='서울', lat='37.0', lng='127.0')
         self.client.force_login(self.admin_user)
-        for model in READ_ONLY_MODELS:
+        for model, obj in [(Item, item), (WeatherStation, station)]:
             with self.subTest(model=model.__name__):
-                self.assertEqual(self.client.get(add_url(model)).status_code, 403)
+                url = reverse(f'admin:codes_{model._meta.model_name}_delete', args=[obj.pk])
+                self.assertEqual(self.client.get(url).status_code, 403)
+                self.assertEqual(self.client.post(url, {'post': 'yes'}).status_code, 403)
+                self.assertTrue(model.objects.filter(pk=obj.pk).exists())
+
+    def test_natural_key_is_read_only_on_change_form(self):
+        Market.objects.create(market_id='990002', name='키시험도매', sido='서울', lat='37.0', lng='127.0')
+        self.client.force_login(self.admin_user)
+        res = self.client.get(reverse('admin:codes_market_change', args=['990002']))
+        self.assertEqual(res.status_code, 200)
+        self.assertNotContains(res, 'name="market_id"')
