@@ -341,7 +341,8 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 | 쿼리 | 기본값 | 설명 |
 |---|---|---|
-| `collect` | `true` | `true`면 수집 대상 시장만 (4개 + 가락), `false`면 전체 33곳 |
+| `q` | - | 이름 일부로 검색 (예: `천`). 일치하는 시장이 없으면 `200` + `data: []` |
+| `collect` | `true` | `true`면 수집 대상 시장만 (4개 + 가락), `false`면 전체 33곳. 그 밖의 값은 `400 INVALID_PARAMETER` |
 
 **200**
 ```json
@@ -367,6 +368,8 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 |---|---|---|
 | `q` | - | 이름 일부로 검색 (예: `사`) |
 | `forecast` | - | `true`면 가격 예측 제공 품목만 |
+
+`forecast`가 `true`·`false`가 아니면 `400 INVALID_PARAMETER`. 일치하는 품목이 없으면 `200` + `data: []`.
 
 **200**
 ```json
@@ -396,7 +399,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | `grade` | X | `ALL` | 등급. `ALL`은 전 등급 물량가중 평균 |
 | `compare_last_year` | X | `false` | `true`면 전년 같은 기간 값을 함께 |
 
-- 기간 제한: `unit=day`는 최대 1년, `week`·`month`는 최대 5년. 넘으면 `400 VALIDATION_ERROR`
+- 기간 제한: `unit=day`는 최대 1년, `week`·`month`는 최대 5년 (일수가 아니라 연으로 센다. `from`에 N년을 더한 날짜까지 허용). 넘으면 `400 VALIDATION_ERROR`
 
 **200**
 ```json
@@ -426,7 +429,11 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 - `last_year_avg_price`는 `compare_last_year=true`일 때만 포함
 - `last_updated`: 마지막 정산 수집 시각 (`collect_log` 기준)
 
-**오류**: `404 NOT_FOUND`(없는 품목·시장), `400 VALIDATION_ERROR`(`from > to`, 기간 초과)
+- 주·월 단위 `avg_price`는 물량가중 평균(Σ가격×물량 / Σ물량)이다. 전년 비교는 일 단위는 1년 전, 주 단위는 52주 전(같은 요일), 월 단위는 12개월 전과 맞추고, 전년 데이터가 없으면 `null`이다.
+- `from`·`to`는 `YYYY-MM-DD`만 받고 2000-01-01~2100-12-31 범위여야 한다 (밖이면 `400 VALIDATION_ERROR`). 둘 다 그날을 포함한다.
+- 가격은 소수 첫째 자리로 반올림해 돌려준다. `from`이 주·월 중간이면 첫 행의 `period`는 그 주 월요일·그 달 1일이고 집계는 `from` 이후 날짜만으로 한다.
+
+**오류**: `404 NOT_FOUND`(없는 품목·시장), `400 VALIDATION_ERROR`(필수 값 없음, 날짜 형식, `from > to`, 기간 초과), `400 INVALID_PARAMETER`(`unit`·`compare_last_year` 값이 허용 범위 밖)
 
 ---
 
@@ -455,6 +462,9 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 ```
 - 수집 대상 시장은 거래가 없어도 행을 넣고 `avg_price: null`로 둔다 (화면에서 "거래 없음" 표시).
 - 참고 시장(가락)은 포함하지 않는다.
+- `date`를 생략했는데 그 품목·등급의 정산 데이터가 하나도 없으면 `200`, 모든 시장 `avg_price: null`, `meta.date: null`이다.
+
+**오류**: `404 NOT_FOUND`(없는 품목), `400 VALIDATION_ERROR`(`item_id` 필수·숫자, `date` 형식)
 
 ---
 
