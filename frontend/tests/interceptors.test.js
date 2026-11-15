@@ -76,6 +76,13 @@ describe('응답 인터셉터', () => {
     expect(hooks.notify).toHaveBeenCalledWith(RETRY_LATER)
   })
 
+  it('503 DATA_NOT_READY는 화면이 "준비 중"을 안내하므로 토스트를 띄우지 않는다', async () => {
+    const { http, hooks } = makeHttp([fail(503, 'DATA_NOT_READY')])
+    const err = await http.get('/prices/realtime').catch((e) => e)
+    expect(hooks.notify).not.toHaveBeenCalled()
+    expect(err.apiError.code).toBe('DATA_NOT_READY')
+  })
+
   it('백엔드가 꺼져 프록시가 본문 없는 502를 줘도 토스트를 띄운다', async () => {
     const { http, hooks } = makeHttp([{ status: 502, data: '' }])
     const err = await http.get('/prices').catch((e) => e)

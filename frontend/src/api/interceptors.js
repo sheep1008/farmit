@@ -57,8 +57,9 @@ export function setupInterceptors(http, { onUnauthenticated, notify }) {
         notify(seconds ? `요청이 너무 많습니다. ${seconds}초 후 다시 시도해 주세요.` : api.message || RETRY_LATER)
       }
 
-      // 5xx 또는 서버에 닿지 못함(백엔드 꺼짐·네트워크 오류): 공통 토스트
-      if (api.status >= 500 || api.status === 0) {
+      // 5xx 또는 서버에 닿지 못함(백엔드 꺼짐·네트워크 오류): 공통 토스트.
+      // 503 DATA_NOT_READY는 오류가 아니라 "데이터 준비 중"이라 화면이 직접 안내한다 (api.md 1.5절. 예: 경매 전 당일 경매가)
+      if ((api.status >= 500 || api.status === 0) && api.code !== 'DATA_NOT_READY') {
         notify(RETRY_LATER)
       }
 

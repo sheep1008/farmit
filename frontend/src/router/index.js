@@ -17,7 +17,7 @@ const router = createRouter({
       component: HomeView,
       meta: { title: '대시보드', requiresAuth: true },
     },
-    { path: '/prices', name: 'prices', component: Placeholder, meta: { title: '가격' } }, // SCR-004
+    { path: '/prices', name: 'prices', component: () => import('../views/PriceView.vue'), meta: { title: '가격' } }, // SCR-004
     {
       path: '/recommend', // SCR-005
       name: 'recommend',
@@ -62,6 +62,12 @@ const router = createRouter({
       name: 'login',
       component: () => import('../views/LoginView.vue'),
       meta: { title: '로그인' },
+    },
+    {
+      path: '/signup', // SCR-002
+      name: 'signup',
+      component: () => import('../views/SignupView.vue'),
+      meta: { title: '회원가입' },
     },
     {
       // SCR-017 오류·안내. 화면에서 보낼 때: router.push({ name: 'error', params: { kind: 'chat-limit' } })

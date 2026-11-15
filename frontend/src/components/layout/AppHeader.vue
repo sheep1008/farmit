@@ -1,9 +1,10 @@
 <script setup>
-import { ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 // 공통 상단 메뉴 (docs/screens.md 1절). 768px 미만에서는 햄버거 버튼으로 메뉴를 펼친다.
+// 회원 전용 화면(route meta.requiresAuth)의 메뉴는 로그인했을 때만 보인다 (REQ-USR-002 수용 기준).
 const MENU = [
   { name: 'dashboard', label: '대시보드' },
   { name: 'prices', label: '가격' },
@@ -15,7 +16,19 @@ const MENU = [
 
 const auth = useAuthStore()
 const route = useRoute()
+const router = useRouter()
 const open = ref(false)
+
+// 회원 전용 여부는 메뉴에 따로 적지 않고 라우트 meta에서 읽는다 → 접근 구분을 router/index.js 한 곳에서만 고친다
+const isMemberOnly = (name) => !!router.resolve({ name }).meta.requiresAuth
+const visibleMenu = computed(() => MENU.filter((m) => auth.isLoggedIn || !isMemberOnly(m.name)))
+
+// 로그아웃 뒤에는 회원 전용 화면에 남아 있으면 안 되므로 로그인 화면으로 보낸다.
+// (로그아웃 버튼은 SCR-015 내 정보에도 생긴다. K14)
+async function logout() {
+  await auth.logout()
+  router.push({ name: 'login' })
+}
 
 // 읽지 않은 알림 수 자리. 알림 API(Y09)가 생기면 채운다. null이면 숫자 표시를 숨긴다.
 const unreadCount = ref(null)
@@ -46,7 +59,7 @@ watch(
       </button>
 
       <nav id="main-menu" class="menu" :class="{ open }" aria-label="주 메뉴">
-        <RouterLink v-for="m in MENU" :key="m.name" :to="{ name: m.name }" class="menu-link">
+        <RouterLink v-for="m in visibleMenu" :key="m.name" :to="{ name: m.name }" class="menu-link">
           {{ m.label }}
         </RouterLink>
 
@@ -58,7 +71,7 @@ watch(
             </svg>
             <span class="icon-text">검색</span>
           </RouterLink>
-          <RouterLink :to="{ name: 'alerts' }" class="icon-link" aria-label="알림">
+          <RouterLink v-if="auth.isLoggedIn" :to="{ name: 'alerts' }" class="icon-link" aria-label="알림">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z" />
               <path d="M10 20a2 2 0 0 0 4 0" />
@@ -73,6 +86,7 @@ watch(
             </svg>
             <span class="icon-text">내 정보</span>
           </RouterLink>
+          <button v-if="auth.isLoggedIn" type="button" class="menu-link logout" @click="logout">로그아웃</button>
           <RouterLink v-else :to="{ name: 'login' }" class="menu-link">로그인</RouterLink>
         </div>
       </nav>
@@ -116,6 +130,12 @@ watch(
   border-radius: 6px;
   color: var(--color-text);
   text-decoration: none;
+}
+.logout {
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
 }
 .menu-link:hover,
 .icon-link:hover {
