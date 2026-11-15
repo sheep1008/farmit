@@ -17,7 +17,7 @@ const router = createRouter({
       component: HomeView,
       meta: { title: '대시보드', requiresAuth: true },
     },
-    { path: '/prices', name: 'prices', component: Placeholder, meta: { title: '가격' } }, // SCR-004
+    { path: '/prices', name: 'prices', component: () => import('../views/PriceView.vue'), meta: { title: '가격' } }, // SCR-004
     {
       path: '/recommend', // SCR-005
       name: 'recommend',
