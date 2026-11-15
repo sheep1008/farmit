@@ -7,6 +7,7 @@ handler500 = 'api.exceptions.server_error_handler'
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/prices/', include('prices.urls')),
+    path('api/', include('prices.forecast_urls')),
     path('api/', include('codes.urls')),
     path('api/', include('api.urls')),
     path('api/', include('accounts.urls')),

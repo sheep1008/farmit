@@ -367,6 +367,7 @@ erDiagram
 | `market_closure` | `reason` | 직접 입력하며 사유를 모를 수 있다 |
 | `weather_daily` | `avg_temp`, `max_temp`, `min_temp`, `rain_mm`, `humidity` | 관측값이 빠진 날이 있다. 빠진 값을 0으로 채우지 않는다 |
 | `user_profile` | `lat`, `lng`, `transport_cost_per_km`, `storage_cost_per_week` | 가입 뒤에 채운다 (`sido`, `sigungu`는 가입 때 필수) |
+| `forecast` | `last_week_price` | 기준 시점에 지난주 실제 가격이 없을 수 있다 |
 | `collect_log` | `finished_at`, `error_msg` | 실행 중이거나 성공이면 없다 |
 
 위에 적지 않은 컬럼은 모두 NOT NULL이다.
@@ -374,7 +375,7 @@ erDiagram
 **삭제 규칙 (`on_delete`).** DB의 FK 제약이 아니라 Django가 처리한다 (2.2절 마지막 문단 참고).
 | 규칙 | 해당 | 의미 |
 |---|---|---|
-| `PROTECT` | `settle_price`·`auction_trade`의 `market`, `item`, `crop_production.item`, `item_producing_area.station` | 가격 이력이 있는 시장·품목, 주산지가 쓰는 관측소는 지울 수 없다 |
+| `PROTECT` | `settle_price`·`auction_trade`의 `market`, `item`, `crop_production.item`, `forecast`의 `market`, `item`, `item_producing_area.station` | 가격 이력이 있는 시장·품목, 주산지가 쓰는 관측소는 지울 수 없다 |
 | `CASCADE` | `user_interest_item`(`user`, `item`), `user_profile.user`, `market_closure.market`, `item_producing_area.item`, `weather_daily.station` | 부모를 지우면 함께 지운다 |
 
 **기본값.** `default`는 Django가 값을 채울 때만 적용되고 DB에는 기본값이 없다. SQL로 직접 INSERT하는 수집기는 값을 직접 넣어야 한다. DB에도 기본값을 심을지(`db_default`)는 수집기를 만들 때 정한다.
@@ -400,7 +401,7 @@ erDiagram
 |---|---|---|---|
 | `realtime_price` | trade_date(정산일자. 전날 오후 경매분 포함, settle_price와 같은 기준), market_id, item_id, avg_price(물량 가중, 원/kg), min_price, max_price, volume_kg, trade_count, last_auction_at(UTC), updated_at(UTC) | UK(trade_date, market_id, item_id) `uk_realtime_price`. Flink `realtime_price` 작업이 UPSERT (`source_key`로 중복 제거 후 집계). **구현됨** (`prices` 앱) | REQ-PRC-004 |
 | `sale_record` | user_id, sale_date, market_id, item_id, grade, volume_kg, amount_won, created_at | 평균 대비 %는 settle_price와 조인해 계산 | REQ-SAL-001~003 |
-| `forecast` | item_id, market_id, base_week(예측 기준 월요일), horizon(1~4), target_week, pred_price, lower80, upper80, last_week_price, model_version, created_at | UK(item_id, market_id, base_week, horizon). 지난 예측도 지우지 않음 | REQ-PRD-001~005 |
+| `forecast` | item_id, market_id, base_week(예측 기준 월요일), horizon(1~4), target_week, pred_price, lower80, upper80, last_week_price, model_version, created_at | UK(item_id, market_id, base_week, horizon) `uk_forecast`. 지난 예측도 지우지 않음. h1의 target_week = base_week(이번 주), h4 = 3주 뒤. 값 채우기는 `ml/` 예측 작업(김기현). **구현됨** (`prices` 앱) | REQ-PRD-001~005 |
 | `special_event` | event_type(WARNING·IMPORT_SURGE·PEST_INCREASE·GOV_NOTICE), item_id(없으면 NULL), sido, sigungu(NULL이면 시도 전체), occurred_at, title, detail(JSON: 비교 수치 등), source_url, source_ref | 특수 상황 1건 = 1행. UK(event_type, source_ref) `uq_special_event_source`. 기상특보는 source_ref = `source_key:status`, 상태가 발표·변경발표일 때만 만든다. **구현됨** (`alerts` 앱) | REQ-ALT-001, 004~006 |
 | `alert` | user_id, special_event_id, created_at, read_at | 회원별 알림. read_at이 NULL이면 안 읽음. UK(user_id, special_event_id) `uq_alert_user_event`. **구현됨** (`alerts` 앱) | REQ-ALT-003 |
 | `crop_production` | item_id, year, area_ha(ha), production_kg(KOSIS 톤 × 1000), yield_kg_10a(10a당 kg), kosis_updated_on(KOSIS 최종 수정일 `LST_CHN_DE`) | UK(item_id, year) `uk_crop_production`. KOSIS 과실생산량(DT_1ET0292) **전국·연** 단위. item 이름과 정확히 같은 과일만 저장(`기타`처럼 item에 이름이 둘이면 제외). 값 3개는 KOSIS에 없을 수 있어 NULL 허용. 예측은 `kosis_updated_on` 뒤에만 그해 값을 쓴다(공표 전 값 누수 방지). `collectors/weather/kosis.py`가 UPSERT. **구현됨** (`prices` 앱) | REQ-COL-003 |

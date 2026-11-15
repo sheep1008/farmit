@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone as dt_timezone
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 from unittest import mock
 
 from django.test import SimpleTestCase, TestCase
@@ -435,3 +435,288 @@ class ComparePriceApiTest(PriceApiBase):
         self.put(self.m1, self.apple, date(2026, 10, 30), 1000)
         with self.assertNumQueries(4):          # 품목, 시장 목록, 최근 정산일, 가격
             self.get()
+
+
+# ---------------------------------------------------------------------------
+# 주간 예측 조회, 판매 추천 (Y08: REQ-PRD-001~003, REQ-REC-001~003, REQ-REC-005)
+# ---------------------------------------------------------------------------
+from decimal import Decimal  # noqa: E402
+
+from django.contrib.auth import get_user_model  # noqa: E402
+from django.test import Client  # noqa: E402
+
+from accounts.models import UserProfile  # noqa: E402
+from codes.models import Holiday, MarketClosure  # noqa: E402
+
+from .models import Forecast  # noqa: E402
+
+FORECAST_URL = '/api/forecasts'
+RECOMMEND_URL = '/api/recommendations'
+BASE = date(2026, 11, 9)       # 월요일
+
+
+def make_forecasts(item, markets, base_week=BASE, price=3000, version='v3'):
+    for market in markets:
+        for h in range(1, 5):
+            Forecast.objects.create(
+                item=item, market=market, base_week=base_week, horizon=h,
+                target_week=base_week + timedelta(weeks=h - 1),
+                pred_price=Decimal(price + h * 100), lower80=Decimal(price + h * 100 - 300),
+                upper80=Decimal(price + h * 100 + 300), last_week_price=Decimal(price),
+                model_version=version, created_at=utc(2026, 11, 9, 1, 0))
+
+
+
+class ForecastApiTest(TestCase):
+    """GET /api/forecasts (REQ-PRD-001~003, REQ-PRD-005)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.m1 = Market.objects.create(market_id='250001', name='대전오정', sido='대전', lat=36.4, lng=127.4,
+                                       is_collect=True)
+        cls.m2 = Market.objects.create(market_id='340101', name='천안', sido='충남', lat=36.8, lng=127.1,
+                                       is_collect=True)
+        cls.apple = Item.objects.create(at_code='0601', name='사과', category='과일', is_forecast=True)
+        cls.cabbage = Item.objects.create(at_code='1101', name='배추', category='채소', is_forecast=False)
+        make_forecasts(cls.apple, [cls.m1, cls.m2])
+
+    def test_시장_4곳_아닌_2곳_x_h4_8행과_구간(self):
+        res = self.client.get(FORECAST_URL, {'item_id': self.apple.pk})
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(len(body['data']), 8)
+        row = body['data'][0]
+        self.assertEqual((row['market_id'], row['horizon'], row['target_week']), ('250001', 1, '2026-11-09'))
+        self.assertEqual((row['pred_price'], row['lower80'], row['upper80']), (3100.0, 2800.0, 3400.0))
+        self.assertEqual(body['meta']['base_week'], '2026-11-09')
+        self.assertEqual(body['meta']['model_version'], 'v3')
+        self.assertTrue(body['meta']['forecast_available'])
+
+    def test_예측값은_한국시간_생성시각(self):
+        meta = self.client.get(FORECAST_URL, {'item_id': self.apple.pk}).json()['meta']
+        self.assertEqual(meta['created_at'], '2026-11-09T10:00:00+09:00')
+
+    def test_시장_필터(self):
+        res = self.client.get(FORECAST_URL, {'item_id': self.apple.pk, 'market_id': '340101'})
+        self.assertEqual({r['market_id'] for r in res.json()['data']}, {'340101'})
+
+    def test_가장_최근_기준주만_보여_주고_지난_예측은_남아_있다(self):
+        make_forecasts(self.apple, [self.m1], base_week=date(2026, 11, 2), price=1000, version='v2')
+        res = self.client.get(FORECAST_URL, {'item_id': self.apple.pk})
+        self.assertEqual({r['target_week'] for r in res.json()['data']} & {'2026-11-02'}, set())
+        self.assertEqual(res.json()['meta']['base_week'], '2026-11-09')
+        self.assertEqual(Forecast.objects.filter(base_week=date(2026, 11, 2)).count(), 4)
+
+    def test_명절_3주_이내이면_주의_문구(self):
+        Holiday.objects.create(holiday_date=date(2026, 11, 30), name='추석')   # 가정: h1(11/9)은 3주(21일) 이내
+        data = self.client.get(FORECAST_URL, {'item_id': self.apple.pk, 'market_id': '250001'}).json()['data']
+        notices = {r['horizon']: r['holiday_notice'] for r in data}
+        # h1 주(11/9~15)는 11/30까지 15일 → 문구 있음. 모든 h가 21일 안
+        self.assertIsNotNone(notices[1])
+        self.assertIsNotNone(notices[4])
+
+    def test_명절_멀면_문구_없음_공휴일은_무시(self):
+        Holiday.objects.create(holiday_date=date(2026, 12, 25), name='성탄절')
+        Holiday.objects.create(holiday_date=date(2027, 9, 15), name='추석')
+        data = self.client.get(FORECAST_URL, {'item_id': self.apple.pk}).json()['data']
+        self.assertTrue(all(r['holiday_notice'] is None for r in data))
+
+    def test_예측_대상_아닌_품목은_200_forecast_available_false(self):
+        res = self.client.get(FORECAST_URL, {'item_id': self.cabbage.pk})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['data'], [])
+        self.assertFalse(res.json()['meta']['forecast_available'])
+
+    def test_예측이_아직_없으면_503(self):
+        Forecast.objects.all().delete()
+        res = self.client.get(FORECAST_URL, {'item_id': self.apple.pk})
+        self.assertEqual((res.status_code, res.json()['error']['code']), (503, 'DATA_NOT_READY'))
+
+    def test_입력_오류(self):
+        self.assertEqual(self.client.get(FORECAST_URL).status_code, 400)
+        self.assertEqual(self.client.get(FORECAST_URL, {'item_id': '²'}).status_code, 400)
+        res = self.client.get(FORECAST_URL, {'item_id': 9999})
+        self.assertEqual((res.status_code, res.json()['error']['code']), (404, 'NOT_FOUND'))
+        res = self.client.get(FORECAST_URL, {'item_id': self.apple.pk, 'market_id': 'x'})
+        self.assertEqual((res.status_code, res.json()['error']['code']), (404, 'NOT_FOUND'))
+        res = self.client.get(FORECAST_URL)
+        self.assertEqual(res.json()['error']['code'], 'VALIDATION_ERROR')
+
+    def test_이번_주_예측이_아니면_is_stale(self):
+        with mock.patch('prices.forecast_views._today_kst', return_value=date(2026, 11, 12)):
+            self.assertFalse(self.client.get(FORECAST_URL, {'item_id': self.apple.pk}).json()['meta']['is_stale'])
+        with mock.patch('prices.forecast_views._today_kst', return_value=date(2026, 11, 17)):
+            self.assertTrue(self.client.get(FORECAST_URL, {'item_id': self.apple.pk}).json()['meta']['is_stale'])
+
+    def test_예측이_없는_시장은_200_빈_배열(self):
+        ref = Market.objects.create(market_id='110001', name='가락', sido='서울', lat=0, lng=0)
+        res = self.client.get(FORECAST_URL, {'item_id': self.apple.pk, 'market_id': ref.pk})
+        self.assertEqual((res.status_code, res.json()['data']), (200, []))
+
+    def test_명절_21일_경계(self):
+        # h1 주는 11/9~15. 일요일(15)+21일 = 12/6 은 문구 있음, 12/7 은 h1 기준 없음
+        Holiday.objects.create(holiday_date=date(2026, 12, 7), name='설날')
+        data = self.client.get(FORECAST_URL, {'item_id': self.apple.pk, 'market_id': '250001'}).json()['data']
+        notices = {r['horizon']: r['holiday_notice'] for r in data}
+        self.assertIsNone(notices[1])
+        self.assertIsNotNone(notices[2])
+
+
+class RecommendationApiTest(TestCase):
+    """POST /api/recommendations (REQ-REC-001~003, REQ-REC-005)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        # 위도 0, 경도 0 / 1° 차이 = 약 111.19km로 거리를 쉽게 맞춘다
+        cls.near = Market.objects.create(market_id='250001', name='가까운시장', sido='대전', lat=0, lng=0,
+                                         is_collect=True)
+        cls.far = Market.objects.create(market_id='340101', name='먼시장', sido='충남', lat=0, lng=1,
+                                        is_collect=True)
+        cls.apple = Item.objects.create(at_code='0601', name='사과', category='과일', is_forecast=True)
+        cls.cabbage = Item.objects.create(at_code='1101', name='배추', category='채소', is_forecast=False)
+        make_forecasts(cls.apple, [cls.near])
+        # 먼 시장은 예측가가 500원 더 높다
+        make_forecasts(cls.apple, [cls.far], price=3500)
+        cls.user = get_user_model().objects.create_user('farmer', password='pw12345678')
+        cls.profile = UserProfile.objects.create(user=cls.user, sido='대전', sigungu='서구', lat=0, lng=0)
+
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=False)
+        self.client.force_login(self.user)
+
+        patcher = mock.patch('prices.forecast_views._today_kst', return_value=date(2026, 11, 10))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def post(self, **body):
+        body.setdefault('item_id', self.apple.pk)
+        body.setdefault('volume_kg', 100)
+        return self.client.post(RECOMMEND_URL, body, content_type='application/json')
+
+    def test_사과_100kg이면_시장_x_시점_8개가_수령액_순(self):
+        res = self.post()
+        self.assertEqual(res.status_code, 200)
+        results = res.json()['data']['results']
+        self.assertEqual(len(results), 8)
+        nets = [r['net_won'] for r in results]
+        self.assertEqual(nets, sorted(nets, reverse=True))
+        self.assertEqual([r['rank'] for r in results], list(range(1, 9)))
+        # 비용이 전부 0이면 먼 시장 h4(3900원)가 1등: 3900 × 100kg
+        self.assertEqual((results[0]['market_id'], results[0]['horizon'], results[0]['net_won']),
+                         ('340101', 4, 390000))
+
+    def test_비용_수식_감모율_수수료_운송비_보관비(self):
+        res = self.post(loss_rate=10, commission_rate=5, transport_cost_per_km=10, storage_cost_per_week=1000)
+        rows = {(r['market_id'], r['horizon']): r for r in res.json()['data']['results']}
+        # 먼 시장 h3: 예측 3800, 판매량 90kg → 매출 342000, 수수료 17100, 운송비 111.19km×10=1112, 보관비 2×1000
+        r = rows[('340101', 3)]
+        self.assertEqual((r['sellable_kg'], r['revenue_won'], r['commission_won']), (90.0, 342000, 17100))
+        self.assertEqual((r['transport_won'], r['storage_won']), (1112, 2000))
+        self.assertEqual(r['net_won'], 342000 - 17100 - 1112 - 2000)
+        self.assertEqual(r['distance_km'], 111.2)
+        # 가까운 시장은 운송비 0
+        self.assertEqual(rows[('250001', 1)]['transport_won'], 0)
+
+    def test_비용을_바꾸면_다시_계산된다(self):
+        a = self.post().json()['data']['results'][0]['net_won']
+        b = self.post(storage_cost_per_week=50000).json()['data']['results'][0]
+        self.assertNotEqual(a, b['net_won'])
+        self.assertEqual(b['horizon'], 1)     # 보관비가 크면 이번 주 판매가 1등
+
+    def test_회원_기본값을_쓰고_요청값이_우선한다(self):
+        self.profile.loss_rate = Decimal('20')
+        self.profile.storage_cost_per_week = 700
+        self.profile.save()
+        costs = self.post().json()['meta']['costs']
+        self.assertEqual((costs['loss_rate'], costs['storage_cost_per_week']), (20.0, 700))
+        costs = self.post(loss_rate=0, storage_cost_per_week=0).json()['meta']['costs']
+        self.assertEqual((costs['loss_rate'], costs['storage_cost_per_week']), (0.0, 0))
+
+    def test_위치가_없으면_운송비를_빼고_알린다(self):
+        self.profile.lat = self.profile.lng = None
+        self.profile.save()
+        res = self.post(transport_cost_per_km=10).json()
+        self.assertFalse(res['meta']['costs']['transport_applied'])
+        self.assertTrue(all(r['transport_won'] == 0 and r['distance_km'] is None for r in res['data']['results']))
+
+    def test_예측구간_하한_상한_수령액(self):
+        r = self.post().json()['data']['results'][-1]
+        self.assertLessEqual(r['net_low_won'], r['net_won'])
+        self.assertLessEqual(r['net_won'], r['net_high_won'])
+
+    def test_휴장일이_있는_시장_시점은_휴장_표시(self):
+        MarketClosure.objects.create(market=self.near, closure_date=date(2026, 11, 17))   # h2 주(11/16~22)
+        rows = {(r['market_id'], r['horizon']): r for r in self.post().json()['data']['results']}
+        self.assertTrue(rows[('250001', 2)]['is_closed'])
+        self.assertEqual(rows[('250001', 2)]['closed_dates'], ['2026-11-17'])
+        self.assertFalse(rows[('250001', 1)]['is_closed'])
+        self.assertFalse(rows[('340101', 2)]['is_closed'])
+
+    def test_희망_시기_표시(self):
+        rows = self.post(desired_week='2026-11-18').json()['data']['results']
+        self.assertEqual({r['horizon'] for r in rows if r['is_desired']}, {2})
+
+    def test_명절_주의_문구(self):
+        Holiday.objects.create(holiday_date=date(2026, 11, 30), name='추석')
+        rows = self.post().json()['data']['results']
+        self.assertTrue(all(r['holiday_notice'] for r in rows))
+
+    def test_예측_대상_아닌_품목은_시장_비교만(self):
+        SettlePrice.objects.create(trade_date=date(2026, 11, 13), market=self.near, item=self.cabbage, grade='ALL',
+                                   avg_price=1000, min_price=900, max_price=1100, volume_kg=500)
+        res = self.post(item_id=self.cabbage.pk)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()['data']
+        self.assertFalse(data['forecast_available'])
+        self.assertEqual(data['results'], [])
+        self.assertIn('아직 가격 예측을 제공하지 않습니다', data['message'])
+        self.assertEqual(data['market_comparison'][0]['avg_price'], 1000.0)
+
+    def test_지난_주_예측만_남았으면_지난_주는_추천하지_않는다(self):
+        with mock.patch('prices.forecast_views._today_kst', return_value=date(2026, 11, 18)):
+            horizons = {r['horizon'] for r in self.post().json()['data']['results']}
+        self.assertEqual(horizons, {2, 3, 4})       # h1 주(11/9~15)는 이미 지남
+        with mock.patch('prices.forecast_views._today_kst', return_value=date(2026, 12, 20)):
+            self.assertEqual(self.post().status_code, 503)
+
+    def test_예측이_아직_없으면_503(self):
+        Forecast.objects.all().delete()
+        res = self.post()
+        self.assertEqual((res.status_code, res.json()['error']['code']), (503, 'DATA_NOT_READY'))
+
+    def test_로그인_필요(self):
+        res = Client().post(RECOMMEND_URL, {'item_id': 1, 'volume_kg': 1}, content_type='application/json')
+        self.assertEqual(res.status_code, 401)
+        self.assertEqual(res.json()['error']['code'], 'NOT_AUTHENTICATED')
+
+    def test_CSRF_없으면_403(self):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(self.user)
+        res = c.post(RECOMMEND_URL, {'item_id': 1, 'volume_kg': 1}, content_type='application/json')
+        self.assertEqual((res.status_code, res.json()['error']['code']), (403, 'CSRF_FAILED'))
+
+    def test_입력_오류_400(self):
+        for body in ({}, {'item_id': 1}, {'item_id': 1, 'volume_kg': 0}, {'item_id': 1, 'volume_kg': -5},
+                     {'item_id': 1, 'volume_kg': 'abc'}, {'item_id': 'x', 'volume_kg': 5},
+                     {'item_id': 1, 'volume_kg': 5, 'loss_rate': 101},
+                     {'item_id': 1, 'volume_kg': 5, 'transport_cost_per_km': -1},
+                     {'item_id': 1, 'volume_kg': 5, 'desired_week': '2026-13-01'}):
+            res = self.client.post(RECOMMEND_URL, body, content_type='application/json')
+            self.assertEqual((res.status_code, res.json()['error']['code']), (400, 'VALIDATION_ERROR'), body)
+
+    def test_없는_품목_404(self):
+        res = self.post(item_id=99999)
+        self.assertEqual((res.status_code, res.json()['error']['code']), (404, 'NOT_FOUND'))
+
+    def test_프로필이_없는_계정도_계산된다(self):
+        admin = get_user_model().objects.create_user('noprofile', password='pw12345678')
+        self.client.force_login(admin)
+        res = self.post()
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.json()['meta']['costs']['transport_applied'])
+        costs = res.json()['meta']['costs']
+        self.assertEqual((costs['loss_rate'], costs['storage_cost_per_week'], costs['commission_rate']), (0.0, 0, 0.0))
+
+    def test_쿼리_수(self):
+        with self.assertNumQueries(8):
+            self.post()
