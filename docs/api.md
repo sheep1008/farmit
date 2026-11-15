@@ -537,16 +537,58 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 ---
 
+### 2.6 판매 기록 (회원 전용)
+
+네 API 모두 로그인 필요(`401 NOT_AUTHENTICATED`), 쓰기는 CSRF 필요. **남의 기록은 403이 아니라 `404 NOT_FOUND`**.
+| 화면 | REQ |
+|---|---|
+| SCR-006, SCR-007 | REQ-SAL-001, 002 |
+
+기록 모양(목록·생성·수정 응답 공통):
+```json
+{ "id": 3, "sale_date": "2026-11-10", "market_id": "250001", "market_name": "대전오정",
+  "item_id": 1, "item_name": "사과", "grade": "ALL", "volume_kg": 100.0, "amount_won": 330000,
+  "unit_price": 3300.0, "avg_price": 3000.0, "vs_avg_pct": 10.0, "created_at": "2026-11-15T10:00:00+09:00" }
+```
+- `unit_price` = `amount_won / volume_kg` (원/kg, 소수 첫째 자리).
+- `avg_price`: 같은 날짜·시장·품목·등급의 정산 확정 평균가(`settle_price`). 없으면 `null`.
+- `vs_avg_pct` = `(unit_price / avg_price − 1) × 100`, 소수 첫째 자리. `avg_price`가 없거나 0이면 `null` ("비교할 평균 없음"으로 표시). 반올림 전 단가로 계산한다. 정산은 다음 날 반영되므로 어제·오늘 판매는 `null`일 수 있다. 조회할 때마다 계산하므로 나중에 정산이 들어오면 값이 채워진다.
+
+#### `GET /api/sales` — 내 판매 기록 목록
+쿼리: `from`·`to`(YYYY-MM-DD, 기본 전체), `page`, `size`(1.3절). 판매일 최신순.
+`meta`: `page`, `size`, `total`, `total_volume_kg`, `total_amount_won` (합계는 페이지가 아니라 **기간 전체**).
+**오류**: `400 VALIDATION_ERROR`(날짜 형식, `from` > `to`), `400 INVALID_PARAMETER`(`page`·`size`)
+
+#### `POST /api/sales` — 판매 기록 추가
+| 본문 | 필수 | 설명 |
+|---|---|---|
+| `sale_date` | O | 판매일. 2000-01-01 ~ 오늘(KST) |
+| `market_id` | O | 시장 코드 (`/api/markets`) |
+| `item_id` | O | 품목 |
+| `grade` | X | 기본 `ALL` (최대 10자) |
+| `volume_kg` | O | 0.1 이상, 소수 첫째 자리까지 (정수 11자리 이하) |
+| `amount_won` | O | 받은 총액(원), 0 이상 정수 (최대 10^13) |
+
+**201** `data` = 기록 모양. **오류**: `400 VALIDATION_ERROR`(`details`에 필드별)
+
+#### `PATCH /api/sales/{id}` — 수정
+위 본문의 일부만 보내도 된다. **200** `data` = 기록 모양. **오류**: `400`, `404`
+
+#### `DELETE /api/sales/{id}` — 삭제
+**204**. **오류**: `404`
+
+---
+
 ## 3. 2주차 이후 API (주소 목록)
 
 상세는 해당 주차 시작 전에 이 문서에 추가한다.
 
 | 메서드 | 주소 | 인증 | 설명 | 화면 | REQ | 주차 |
 |---|---|---|---|---|---|---|
-| GET | `/api/sales` | 회원 | 판매 기록 목록 (기간 필터, 평균 대비 %) | SCR-006 | REQ-SAL-001, 002 | 2 |
-| POST | `/api/sales` | 회원 | 판매 기록 추가 | SCR-007 | REQ-SAL-001 | 2 |
-| PATCH | `/api/sales/{id}` | 회원 | 판매 기록 수정 | SCR-007 | REQ-SAL-001 | 2 |
-| DELETE | `/api/sales/{id}` | 회원 | 판매 기록 삭제 | SCR-007 | REQ-SAL-001 | 2 |
+| GET | `/api/sales` | 회원 | **(2.6에 상세)** 판매 기록 목록 (기간 필터, 평균 대비 %) | SCR-006 | REQ-SAL-001, 002 | 2 |
+| POST | `/api/sales` | 회원 | **(2.6에 상세)** 판매 기록 추가 | SCR-007 | REQ-SAL-001 | 2 |
+| PATCH | `/api/sales/{id}` | 회원 | **(2.6에 상세)** 판매 기록 수정 | SCR-007 | REQ-SAL-001 | 2 |
+| DELETE | `/api/sales/{id}` | 회원 | **(2.6에 상세)** 판매 기록 삭제 | SCR-007 | REQ-SAL-001 | 2 |
 | GET | `/api/forecasts` | 전체 | 주간 예측 (item_id, market_id) — 예측값·80% 구간·명절 주의 | SCR-003, 005 | REQ-PRD-001~003 | 2 |
 | POST | `/api/recommendations` | 회원 | 판매 추천 계산 (품목·물량·시기·비용) | SCR-005 | REQ-REC-001~006 | 2 |
 | GET | `/api/alerts` | 회원 | 알림 목록 (`unread=true` 필터) | SCR-003, 008 | REQ-ALT-003 | 3 |

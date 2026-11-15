@@ -374,8 +374,8 @@ erDiagram
 **삭제 규칙 (`on_delete`).** DB의 FK 제약이 아니라 Django가 처리한다 (2.2절 마지막 문단 참고).
 | 규칙 | 해당 | 의미 |
 |---|---|---|
-| `PROTECT` | `settle_price`·`auction_trade`의 `market`, `item`, `crop_production.item`, `item_producing_area.station` | 가격 이력이 있는 시장·품목, 주산지가 쓰는 관측소는 지울 수 없다 |
-| `CASCADE` | `user_interest_item`(`user`, `item`), `user_profile.user`, `market_closure.market`, `item_producing_area.item`, `weather_daily.station` | 부모를 지우면 함께 지운다 |
+| `PROTECT` | `settle_price`·`auction_trade`의 `market`, `item`, `crop_production.item`, `sale_record`의 `market`, `item`, `item_producing_area.station` | 가격 이력이 있는 시장·품목, 주산지가 쓰는 관측소는 지울 수 없다 |
+| `CASCADE` | `user_interest_item`(`user`, `item`), `user_profile.user`, `sale_record.user`, `market_closure.market`, `item_producing_area.item`, `weather_daily.station` | 부모를 지우면 함께 지운다 |
 
 **기본값.** `default`는 Django가 값을 채울 때만 적용되고 DB에는 기본값이 없다. SQL로 직접 INSERT하는 수집기는 값을 직접 넣어야 한다. DB에도 기본값을 심을지(`db_default`)는 수집기를 만들 때 정한다.
 | 테이블 | 컬럼 | 기본값 |
@@ -388,6 +388,7 @@ erDiagram
 **제약·인덱스 이름.**
 | 이름 | 테이블 | 내용 |
 |---|---|---|
+| `idx_sale_user_date` | `sale_record` | (user_id, sale_date) |
 | `uk_settle_price` | `settle_price` | UK① (trade_date, market_id, item_id, grade) |
 | `idx_settle_item_mkt_date` | `settle_price` | (item_id, market_id, trade_date) |
 | `idx_auction_mkt_item_at` | `auction_trade` | (market_id, item_id, auction_at) |
@@ -399,7 +400,7 @@ erDiagram
 | 테이블 | 주요 컬럼 | 키·비고 | 관련 REQ |
 |---|---|---|---|
 | `realtime_price` | trade_date(정산일자. 전날 오후 경매분 포함, settle_price와 같은 기준), market_id, item_id, avg_price(물량 가중, 원/kg), min_price, max_price, volume_kg, trade_count, last_auction_at(UTC), updated_at(UTC) | UK(trade_date, market_id, item_id) `uk_realtime_price`. Flink `realtime_price` 작업이 UPSERT (`source_key`로 중복 제거 후 집계). **구현됨** (`prices` 앱) | REQ-PRC-004 |
-| `sale_record` | user_id, sale_date, market_id, item_id, grade, volume_kg, amount_won, created_at | 평균 대비 %는 settle_price와 조인해 계산 | REQ-SAL-001~003 |
+| `sale_record` | user_id, sale_date, market_id, item_id, grade, volume_kg, amount_won, created_at | grade 기본 `ALL`(settle_price.grade와 같은 값), amount_won은 총액(원). 평균 대비 %는 저장하지 않고 조회 때 settle_price(같은 날짜·시장·품목·등급)와 맞춰 계산. 인덱스 `idx_sale_user_date`(user_id, sale_date). **구현됨** (`accounts` 앱) | REQ-SAL-001~003 |
 | `forecast` | item_id, market_id, base_week(예측 기준 월요일), horizon(1~4), target_week, pred_price, lower80, upper80, last_week_price, model_version, created_at | UK(item_id, market_id, base_week, horizon). 지난 예측도 지우지 않음 | REQ-PRD-001~005 |
 | `special_event` | event_type(WARNING·IMPORT_SURGE·PEST_INCREASE·GOV_NOTICE), item_id(없으면 NULL), sido, sigungu(NULL이면 시도 전체), occurred_at, title, detail(JSON: 비교 수치 등), source_url, source_ref | 특수 상황 1건 = 1행. UK(event_type, source_ref) `uq_special_event_source`. 기상특보는 source_ref = `source_key:status`, 상태가 발표·변경발표일 때만 만든다. **구현됨** (`alerts` 앱) | REQ-ALT-001, 004~006 |
 | `alert` | user_id, special_event_id, created_at, read_at | 회원별 알림. read_at이 NULL이면 안 읽음. UK(user_id, special_event_id) `uq_alert_user_event`. **구현됨** (`alerts` 앱) | REQ-ALT-003 |
