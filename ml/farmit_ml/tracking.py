@@ -42,7 +42,8 @@ def log_run(run_name: str, stage: str, bundle: Bundle, data_hash: str, metrics: 
     """실행 하나를 기록하고 run_id를 돌려준다. stage: forecast | evaluate | experiment."""
     mlflow = _mlflow()
     with mlflow.start_run(run_name=run_name) as run:
-        mlflow.set_tags({"stage": stage, "model_version": bundle.version, "data_hash": data_hash,
+        mlflow.set_tags({"stage": stage, "item_code": bundle.item_code, "model_version": bundle.version,
+                         "data_hash": data_hash,
                          "git_commit": _git_commit()})
         flat = {**{k: v for k, v in asdict(bundle).items()}, **(params or {})}
         mlflow.log_params({k: (json.dumps(v, ensure_ascii=False, default=str)[:6000]

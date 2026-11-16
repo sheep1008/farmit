@@ -2,7 +2,7 @@
  "version": "v3",
  "item_code": "0601",
  "item_name": "사과",
- "markets": {"250001": "대전오정", "250003": "대전노은", "340101": "천안", "330101": "청주"},
+ "data_file": "apple_weekly.csv",
  "horizons": [1, 2, 3, 4],
  "seed": 42,
  "lstm_seeds": 5,

@@ -24,6 +24,9 @@
 
 ## 1. 현재 운영 모델: 사과 v3
 
+> **2026-11-16부터 운영은 v4다** (K13, `config/0601`): 공통 피처 40개로 전국 32개 시장을 학습하고 32곳 모두 노출한다. 테스트 NMAE 0.112, 기준선 대비 29% 개선, 시장 × h별 80% 구간(테스트 커버리지 80.1%). 결과와 이유는 [7.10](#710-운영-코드로-재현-k13-2026-11-16-사과-v4).
+> 아래는 대전·충청 4개 시장 v3 기록이다. v3 설정은 `config/0601_v3`로 남아 있다 (4개 시장만 보면 v3가 0.098로 약간 낫다. 7.2).
+
 실험 저장소 `ml_kimkihyun_yangjeongho`(원본 저장소에 있음, 이 레포에는 없음)에서 정한 방식을 `ml/farmit_ml`로 옮겼다. Windows에서 실험 저장소의 테스트 결과와 2026-10-19 예측 16행을 똑같이 재현한다.
 
 **문제 정의**
@@ -51,16 +54,20 @@
 
 ```
 ml/
-├── config/                  사과 v3 모델 구성. 코드를 고치지 않고 여기서 바꾼다
-│   ├── model.json           버전(v3), 품목·시장 코드, horizon, LSTM 시드 수, 80% 구간 분위수
-│   ├── preprocess.json      타깃 변환(logratio), 트리 피처 77개, LSTM 피처 71개, 전처리 옵션
-│   ├── best_params.json     h별 트리 모델 하이퍼파라미터 (전국 실험도 이 값을 쓴다)
-│   ├── stack_params.json    horizon 통합 트리 모델 하이퍼파라미터
-│   ├── lstm_params.json     LSTM 하이퍼파라미터
-│   ├── final_choice.json    앙상블 가중치 (구성 모델 이름 → 비중)
-│   └── postprocess.json     시장 간 수축 시장별 w, 비율 계산 주 수
-├── farmit_ml/               운영 패키지 (사과 v3)
-│   ├── settings.py          경로·상수, config 묶음(Bundle) 로드
+├── config/                  모델 구성. 코드를 고치지 않고 여기서 바꾼다. 품목마다 폴더 하나
+│   ├── <품목코드>/          운영 설정 (--item <품목코드>). 파일 구성은 아래 0601_v3와 같다
+│   └── 0601_v3/             사과 v3 (대전·충청 4개 시장, 77개 피처). 재현·비교용으로 남긴다 (--config config/0601_v3)
+│       ├── model.json       버전(v3), 품목 코드, 데이터 파일 이름(data_file), horizon, LSTM 시드 수, 80% 구간 분위수
+│       ├── markets.json     학습 시장(train: 코드 → 이름, 순서 = 시장 더미·LSTM 임베딩 순서), 예측을 내보낼 시장(serve)
+│       ├── (intervals.json) 시장 × h별 80% 구간 분위수 (v4부터. v3는 model.json의 h별 값 하나)
+│       ├── preprocess.json  타깃 변환(logratio), 트리 피처 77개, LSTM 피처 71개, 전처리 옵션
+│       ├── best_params.json h별 트리 모델 하이퍼파라미터 (전국 실험도 이 값을 쓴다)
+│       ├── stack_params.json horizon 통합 트리 모델 하이퍼파라미터
+│       ├── lstm_params.json LSTM 하이퍼파라미터
+│       ├── final_choice.json 앙상블 가중치 (구성 모델 이름 → 비중)
+│       └── postprocess.json 시장 간 수축 시장별 w, 비율 계산 주 수
+├── farmit_ml/               운영 패키지 (품목·시장·피처는 설정에서 읽는다)
+│   ├── settings.py          경로·상수(horizon 1~4, 시드), 설정 폴더 고르기, config 묶음(Bundle) 로드
 │   ├── data.py              데이터 로드·컬럼 검사·분할·교차검증 fold·as_of(그 시점 정보만 남기기)
 │   ├── metrics.py           NMAE·MAE·RMSE·방향 정확도, 기준선
 │   ├── preprocess.py        Preprocessor(상대화·결측·스케일), 타깃 변환
@@ -69,7 +76,10 @@ ml/
 │   ├── ensemble.py          구성 모델 등록(COMPONENTS), 가중 평균, 후처리, 80% 구간
 │   ├── postprocess.py       시장 간 수축
 │   ├── tracking.py          MLflow 기록
-│   ├── forecast.py          [실행] 주간 예측 → forecast 행 16개
+│   ├── selection.py         [실행] 학습·노출 시장 선별, OOF·테스트 평가 → markets.json (7.10)
+│   ├── intervals.py         [실행] OOF 잔차로 시장 × h별 80% 구간, 테스트 커버리지 → intervals.json (7.10)
+│   ├── forecast.py          [실행] 주간 예측 → serve 시장 × h1~h4 forecast 행 (--to-db면 바로 적재)
+│   ├── store.py             [실행] forecast CSV → forecast 테이블 UPSERT (4장)
 │   └── evaluate.py          [실행] 테스트 평가 (재현·비교)
 ├── experiments/             전국·저장성 품목 확장 실험 (7장, 사용법은 experiments/README.md)
 ├── tests/                   가짜 데이터로 출력 형식·누수 없음 확인
@@ -100,7 +110,7 @@ flowchart LR
 
 ## 3. 입력 데이터
 
-`ml/data/apple_weekly.csv`가 기본 경로다 (`--data` 또는 환경 변수 `FARMIT_ML_DATA`). 시장 × 주 한 행이며, 아래 컬럼이 반드시 있어야 한다. 빠지면 `check_columns()`가 빠진 컬럼 이름을 알려 준다.
+`ml/data/<model.json의 data_file>`이 기본 경로다 (없으면 `weekly_<품목코드>.csv`, v3는 `apple_weekly.csv`. `--data` 또는 환경 변수 `FARMIT_ML_DATA`로 바꾼다). 시장 × 주 한 행이며, `markets.json`의 학습 시장 행만 읽는다. 아래 컬럼이 반드시 있어야 한다. 빠지면 `check_columns()`가 빠진 컬럼 이름(학습 시장이 없으면 그 시장)을 알려 준다.
 
 | 컬럼 | 의미 |
 |---|---|
@@ -110,7 +120,7 @@ flowchart LR
 | `price_kg`, `price_ma4` | 그 주 kg당 가격, 4주 이동평균 (기준선·타깃 변환에 사용) |
 | `target_h1~4`, `target_week_h1~4` | h주 뒤 가격과 그 주 월요일 (최근 주는 비어 있음) |
 | `hol_offset_h1~4`, `hol_in_target_h1~4` | 타깃 주와 명절 사이 일수, 타깃 주에 명절 포함 여부 |
-| `config/preprocess.json`의 피처 | 트리 77개 + LSTM 71개 (겹침 포함) |
+| `preprocess.json`의 피처 | 가중치가 0보다 큰 구성 모델이 쓰는 것만 검사한다: 트리 모델이 있으면 `tree.features`, LSTM이 있으면 `linear.features` (v3: 트리 77개 + LSTM 71개) |
 
 - **이 데이터셋은 레포에 없다.** 실험 저장소의 `scripts/run_all.py`(수집) → `build_dataset.py`(통합·누수 검사)로 만든다. 운영에서는 `batch/`로 옮겨야 한다 ([8장](#8-다음-단계)).
 - **옮기는 중 (K12, 2026-11-15):** `batch/spark/features.py`(Airflow `build_features_weekly`, 매주 일 23:00 UTC)가 MySQL에서 읽어
@@ -150,7 +160,7 @@ flowchart LR
 - **답을 기다리며 정한 가정** (양정호 답이 다르면 그 부분만 고친다)
   1. 전국 시장 행을 모두 만든다. 학습 시장 선별(`pick_markets`, 7.2절 "학습 시장")은 ML 쪽(K13)에서 한다.
   2. 가락 묶음(`garak_price`·`garak_price_ma4`·`dev_garak`)은 넣지 않는다.
-  3. `n_records`(거래 건수)는 넣지 않는다. 정산 테이블(`settle_price`)은 (날짜, 시장, 등급) 합계라 원천이 없다. 시장 선별 기준 "주당 거래 20건 이상"은 거래일 수 등으로 바꿔야 한다 (K13).
+  3. `n_records`(거래 건수)는 넣지 않는다. 정산 테이블(`settle_price`)은 (날짜, 시장, 등급) 합계라 원천이 없다. 시장 선별 기준 "주당 거래 20건 이상"은 "주당 거래일 수 중앙값 4일 이상"으로 바꿨다 ([7.10](#710-운영-코드로-재현-k13-2026-11-16-사과-v4)).
 - **실험과 똑같이 못 하는 것**
   - 이상치: 실험은 원본 거래 한 건씩 "품목·월 전국 중앙값의 1/5~5배" 밖을 버린다. DB에는 (날짜, 시장, 등급) 합계만 있어 같은 단위로 거를 수 없다 → 합계 행의 kg당 가격으로 비슷하게 거르고, 실험 데이터셋과의 차이를 숫자로 확인한다 (K30 3단계).
   - 명절: holiday 테이블에 2017년이 없어 2018년 초 `days_since_*`가 400이 된다 → 2017년 설·추석을 보충한다.
@@ -172,7 +182,7 @@ flowchart LR
 
 ## 4. 출력 (forecast 테이블)
 
-`python -m farmit_ml.forecast`는 `ml/outputs/forecast_<base_week>.csv`를 만든다. 컬럼은 [ERD의 `forecast` 테이블](erd.md)에 맞췄다.
+`python -m farmit_ml.forecast --item <품목코드>`는 `ml/outputs/forecast_<품목코드>_<base_week>.csv`를 만든다. 학습 시장 전부로 학습하고 `markets.json`의 `serve` 시장 행만 낸다. 컬럼은 [ERD의 `forecast` 테이블](erd.md)에 맞췄다.
 
 | 출력 컬럼 | forecast 테이블 | 비고 |
 |---|---|---|
@@ -185,8 +195,13 @@ flowchart LR
 | `pred_price`, `lower80`, `upper80` | 같음 | 원/kg |
 | `last_week_price` | 같음 | 지난주 실제 가격 |
 | `near_holiday` | - (**테이블에 없음**) | 대상 주가 명절 3주(21일) 이내. REQ-PRD-003 주의 문구용 |
-| `model_version` | `model_version` | `v3-<MLflow run_id 앞 8자리>` (REQ-PRD-004) |
-| `created_at` | `created_at` | |
+| `model_version` | `model_version` | `<버전>-<MLflow run_id 앞 8자리>`, 예: `v4-1386060b` (REQ-PRD-004) |
+| `created_at` | `created_at` | UTC (`+00:00`). API가 Asia/Seoul로 바꿔 보여 준다 |
+
+**적재:** `farmit_ml.store`가 CSV를 `forecast` 테이블에 UPSERT한다 (수집기와 같은 PyMySQL + 환경 변수 `MYSQL_*`·`DB_HOST`·`DB_PORT`).
+- UK `uk_forecast`(item_id, market_id, base_week, horizon)로 덮어쓴다. 같은 기준 주를 다시 돌려도 행이 늘지 않고, 지난 기준 주는 그대로 남는다.
+- `item_code`(aT 코드)로 `item.item_id`를 찾고, `item.is_forecast`가 false거나 `market`에 없는 시장이 있으면 아무것도 쓰지 않고 멈춘다.
+- 표준 라이브러리 + PyMySQL만 써서 수집기 컨테이너에서도 돈다. 2026-11-16 첫 적재: 기준 주 2026-11-16, 32개 시장 × h1~h4 = 128행, `GET /api/forecasts?item_id=10`으로 확인. 매주 자동 실행은 K19.
 
 ---
 
@@ -203,13 +218,23 @@ pip install -r requirements.txt
 # 실험(experiments/)·튜닝까지 하려면: pip install -r requirements-dev.txt
 ```
 
-### 주간 예측 (데이터셋을 `ml/data/apple_weekly.csv`에 둔 뒤)
+### 주간 예측
+품목은 코드에 고정하지 않는다. `--item <품목코드>`(→ `config/<품목코드>/`, `data/weekly_<품목코드>.csv`) 또는 `--config <설정 폴더>`를 꼭 준다.
 ```bash
-python -m farmit_ml.forecast                          # 데이터의 마지막 주 기준
-python -m farmit_ml.forecast --base-week 2026-10-19   # 지난 주차 다시 예측 (백필)
-python -m farmit_ml.forecast --skip LSTM              # torch 없이 (나머지 가중치로 다시 나눔, 버전에 -noLSTM 표시)
-python -m farmit_ml.forecast --no-mlflow              # MLflow 기록 없이
-python -m farmit_ml.evaluate                          # 테스트 평가: v3 + 후처리 NMAE Windows 0.0984, Linux·Docker 0.0982
+python -m farmit_ml.selection --item 0601                         # 학습·노출 시장 선별 → config/0601/markets.json (설정을 바꿨을 때·분기마다)
+python -m farmit_ml.intervals --item 0601                         # 위 OOF로 시장별 80% 구간 → config/0601/intervals.json
+python -m farmit_ml.forecast --item 0601                          # 데이터의 마지막 주 기준
+python -m farmit_ml.forecast --item 0601 --base-week 2026-10-19   # 지난 주차 다시 예측 (백필)
+python -m farmit_ml.forecast --item 0601 --skip LSTM              # torch 없이 (나머지 가중치로 다시 나눔, 버전에 -noLSTM 표시)
+python -m farmit_ml.forecast --item 0601 --no-mlflow              # MLflow 기록 없이
+python -m farmit_ml.forecast --item 0601 --to-db                  # 예측하고 forecast 테이블에 UPSERT (DB 환경 변수 필요)
+python -m farmit_ml.store outputs/forecast_0601_2026-11-16.csv    # 이미 만든 CSV를 적재
+# 호스트에 DB 환경 변수가 없으면 수집기 컨테이너로 (레포 루트, Git Bash는 앞에 MSYS_NO_PATHCONV=1):
+# docker compose -f infra/docker-compose.yml --profile collect run --rm --no-deps -v "$PWD/ml:/ml:ro" collectors \
+#   python /ml/farmit_ml/store.py /ml/outputs/forecast_0601_2026-11-16.csv
+python -m farmit_ml.evaluate --item 0601                          # 테스트 평가
+# v3 재현 (실험 저장소의 apple_weekly.csv를 data/에 둔 뒤): 후처리 NMAE Windows 0.0984, Linux·Docker 0.0982
+python -m farmit_ml.evaluate --config config/0601_v3
 ```
 - Windows와 Linux의 차이는 XGBoost·LSTM 부동소수점 연산 차이다. 같은 OS·같은 스레드 수에서는 매번 같다.
 
@@ -223,17 +248,17 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db   # http://localhost:50
 ```bash
 # 레포 루트에서. Git Bash는 앞에 MSYS_NO_PATHCONV=1
 docker build -t farmit-ml ml
-docker run --rm -v "$PWD/ml/data:/app/data" -v "$PWD/ml/outputs:/app/outputs" -v "$PWD/ml/mlruns:/app/mlruns" farmit-ml
-docker run --rm -v "$PWD/ml/data:/app/data" -v "$PWD/ml/outputs:/app/outputs" farmit-ml farmit_ml.evaluate --no-mlflow
+docker run --rm -v "$PWD/ml/data:/app/data" -v "$PWD/ml/outputs:/app/outputs" -v "$PWD/ml/mlruns:/app/mlruns" farmit-ml farmit_ml.forecast --item 0601
+docker run --rm -v "$PWD/ml/data:/app/data" -v "$PWD/ml/outputs:/app/outputs" farmit-ml farmit_ml.evaluate --item 0601 --no-mlflow
 ```
-- 기본 명령은 `farmit_ml.forecast`. 이미지는 약 2.6GB (torch·XGBoost 모두 CPU 전용)
+- 기본 명령은 `farmit_ml.forecast`(품목 인자를 붙여야 한다). 이미지는 약 2.6GB (torch·XGBoost 모두 CPU 전용)
 
 ### 환경 변수
 
 | 변수 | 기본값 | 용도 |
 |---|---|---|
-| `FARMIT_ML_DATA` | `ml/data/apple_weekly.csv` | 입력 데이터셋 |
-| `FARMIT_ML_CONFIG` | `ml/config` | 설정 폴더 (실험용 설정 비교) |
+| `FARMIT_ML_DATA` | `ml/data/<model.json data_file>` | 입력 데이터셋 (`--data`가 우선) |
+| `FARMIT_ML_CONFIG` | `ml/config/<--item>` | 설정 폴더 (실험용 설정 비교, `--config`가 우선) |
 | `FARMIT_ML_OUTPUT` | `ml/outputs` | 결과 CSV 폴더 |
 | `FARMIT_ML_THREADS` | `8` | 학습 스레드 수. **XGBoost·LSTM은 스레드 수가 바뀌면 결과가 조금 달라진다** |
 | `MLFLOW_TRACKING_URI` | `sqlite:///ml/mlruns/mlflow.db` | MLflow 서버를 띄우면 그 주소로 |
@@ -256,9 +281,12 @@ docker run --rm -v "$PWD/ml/data:/app/data" -v "$PWD/ml/outputs:/app/outputs" fa
 | 하이퍼파라미터 | `best_params.json`, `stack_params.json`, `lstm_params.json` |
 | 피처 추가·제거 | `preprocess.json`의 `tree.features`, `linear.features` |
 | 후처리 끄기·비중 변경 | `postprocess.json`의 `weights` (모두 0이면 후처리 없음) |
-| 80% 구간 다시 계산 | `model.json`의 `interval.quantiles` |
+| 80% 구간 다시 계산 | `python -m farmit_ml.intervals --item <품목>` → `intervals.json` (없으면 `model.json`의 `interval.quantiles`를 모든 시장에 쓴다) |
 
-기존 설정을 두고 비교하려면 `cp -r config config_exp` 후 `FARMIT_ML_CONFIG=config_exp python -m farmit_ml.forecast --no-mlflow`.
+| 학습·노출 시장 | `markets.json`의 `train`(학습), `serve`(forecast로 내보냄, `train`의 부분집합) |
+| 시장 더미 끄기 | `preprocess.json`의 `tree.prep.market_dummies: false` (시장 수가 많을 때 `mkt_id` 피처로 대신) |
+
+기존 설정을 두고 비교하려면 `cp -r config/0601 config/0601_exp` 후 `python -m farmit_ml.forecast --config config/0601_exp --no-mlflow`. 버전을 바꾸면 이전 폴더를 `config/<품목>_<버전>`으로 남긴다.
 
 ### 새 모델 추가
 `ensemble.py`의 `COMPONENTS`에 이름과 예측 함수를 등록하고 `final_choice.json`에 같은 이름으로 비중을 준다. 예측 함수는 `(bundle, df_all, trn, tst)`를 받아 `(len(tst), 4)` 가격(원/kg) 배열을 돌려준다. 예측하지 못한 행은 NaN으로 두면 그 행만 나머지 모델 비중으로 다시 나눈다.
@@ -448,9 +476,52 @@ COMPONENTS["CatBoost"] = _catboost
 
 ### 7.9 한계
 - 하이퍼파라미터는 사과 v3 값을 그대로 썼다. 품목별로 튜닝하면 더 나아질 여지가 있다.
-- 80% 예측 구간을 상품·시장별로 아직 만들지 않았다.
+- 80% 예측 구간을 상품·시장별로 아직 만들지 않았다. (사과는 K13에서 만들었다: [7.10](#710-운영-코드로-재현-k13-2026-11-16-사과-v4))
 - 날씨는 시도 단위로 거칠다 (사과 v3는 시군 단위). 생산량 값은 이후 수정된 최신값이라 공표 당시 값과 조금 다를 수 있다.
 - 깐마늘은 OOF가 2년뿐이다. 모든 결과는 2026-11 이후 새 데이터로 다시 확인해야 한다.
+
+### 7.10 운영 코드로 재현 (K13, 2026-11-16, 사과 v4)
+
+7장 실험 구성을 `farmit_ml` 설정(`config/0601`, 버전 v4)으로 옮기고, 운영 피처(K30 `weekly_0601.csv`, 32개 시장)로 다시 돌렸다.
+`python -m farmit_ml.selection --item 0601` 한 번이 학습 시장 선별 → 2021~2024 OOF → 노출 시장 선별(`markets.json` 저장) → 테스트 한 번 → MLflow(stage=select)를 한다.
+
+| 설정 | 내용 |
+|---|---|
+| 피처 | 공통 피처 40개 = 실험 `GROUPS`에서 K30에 없는 `n_records`·가락 묶음 3개를 뺀 것 (`preprocess.json`) |
+| 전처리 | 실험과 같게: 가격 수준 → 지난주 가격 대비 로그비, 물량 5개 → `log1p`, 시장 → `mkt_id` 하나(더미 없음), RF 결측 → 학습 중앙값(결측 표시 없음), 무한대 → 결측 |
+| 모델 | RF·LightGBM·XGBoost h별 모델 같은 비중(`final_choice.json`), 통합 트리·LSTM·후처리 0. 하이퍼파라미터는 v3 값 |
+| 학습 시장 | 학습 기간(~2023)에 제철 주의 80% 이상 거래 **+ 주당 거래일 수 중앙값 4일 이상** (`model.json`의 `selection`) |
+| 노출 시장 | 7.4 최종 규칙: OOF 4개 연도 중 3개 이상 기준선(B1·B2 중 그 시장 OOF에서 나은 쪽)을 이김 |
+
+**"주당 거래 20건" 기준을 바꾼 이유:** 정산 테이블은 (날짜, 시장, 등급) 합계라 거래 건수(`n_records`)가 없다. 거래일 수가 그다음으로 "꾸준히 거래되는가"를 보여 준다.
+사과는 32개 시장 모두 중앙값 5~6일이라 모두 통과했다. 실험에서 건수 기준으로 빠졌던 **춘천(320101)이 학습·노출 시장에 들어온다** (주 5일 거래, 물량 중앙값 6.8t으로 강릉·정읍과 비슷해 거래일·물량으로는 가를 수 없다).
+
+| 결과 | OOF 평균 | 2021 | 2022 | 2023 | 2024 | 테스트 | 테스트 h1 / h2 / h3 / h4 |
+|---|---|---|---|---|---|---|---|
+| 7.3 실험 (31개 시장) | 0.113 | 0.121 | 0.108 | 0.106 | 0.116 | 0.109 | |
+| **v4 운영 (32개 시장)** | **0.115** | 0.119 | 0.110 | 0.110 | 0.123 | **0.112** | 0.093 / 0.108 / 0.120 / 0.124 |
+| v4, 춘천 빼고 채점 | 0.112 | 0.116 | 0.106 | 0.107 | 0.120 | | |
+| v4, 춘천 빼고 학습·채점 | 0.112 | 0.116 | 0.106 | 0.108 | 0.118 | 0.111 | |
+
+- **재현됐다.** 차이(OOF +0.002)는 대부분 춘천 한 곳의 큰 오차(OOF 0.199)가 전체 평균에 들어가서다. 춘천을 빼고 채점하면 0.112로 실험과 같은 수준이고, 춘천을 학습에 넣든 빼든 다른 시장 결과는 같다. 테스트에 남은 0.002 차이는 가락 묶음·`n_records`를 뺀 것과 이상치 거르는 단위 차이(3.1절)로 본다.
+- **기준선 대비:** 테스트 NMAE 0.112 vs 기준선 0.158(B1 직전값, B2는 0.161) → **29% 개선**. 시장별 개선 중앙값 30% (실험 30%).
+- **노출 시장 32/32** (모두 OOF 4개 연도 전부 기준선을 이김). 테스트에서도 31/32(96.9%)가 기준선을 이겼다. 진 곳은 서울가락(−0.1%, 사실상 같음).
+- 춘천은 노출하지만 오차가 크다(OOF 0.199, 테스트 0.128). 7.4대로 오차 크기는 시장별 80% 구간 폭으로 보여 준다 (K13 3단계).
+- 결과 파일: `ml/outputs/select_0601_v4.csv`(시장별 표), `ml/outputs/oof_0601_v4.csv`(OOF 예측, 구간 계산용), `ml/outputs/test_0601_v4.csv`(테스트 예측, 커버리지 확인용), MLflow `apple-price` 실험의 `select 0601 v4` 실행.
+
+**80% 구간 (REQ-PRD-002, `python -m farmit_ml.intervals --item 0601` → `config/0601/intervals.json`)**
+
+v3 구간은 4개 시장 **테스트** 잔차로 만들어 전국 시장에 쓸 수 없고, 테스트를 보고 만든 값이라 검증도 안 된다. v4는 **2021~2024 OOF 상대잔차** (실제 − 예측) / 예측의 10%·90% 분위수를 **시장 × h별**로 만들고(잔차 100개 미만이면 전체 분위수, 사과는 32곳 모두 자기 값), 테스트에서는 커버리지만 확인했다. 구간이 예측값을 꼭 포함하게 하한 ≤ 0 ≤ 상한으로 자른다.
+
+| 테스트 (2025-01~) | 커버리지 | h1 | h2 | h3 | h4 | 시장별 커버리지 범위 | 70~90%인 시장 | 80%에서 평균 벗어남 | 평균 폭 |
+|---|---|---|---|---|---|---|---|---|---|
+| **시장 × h별 (채택)** | **80.1%** | 79.3% | 78.7% | 80.5% | 82.1% | 67.8% ~ 90.5% | 29/32 | 4.1%p | ±19% |
+| 전체 시장 한 구간 (비교) | 81.4% | 80.5% | 80.2% | 81.9% | 83.2% | 61.6% ~ 90.2% | 29/32 | 5.7%p | ±19% |
+
+- 전체 커버리지는 둘 다 목표(80%)에 맞는다. 시장별 구간이 시장 사이 커버리지 차이를 줄인다 (평균 벗어남 5.7 → 4.1%p). 무엇보다 **시장마다 폭이 달라** 오차가 큰 시장을 넓게 보여 준다(7.4): h4 폭이 가장 좁은 부산반여 36%, 가장 넓은 춘천 72%.
+- 커버리지가 낮은 시장: 정읍 67.8%, 포항 68.5%, 창원내서 70.6%, 서울가락 70.9%. 정읍·포항·창원내서는 테스트 NMAE가 OOF보다 0.02~0.05 커서 OOF 잔차로 만든 구간이 좁았다 (서울가락은 NMAE는 비슷하지만 구간 자체가 가장 좁은 편). 8.1의 매주 성능 감시에서 커버리지도 함께 본다.
+- OOF 예측은 테스트 때보다 짧은 학습 기간으로 만든 것이라 실제 운영 오차보다 약간 클 수 있다(보수적인 쪽).
+- 결과 파일: `ml/outputs/coverage_0601_v4.csv`(시장 × h 커버리지), MLflow `intervals 0601 v4` 실행.
 
 ---
 
@@ -497,6 +568,6 @@ COMPONENTS["CatBoost"] = _catboost
 | 데이터셋 만들기 | `experiments/dataset.py`의 데이터셋 생성을 `batch/`(Airflow·Spark)로 옮긴다. 원천은 수집기가 MySQL에 쌓은 aT 정산 데이터 | REQ-COL-003 |
 | `farmit_ml` 일반화 | 사과·4개 시장 고정을 **상품 정의·시장 목록 설정형**으로 바꾸고, 시장 × 상품 선별 결과(7.4 규칙)를 설정으로 둔다 | REQ-NFR-010 |
 | 상품·시장별 80% 구간 | OOF 잔차로 상품 × 시장(또는 거래량 구간)별 분위수 | REQ-PRD-002 |
-| DB 적재·자동 실행 | 예측 CSV → `forecast` 테이블, Airflow 월요일 DAG (`farmit_ml` Docker) | REQ-PRD-001, 005 |
+| DB 적재·자동 실행 | 예측 CSV → `forecast` 테이블(**K13에서 만듦**: `farmit_ml.store`, `forecast --to-db`), Airflow 월요일 DAG (`farmit_ml` Docker, K19) | REQ-PRD-001, 005 |
 | 성능 감시 | 지난 예측 vs 실제 가격 NMAE를 시장 × 상품별로 매주 계산하고, 기준선보다 나쁜 곳은 노출을 멈춘다 (8.1) | REQ-PRD-005 |
 | 분기 재검증 | `experiments/run_oof.py`의 OOF·시장 선별을 운영 작업으로 옮겨 분기마다 설정을 다시 정한다. 첫 재검증은 2026-11 이후 실제 가격으로 | REQ-PRD-004, 005 |
