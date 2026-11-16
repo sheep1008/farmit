@@ -32,6 +32,7 @@ pip install -r requirements-dev.txt
 | 4 | `python run_prod.py` | 생산량 피처 효과 | - | 품목당 5분 |
 | 4 | `python run_region.py` | 지역 예측을 개별 시장에 옮겨 쓸 때 (run_oof market 다음에) | - | 품목당 2분 |
 | 5 | `python summarize.py` | docs/ml.md 7장 표 출력 (markdown) | - | 1분 |
+| (K30) | `python collect_items.py 2018-01-01 2026-11-08 0601` → `python compare_spark.py 0601` | Spark 운영 피처(`ml/data/weekly_0601.csv`)와 실험 데이터셋을 같은 (시장, 주)끼리 비교 (docs/ml.md 3.1) | aT 약 650 | 2분 |
 
 aT 정산 API 하루 한도는 10,000건이다. 1~3단계를 하루에 모두 돌리면 약 4,000건을 쓴다.
 `run_*.py`는 상품 코드를 인자로 받는다 (예: `python run_oof.py market 0601 1201`). 없으면 최종 검토 대상 8개 (`dataset.FINAL_ITEMS`).
