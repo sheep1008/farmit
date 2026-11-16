@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '../views/HomeView.vue'
+import DashboardView from '../views/DashboardView.vue'
 import ErrorView from '../views/ErrorView.vue' // 오류 화면은 네트워크가 나빠도 떠야 하므로 처음부터 같이 싣는다
 import { requireAuth } from './guards'
 
@@ -13,8 +13,8 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'dashboard', // SCR-003. 지금은 K05의 백엔드 연결 확인 화면을 그대로 둔다
-      component: HomeView,
+      name: 'dashboard', // SCR-003 (K20: 알림·특수 상황 카드, 예측 카드 자리)
+      component: DashboardView,
       meta: { title: '대시보드', requiresAuth: true },
     },
     { path: '/prices', name: 'prices', component: () => import('../views/PriceView.vue'), meta: { title: '가격' } }, // SCR-004
@@ -41,9 +41,17 @@ const router = createRouter({
     {
       path: '/alerts', // SCR-008
       name: 'alerts',
-      component: Placeholder,
+      component: () => import('../views/AlertListView.vue'),
       meta: { title: '알림', requiresAuth: true },
     },
+    {
+      path: '/alerts/:id(\\d+)', // SCR-009
+      name: 'alert-detail',
+      component: () => import('../views/AlertDetailView.vue'),
+      props: true,
+      meta: { title: '알림 상세', requiresAuth: true },
+    },
+    { path: '/cases', name: 'cases', component: () => import('../views/CaseView.vue'), meta: { title: '과거 사례' } }, // SCR-010
     {
       path: '/mypage', // SCR-015
       name: 'mypage',
