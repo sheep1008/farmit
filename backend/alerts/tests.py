@@ -229,3 +229,70 @@ class AlertApiTests(TestCase):
         self.login()
         res = self.client.get('/api/alerts?page=99')
         self.assertEqual((res.status_code, res.json()['data'], res.json()['meta']['total']), (200, [], 2))
+
+
+class CaseListTests(TestCase):
+    """GET /api/cases (K18, api.md 2.4). past_case는 Spark가 채우므로 여기서는 행을 직접 넣는다."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import date, datetime, timezone as tz
+
+        from codes.models import Market
+
+        from .models import PastCase
+        cls.apple = Item.objects.create(at_code='0601', name='사과', category='과일')
+        cls.pear = Item.objects.create(at_code='0602', name='배', category='과일')
+        m1 = Market.objects.create(market_id='250001', name='대전오정', sido='대전광역시', lat=0, lng=0)
+        m2 = Market.objects.create(market_id='340101', name='천안', sido='충청남도', lat=0, lng=0)
+        now = datetime(2026, 11, 16, 7, 0, tzinfo=tz.utc)
+
+        def case(market, etype, start, w1, n1=None, detail=None):
+            PastCase.objects.create(
+                item=cls.apple, market=market, event_type=etype, sido='경상북도', event_start=start,
+                event_end=start, base_week=start, base_price='1000.0', change_w1=w1, normal_w1=n1,
+                detail=detail or {'places': ['경상북도 영주시'], 'share': 25.0, 'normal_years': 5}, computed_at=now)
+
+        case(m1, 'COLD_WAVE', date(2026, 1, 19), '10.00', '2.00')
+        case(m2, 'COLD_WAVE', date(2026, 1, 19), '6.00', None)
+        case(m1, 'HEAT_WAVE', date(2025, 7, 21), '1.50', '0.50')
+        case(m1, 'COLD_WAVE', date(2024, 1, 15), '4.00', '1.00')
+
+    def get(self, **params):
+        return self.client.get('/api/cases', params)
+
+    def test_grouped_by_event_with_market_rows_and_avg(self):
+        res = self.get(item_id=self.apple.item_id, event_type='COLD_WAVE')
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        data = body['data']
+        self.assertEqual([d['event_start'] for d in data], ['2026-01-19', '2024-01-15'])   # 최신순
+        first = data[0]
+        self.assertEqual((first['event_name'], first['share'], first['places']), ('한파', 25.0, ['경상북도 영주시']))
+        self.assertEqual([m['market_id'] for m in first['markets']], ['250001', '340101'])
+        self.assertEqual(first['markets'][0]['base_price'], 1000.0)
+        # 평균은 값이 있는 시장만: change (10+6)/2, normal은 2.0 하나
+        self.assertEqual((first['avg']['change_w1'], first['avg']['normal_w1'], first['avg']['change_w2']),
+                         (8.0, 2.0, None))
+        meta = body['meta']
+        self.assertIn('원인', meta['notice'])
+        self.assertEqual(meta['computed_at'], '2026-11-16T16:00:00+09:00')
+        # summary는 event_type으로 걸러도 모든 종류
+        self.assertEqual([(s['event_type'], s['events']) for s in meta['summary']],
+                         [('COLD_WAVE', 2), ('HEAT_WAVE', 1)])
+
+    def test_market_filter(self):
+        data = self.get(item_id=self.apple.item_id, market_id='340101').json()['data']
+        self.assertEqual([(d['event_type'], [m['market_id'] for m in d['markets']]) for d in data],
+                         [('COLD_WAVE', ['340101'])])
+
+    def test_no_cases_is_empty(self):
+        res = self.get(item_id=self.pear.item_id)
+        self.assertEqual((res.status_code, res.json()['data'], res.json()['meta']['summary']), (200, [], []))
+
+    def test_errors(self):
+        self.assertEqual(self.get().json()['error']['code'], 'VALIDATION_ERROR')
+        bad = self.get(item_id=self.apple.item_id, event_type='TYPHOON')
+        self.assertEqual((bad.status_code, list(bad.json()['error']['details'])), (400, ['event_type']))
+        self.assertEqual(self.get(item_id=999999).status_code, 404)
+        self.assertEqual(self.get(item_id=self.apple.item_id, market_id='999999').status_code, 404)

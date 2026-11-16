@@ -514,9 +514,9 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 **오류**: `400 VALIDATION_ERROR`(`item_id` 없음·숫자 아님), `404 NOT_FOUND`(없는 품목·시장), `503 DATA_NOT_READY`(오늘 정산일자로 끝난 수집이 아직 없음)
 
-### 2.4 알림 (회원 전용)
+### 2.4 알림 (회원 전용) · 과거 사례
 
-세 API 모두 로그인 필요(`401 NOT_AUTHENTICATED`). **남의 알림은 403이 아니라 `404 NOT_FOUND`**.
+알림 세 API는 로그인 필요(`401 NOT_AUTHENTICATED`). **남의 알림은 403이 아니라 `404 NOT_FOUND`**. 과거 사례(`/api/cases`)는 로그인 없이 볼 수 있다.
 
 #### `GET /api/alerts` — 알림 목록
 쿼리: `unread=true`(안 읽은 것만, 기본 false), `page`, `size`(1.3절). 최신 발생순. 값이 잘못되면 `400 INVALID_PARAMETER`.
@@ -535,6 +535,52 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 #### `PATCH /api/alerts/{id}/read` — 읽음 처리
 본문 없음. `200`, `data`는 목록 항목과 같은 모양(`read_at` 채워짐). 이미 읽은 알림은 처음 읽은 시각을 유지한다.
 **오류**: `404 NOT_FOUND`
+
+#### `GET /api/cases` — 과거 사례 리포트
+| 인증 | 화면 | REQ |
+|---|---|---|
+| 전체 | SCR-010 | REQ-HIS-001, 002 |
+
+| 쿼리 | 필수 | 설명 |
+|---|---|---|
+| `item_id` | O | 품목 |
+| `event_type` | X | `HEAT_WAVE`(폭염)·`HEAVY_RAIN`(호우)·`COLD_WAVE`(한파)·`IMPORT_SURGE`(수입량 급증)·`PEST_INCREASE`(예찰 증가). 없으면 모두 |
+| `market_id` | X | 없으면 사례가 있는 모든 시장 (수집·참고 시장) |
+
+사건 하나 = `data` 한 항목, 시작일 최신순. 사례는 품목·종류당 수십 건이라 페이지를 나누지 않는다.
+
+**200**
+```json
+{
+  "data": [
+    { "event_type": "COLD_WAVE", "event_name": "한파", "sido": "경상북도",
+      "places": ["경상북도 영주시", "충청북도 충주시"], "share": 28.65,
+      "event_start": "2026-01-20", "event_end": "2026-01-22", "base_week": "2026-01-19",
+      "markets": [
+        { "market_id": "250001", "market_name": "대전오정", "base_price": 4210.5,
+          "change_w1": 8.2, "change_w2": 10.1, "change_w3": 12.0, "change_w4": 13.5,
+          "normal_w1": 1.4, "normal_w2": 4.0, "normal_w3": 5.2, "normal_w4": 5.0 }
+      ],
+      "avg": { "change_w1": 8.2, "change_w2": 10.1, "change_w3": 12.0, "change_w4": 13.5,
+               "normal_w1": 1.4, "normal_w2": 4.0, "normal_w3": 5.2, "normal_w4": 5.0 } }
+  ],
+  "meta": { "item_id": 10, "price_unit": "원/kg", "change_unit": "%",
+            "computed_at": "2026-11-16T16:00:00+09:00",
+            "notice": "과거 사례는 참고 정보입니다. ...",
+            "summary": [ { "event_type": "COLD_WAVE", "event_name": "한파", "events": 19,
+                           "change_w1": 10.1, "change_w2": 10.5, "change_w3": 10.6, "change_w4": 13.3,
+                           "normal_w1": 1.2, "normal_w2": 4.5, "normal_w3": 5.1, "normal_w4": 5.3 } ] }
+}
+```
+- `base_week`: 사건이 시작된 주의 월요일. `base_price`: 그 주 kg당 가격 (등외·하·5등 이하 제외 물량가중).
+- `change_w1~w4`: 기준 주 대비 1~4주 뒤 가격 변화율(%). 그 주 거래가 없으면 `null`.
+- `normal_w1~w4`: 평년 같은 주 변화율(%) = 사건이 난 해를 뺀 다른 해들의 같은 주차 변화율 평균. 비교할 해가 3년 미만이면 `null`. 설 대목처럼 해마다 오는 계절 움직임과 나란히 보라고 준다.
+- `share`·`places`: 날씨 사건에 걸린 주산지 물량 비중(%)과 시군. 수입량 급증은 `share: null`, `places: []`, `sido: "전국"`.
+- `avg`: 그 사건의 시장 평균 (값이 있는 시장만). `meta.summary`: 품목의 종류별 사건 수와 평균 (`event_type`으로 걸러도 모든 종류를 준다. 화면의 종류 선택에 쓴다).
+- `meta.notice`: "참고 정보이지 원인이 아님" 안내 문구 (REQ-HIS-002). 화면에 그대로 보여 준다.
+- 사례가 없는 품목(주산지·수입·예찰 자료가 없음, 계산 전): `200`, `data: []`, `meta.summary: []`.
+
+**오류**: `400 VALIDATION_ERROR`(`item_id` 필수·숫자, 모르는 `event_type`), `404 NOT_FOUND`(없는 품목·시장)
 
 ---
 
@@ -744,7 +790,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | GET | `/api/alerts` | 회원 | 알림 목록 (`unread=true` 필터) | SCR-003, 008 | REQ-ALT-003 | 3 |
 | GET | `/api/alerts/{id}` | 회원 | 알림 상세 + 대응 체크리스트 | SCR-009 | REQ-ALT-002 | 3 |
 | PATCH | `/api/alerts/{id}/read` | 회원 | 읽음 처리 | SCR-009 | REQ-ALT-003 | 3 |
-| GET | `/api/cases` | 전체 | 과거 사례 (item_id, event_type) | SCR-010 | REQ-HIS-001, 002 | 3 |
+| GET | `/api/cases` | 전체 | **(2.4에 상세)** 과거 사례 (item_id, event_type) | SCR-010 | REQ-HIS-001, 002 | 3 |
 | GET | `/api/search` | 전체 | 통합 검색 (`type`: item·market·press) | SCR-014 | REQ-SRC-001, 002 | 3 |
 | GET | `/api/notices` | 전체 | 시장 공지 (선택) | SCR-014 | REQ-SRC-003 | 3 |
 | POST | `/api/chat/messages` | 회원 | **(2.7에 상세)** 질문 보내기 → 스트리밍 응답(SSE: 진행 상태 → 답변 → 출처) | SCR-011 | REQ-CHT-001~007 | 4 |
