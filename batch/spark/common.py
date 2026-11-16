@@ -40,3 +40,13 @@ def _props() -> dict:
 def read(spark: SparkSession, table_or_query: str) -> DataFrame:
     """테이블 이름 또는 `(SELECT ...) AS t` 형태의 쿼리를 읽는다. 쿼리로 주면 거르기를 MySQL이 먼저 한다."""
     return spark.read.jdbc(_jdbc_url(), table_or_query, properties=_props())
+
+
+def connect():
+    """결과를 쓸 때 쓰는 PyMySQL 연결 (K17). Spark JDBC 쓰기는 INSERT IGNORE·UPSERT를 못 해서, 몇 건 안 되는 결과는 드라이버에서 직접 쓴다."""
+    import pymysql   # Airflow 이미지에 있다 (batch/airflow/Dockerfile). 읽기만 하는 작업은 필요 없어서 여기서 불러온다
+    return pymysql.connect(
+        host=os.environ.get("DB_HOST", "mysql"), port=int(os.environ.get("DB_PORT", "3306")),
+        user=os.environ["MYSQL_USER"], password=os.environ["MYSQL_PASSWORD"],
+        database=os.environ["MYSQL_DATABASE"], charset="utf8mb4", autocommit=True,
+    )
