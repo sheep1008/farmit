@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useAlertStore } from '@/stores/alerts'
 import { useAuthStore } from '@/stores/auth'
 
 // 공통 상단 메뉴 (docs/screens.md 1절). 768px 미만에서는 햄버거 버튼으로 메뉴를 펼친다.
@@ -30,8 +31,15 @@ async function logout() {
   router.push({ name: 'login' })
 }
 
-// 읽지 않은 알림 수 자리. 알림 API(Y09)가 생기면 채운다. null이면 숫자 표시를 숨긴다.
-const unreadCount = ref(null)
+// 읽지 않은 알림 수 (stores/alerts). 로그인하면 불러오고, 로그아웃하면 지운다. null·0이면 숫자를 숨긴다.
+// 상세 화면에서 읽음 처리하면 스토어가 줄여서 여기도 바로 바뀐다.
+const alertStore = useAlertStore()
+const unreadCount = computed(() => alertStore.unreadCount)
+watch(
+  () => auth.isLoggedIn,
+  (loggedIn) => (loggedIn ? alertStore.refreshUnread() : alertStore.reset()),
+  { immediate: true },
+)
 
 // 모바일에서 메뉴를 누르면 화면이 바뀌므로 펼친 메뉴를 닫는다
 watch(

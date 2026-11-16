@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { fetchChatSession, fetchChatSessions, sendChatMessage } from '@/api/chat'
 import BaseButton from '@/components/common/BaseButton.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
@@ -15,13 +15,15 @@ import { formatKstDateTime } from '@/utils/dates'
 const MAX_LENGTH = 1000
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 const messages = ref([]) // [{ role: 'user', content } | newReply() 모양]
 const sessionId = ref(null) // 첫 답변의 session 이벤트로 받는다. 이어서 묻는 질문에 같이 보낸다
 const remaining = computed(() => auth.user?.chat_remaining_today ?? null)
 const interestItems = computed(() => auth.user?.interest_items ?? [])
 const itemId = ref(interestItems.value[0]?.item_id ?? '') // '' = 품목 선택 안 함
-const question = ref('')
+// ?q=로 오면 질문 칸을 미리 채운다 (알림 상세의 "채팅으로 물어보기"). 보내기는 사용자가 누른다
+const question = ref(typeof route.query.q === 'string' ? route.query.q.slice(0, MAX_LENGTH) : '')
 const sending = ref(false)
 const formError = ref('')
 const log = ref(null)
