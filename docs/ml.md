@@ -116,9 +116,57 @@ flowchart LR
 - **옮기는 중 (K12, 2026-11-15):** `batch/spark/features.py`(Airflow `build_features_weekly`, 매주 일 23:00 UTC)가 MySQL에서 읽어
   `ml/data/weekly_<품목코드>.csv`(사과 `weekly_0601.csv`)를 만든다. 지금은 필요한 컬럼 89개 중 54개만 있어 `check_columns()`를 통과하지 못한다.
   나머지는 실험 저장소 정의를 확인하거나(24개), DB에 원천이 없거나(8개: 품종 비중·`n_records`·일조·면적 3종), 생산량을 몇 년도 값으로 붙일지 정해야 한다(3개).
-  나머지 35개는 WBS K30(`feature/data-features-v3`)에서 채운다.
-  완성되면 `--data ml/data/weekly_0601.csv` 또는 `FARMIT_ML_DATA`로 넘긴다.
+  **2026-11-16 방향 변경:** 나머지 35개를 채우는 대신, 운영 피처를 v3 77개가 아니라 7장 실험의 **공통 피처**(`ml/experiments/dataset.py`)로 맞춘다 (양정호와 합의, WBS K30). 아래 3.1절.
 - 단위 테스트(`pytest`)는 가짜 데이터를 쓰므로 이 파일 없이도 돈다.
+
+### 3.1 공통 피처 (K30)
+
+`batch/spark/features.py` → `ml/data/weekly_<품목코드>.csv`. **예측 품목 × 전국 시장(K31로 정산을 받는 32곳) × 주** 한 행.
+정의는 `ml/experiments/dataset.py`(`weekly`·`build`·`GROUPS`)와 같다. 날씨·생산량·가락 묶음은 넣지 않는다.
+
+| 묶음 | 컬럼 | 정의 (W = 그 행의 주, 시장별 주 달력 순서) |
+|---|---|---|
+| base | `price_kg` | W주 kg당 가격. 등외·하·5등 이하를 뺀 등급의 물량가중 (`amount 합 / 물량 합`) |
+| | `qty_kg`, `n_trade_days` | W주 전 등급 물량(kg), 거래일 수 |
+| | `price_allgrade` | 전 등급 물량가중 가격 (K12의 `price_kg_allgrade`에서 이름 변경) |
+| | `price_last1` | W주 마지막 거래일의 `price_kg` |
+| lags | `price_lag1·2·4`, `price_yoy` | 1·2·4·52주 전 `price_kg` |
+| | `price_ma4`, `price_ma8` | 4주(값 2개 이상)·8주(4개 이상) 이동평균 |
+| | `qty_lag1`, `qty_ma4` | 1주 전 물량, 4주 이동평균(2개 이상) |
+| | `chg_1w`, `chg_4w` | `log(price_kg / price_lag1)`, `log(price_kg / price_lag4)` |
+| national | `nat_price` | W주 전국(모든 시장) 주요 등급 물량가중 가격 |
+| | `nat_price_ma4`, `nat_chg_1w` | 전국 가격 4주 이동평균(2개 이상), `log(nat_price / 1주 전 nat_price)` |
+| | `dev_nat` | `log(price_kg / nat_price)` (전국 대비 이 시장의 수준) |
+| | `ratio_nat_med26` | 시장별 `dev_nat`의 26주 이동 중앙값(8개 이상) |
+| supply | `nat_qty`, `nat_qty_ma4`, `nat_qty_yoy` | W주 전국 전 등급 물량, 4주 이동평균, `/ 52주 전` |
+| | `qty_share`, `qty_yoy` | `qty_kg / nat_qty`, `qty_kg / 52주 전 qty_kg` |
+| calendar | `weekofyear`, `month` | W의 주차·월 |
+| | `days_to·since_seol·chuseok` | 예측일(W + 7일)과 설·추석 본날 사이 일수 (상한 400) |
+| | `hol_offset_h1~4`, `hol_in_target_h1~4` | 타깃 주와 가장 가까운 명절의 일수(±35로 자름), 타깃 주에 연휴(전날~다음날)가 겹치는지 |
+| market | `mkt_id` | 시장 코드를 정수로 |
+| 그 밖 | `market_cd`, `market_nm`, `week`, `pred_date`, `target_h1~4`, `target_week_h1~4` | 3절 표와 같다 |
+
+- 시장마다 첫 주~마지막 주의 모든 주를 만들고(거래 없는 주도 행이 있어야 "1주 전"이 정확하다) 시차·이동평균을 계산한 뒤, **`price_kg`가 없는 행은 뺀다** (지난주 거래가 없으면 예측하지 않는다).
+- **답을 기다리며 정한 가정** (양정호 답이 다르면 그 부분만 고친다)
+  1. 전국 시장 행을 모두 만든다. 학습 시장 선별(`pick_markets`, 7.2절 "학습 시장")은 ML 쪽(K13)에서 한다.
+  2. 가락 묶음(`garak_price`·`garak_price_ma4`·`dev_garak`)은 넣지 않는다.
+  3. `n_records`(거래 건수)는 넣지 않는다. 정산 테이블(`settle_price`)은 (날짜, 시장, 등급) 합계라 원천이 없다. 시장 선별 기준 "주당 거래 20건 이상"은 거래일 수 등으로 바꿔야 한다 (K13).
+- **실험과 똑같이 못 하는 것**
+  - 이상치: 실험은 원본 거래 한 건씩 "품목·월 전국 중앙값의 1/5~5배" 밖을 버린다. DB에는 (날짜, 시장, 등급) 합계만 있어 같은 단위로 거를 수 없다 → 합계 행의 kg당 가격으로 비슷하게 거르고, 실험 데이터셋과의 차이를 숫자로 확인한다 (K30 3단계).
+  - 명절: holiday 테이블에 2017년이 없어 2018년 초 `days_since_*`가 400이 된다 → 2017년 설·추석을 보충한다.
+- farmit_ml v3의 `check_columns()`(77개)와는 맞지 않는다. K13에서 8.3 "farmit_ml 일반화"대로 품목·시장·피처를 설정형으로 바꾼다.
+
+**실험 데이터셋과 비교 (2026-11-16, 사과, `ml/experiments/compare_spark.py`)** — 같은 (시장, 주) 14,659행 (실험에만 1행)
+
+| 컬럼 | 결과 |
+|---|---|
+| 달력 13개, `mkt_id` | 100% 같다 (2017년 명절 보충·본날 고르기 수정 뒤) |
+| 가격·물량 (`price_kg` 등) | 87% 행이 0.5% 이내, 중앙값 차이 0, 99% 분위 5.5%, 상관 0.999. 5% 넘게 다른 행 179개(1.2%)가 해마다 고르게 흩어져 있다 |
+| 로그 비율 (`chg_*`, `dev_nat`, `nat_chg_1w`, `ratio_nat_med26`) | 절대 차이 중앙값 0.0003~0.0017, 95% 분위 0.02~0.03 |
+| 타깃 | 가격과 같다. 실험 데이터는 2026-11-08까지라 마지막 주들의 타깃이 Spark에만 있다(32행) |
+
+- 차이는 이상치를 거르는 단위가 달라서 생긴다 (실험: 원본 거래 한 건씩, Spark: 날짜·시장·등급 합계 행). 걸러지는 거래가 섞인 합계 행은 통째로 남거나 빠진다.
+- 피처가 실험과 거의 같아 7장 결과를 운영 피처로도 기대할 수 있다. K13 2단계에서 OOF로 다시 확인한다.
 
 ---
 

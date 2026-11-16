@@ -1,14 +1,14 @@
-"""학습·예측용 피처 테이블 (K12 3단계, REQ-PRD-001). 예측 시장 × 주 한 행 → ml/data/weekly_<품목코드>.csv
+"""학습·예측용 피처 테이블 (K12 3단계·K30, REQ-PRD-001). 예측 품목 × 전국 시장 × 주 한 행 → ml/data/weekly_<품목코드>.csv
 
-ml/farmit_ml v3 입력 형식(docs/ml.md 3절)에 맞춘다. 지금은 정의가 확실한 컬럼만 만든다.
-정의는 ml/experiments/dataset.py·weather.py(v3를 만든 실험 코드의 정리본)를 따른다.
-아직 없는 컬럼(정의를 양정호에게 확인 중이거나 DB에 원천이 없는 것)은 K12 카드 변경 메모에 적어 둔다.
+공통 피처(docs/ml.md 3.1절) = ml/experiments/dataset.py의 GROUPS에서 가락 묶음·n_records를 뺀 것. 날씨·생산량은 넣지 않는다.
+(K12에서 만든 v3용 날씨·가락 피처는 공통 피처에 없어 K30에서 지웠다. 필요하면 git 이력에서 되살린다)
 
 한 행(week = W)의 뜻: W주(월~일)까지 알던 정보로 pred_date = W + 7일(다음 월요일) 아침에 예측한다.
 - 타깃: target_h{h} = W + h주의 price_kg (h = 1이 예측하는 그 주)
 - 가격 시차·이동평균: 시장별로 주 달력 순서 (거래 없는 주도 행이 있어 "1주 전"이 정확히 1주 전이다)
-- 날씨: 주산지 관측소(item_producing_area) 물량 비중 가중 평균. W주의 날씨는 W주 일요일까지라 다음 월요일에 쓸 수 있다
+- 전국(nat_): 품목별 주 달력 순서. 시장 가격과의 비교(dev_nat 등)는 같은 주끼리
 - 명절: pred_date·타깃 주와 설·추석 본날 사이 일수
+- 학습 시장 선별은 하지 않는다. 전국 시장 행을 모두 내보내고 ML 쪽(K13)이 고른다
 
 실행: docker compose -f infra/docker-compose.yml --profile airflow exec airflow-scheduler \
         sh -c "cd /opt/farmit/spark && python -m features"
@@ -27,6 +27,20 @@ H = (1, 2, 3, 4)
 DAY_CAP = 400        # 명절까지 일수 상한 (실험 코드와 같음)
 OFFSET_CLIP = 35     # 타깃 주와 가장 가까운 명절의 일수 차이를 ±35일로 자름
 
+# 공통 피처 (dataset.GROUPS와 같은 이름·순서, 가락 묶음·n_records 제외)
+GROUPS = {
+    "base": ["price_kg", "qty_kg", "price_allgrade", "n_trade_days", "price_last1"],
+    "lags": ["price_lag1", "price_lag2", "price_lag4", "price_ma4", "price_ma8", "price_yoy", "qty_lag1", "qty_ma4",
+             "chg_1w", "chg_4w"],
+    "national": ["nat_price", "nat_price_ma4", "ratio_nat_med26", "dev_nat", "nat_chg_1w"],
+    "supply": ["nat_qty", "nat_qty_ma4", "nat_qty_yoy", "qty_share", "qty_yoy"],
+    "calendar": ["weekofyear", "month", "days_to_seol", "days_since_seol", "days_to_chuseok", "days_since_chuseok"]
+                + [f"hol_offset_h{h}" for h in H] + [f"hol_in_target_h{h}" for h in H],
+    "market": ["mkt_id"],
+}
+ID_COLS = ["item_code", "market_cd", "market_nm", "week", "pred_date"]
+TARGET_COLS = [f"target_h{h}" for h in H] + [f"target_week_h{h}" for h in H]
+
 
 def _rolling(col: str, w: Window, n: int, min_n: int, how=F.avg):
     """pandas rolling(n, min_periods=min_n)과 같다: 값이 있는 칸이 min_n개 미만이면 비운다."""
@@ -44,66 +58,51 @@ def price_features(wp: DataFrame) -> DataFrame:
            .withColumn("price_ma8", _rolling("price_kg", w, 8, 4))
            .withColumn("price_yoy", F.lag("price_kg", 52).over(w))          # 52주 전 = 전년 같은 주
            .withColumn("qty_lag1", F.lag("qty_kg", 1).over(w))
-           .withColumn("qty_ma4", _rolling("qty_kg", w, 4, 2)))
+           .withColumn("qty_ma4", _rolling("qty_kg", w, 4, 2))
+           .withColumn("qty_yoy", F.col("qty_kg") / F.lag("qty_kg", 52).over(w))
+           .withColumn("chg_1w", F.log(F.col("price_kg") / F.col("price_lag1")))
+           .withColumn("chg_4w", F.log(F.col("price_kg") / F.col("price_lag4"))))
     for h in H:
         out = (out.withColumn(f"target_h{h}", F.lead("price_kg", h).over(w))
                   .withColumn(f"target_week_h{h}", F.date_add("week", 7 * h)))
     return out.withColumn("pred_date", F.date_add("week", 7))
 
 
-def garak_features(spark: SparkSession, wp: DataFrame) -> DataFrame:
-    """참고 시장(가락)의 같은 주 가격·물량. 시장 코드는 market.is_reference로 고른다."""
-    ref = [r.market_id for r in read(spark, "market").where("is_reference").select("market_id").collect()]
-    if len(ref) != 1:
-        raise ValueError(f"참고 시장(is_reference)은 하나여야 한다: {ref}")
+def national_features(wp: DataFrame) -> DataFrame:
+    """품목·주 하나에 한 행인 전국 가격·물량의 시차·이동평균. wp는 품목마다 첫 주~마지막 주가 모두 있다 (weekly_price)."""
+    n = wp.select("item_id", "week", "nat_price", "nat_qty").distinct()
     w = Window.partitionBy("item_id").orderBy("week")
-    return (wp.where(F.col("market_cd") == ref[0])
-            .select("item_id", "week", F.col("price_kg").alias("garak_price_kg"), F.col("qty_kg").alias("garak_qty_kg"))
-            .withColumn("garak_price_ma4", _rolling("garak_price_kg", w, 4, 2)))
+    return (n.withColumn("nat_price_ma4", _rolling("nat_price", w, 4, 2))
+             .withColumn("nat_qty_ma4", _rolling("nat_qty", w, 4, 2))
+             .withColumn("nat_qty_yoy", F.col("nat_qty") / F.lag("nat_qty", 52).over(w))
+             .withColumn("nat_chg_1w", F.log(F.col("nat_price") / F.lag("nat_price", 1).over(w))))
 
 
-def weather_features(spark: SparkSession) -> DataFrame:
-    """품목별 주간 날씨. 일별로 관측소를 물량 비중으로 가중 평균한 뒤 주로 묶는다 (weather.py와 같은 순서).
+def vs_national(df: DataFrame) -> DataFrame:
+    """시장 가격·물량을 같은 주 전국 값과 비교한다. ratio_nat_med26 = 시장별 dev_nat의 26주 이동 중앙값(8개 이상)."""
+    w = Window.partitionBy("item_id", "market_cd").orderBy("week").rowsBetween(-25, 0)
+    df = df.withColumn("dev_nat", F.log(F.col("price_kg") / F.col("nat_price")))
+    # F.percentile(…, 0.5)는 짝수 개면 가운데 둘의 평균이라 pandas median과 같다. NULL(거래 없는 주)은 빼고 센다
+    return (df.withColumn("ratio_nat_med26", F.when(F.count("dev_nat").over(w) >= 8,
+                                                    F.percentile("dev_nat", 0.5).over(w)))
+              .withColumn("qty_share", F.col("qty_kg") / F.col("nat_qty")))
 
-    - 그날 값이 빈 관측소는 그날 다른 관측소 평균으로 채운다. 그날 행이 없는 관측소는 가중치에서 빠진다
-    - 강수 결측은 0 (비가 오지 않은 날은 값이 비어 온다)
-    - 폭염일: 가중 최고기온 33도 이상, 한파일: 가중 최저기온 0도 미만
+
+def main_holidays_of(holiday: DataFrame) -> DataFrame:
+    """holiday(holiday_date, name) → 설·추석 본날(kind, hday). 본날 = 연휴 사흘의 가운데 날.
+
+    이름에 '설날'·'추석'이 들어 있고 '대체'가 없는 날을 연휴로 본다. 다른 공휴일과 겹친 날은 이름이 합쳐져 온다
+    (2017-10-03 '개천절·추석') → 이름이 정확히 같은 날만 고르면 연휴 첫날이 빠져 본날이 하루 밀린다.
     """
-    area = read(spark, "item_producing_area").select("item_id", "station_id", F.col("volume_share").alias("wt"))
-    wd = read(spark, "weather_daily").withColumn("rain_mm", F.coalesce("rain_mm", F.lit(0)))
-    d = area.join(wd, "station_id")
-    day = Window.partitionBy("item_id", "obs_date")
-    cols = {"avg_temp": "ta_avg", "max_temp": "ta_max", "min_temp": "ta_min", "rain_mm": "rn", "humidity": "rhm"}
-    for c in cols:
-        d = d.withColumn(c, F.coalesce(c, F.avg(c).over(day)))   # 그날 모두 비면 계속 비어 있다
-    agg = []
-    for c, nm in cols.items():
-        # 값이 있는 관측소의 가중치로만 나눈다 (np.average와 같음)
-        agg.append((F.sum(F.col(c) * F.col("wt")) / F.sum(F.when(F.col(c).isNotNull(), F.col("wt")))).alias(nm))
-    g = d.groupBy("item_id", "obs_date").agg(*agg)
-    g = (g.withColumn("heat", (F.col("ta_max") >= 33).cast("int"))
-          .withColumn("cold", (F.col("ta_min") < 0).cast("int"))
-          .fillna(0, ["heat", "cold"])                                    # 기온이 비면 폭염·한파 아님 (pandas 비교와 같음)
-          .withColumn("week", F.to_date(F.date_trunc("week", "obs_date"))))
-    wk = g.groupBy("item_id", "week").agg(
-        F.avg("ta_avg").alias("wx_ta_avg"), F.max("ta_max").alias("wx_ta_max"), F.min("ta_min").alias("wx_ta_min"),
-        F.sum("rn").alias("wx_rn_sum"), F.avg("rhm").alias("wx_rhm_avg"),
-        F.sum("heat").alias("wx_heat_days"), F.sum("cold").alias("wx_cold_days"))
-    w = Window.partitionBy("item_id").orderBy("week")
-    return (wk.withColumn("wx_rn_sum_4w", _rolling("wx_rn_sum", w, 4, 2, F.sum))
-              .withColumn("wx_rn_sum_12w", _rolling("wx_rn_sum", w, 12, 6, F.sum))
-              .withColumn("wx_heat_days_4w", _rolling("wx_heat_days", w, 4, 2, F.sum))
-              .withColumn("wx_cold_days_4w", _rolling("wx_cold_days", w, 4, 2, F.sum)))
+    name = F.col("name")
+    h = holiday.where((name.contains("설날") | name.contains("추석")) & ~name.contains("대체")) \
+        .withColumn("kind", F.when(name.contains("설날"), "seol").otherwise("chuseok")) \
+        .withColumn("year", F.year("holiday_date"))
+    return h.groupBy("kind", "year").agg(F.date_add(F.min("holiday_date"), 1).alias("hday")).select("kind", "hday")
 
 
 def main_holidays(spark: SparkSession) -> DataFrame:
-    """설·추석 본날. holiday에는 연휴 사흘이 같은 이름으로 들어 있어 가운데 날(본날)을 고른다. 대체공휴일은 이름이 달라 빠진다."""
-    h = read(spark, "holiday").where(F.col("name").isin("설날", "추석")) \
-        .withColumn("year", F.year("holiday_date"))
-    w = Window.partitionBy("name", "year").orderBy("holiday_date")
-    return (h.withColumn("rn", F.row_number().over(w)).where("rn = 2")
-             .select(F.when(F.col("name") == "설날", "seol").otherwise("chuseok").alias("kind"),
-                     F.col("holiday_date").alias("hday")))
+    return main_holidays_of(read(spark, "holiday"))
 
 
 def holiday_features(weeks: DataFrame, hol: DataFrame) -> DataFrame:
@@ -131,14 +130,17 @@ def holiday_features(weeks: DataFrame, hol: DataFrame) -> DataFrame:
 
 def build(spark: SparkSession) -> DataFrame:
     wp = weekly_price(spark).cache()
-    collect = [r.market_id for r in read(spark, "market").where("is_collect").select("market_id").collect()]
-    df = price_features(wp).where(F.col("market_cd").isin(collect))   # 예측 시장만 남긴다 (가락은 피처로만)
-    df = df.join(garak_features(spark, wp), ["item_id", "week"], "left")
-    df = df.join(weather_features(spark), ["item_id", "week"], "left")
+    df = price_features(wp).drop("nat_price", "nat_qty")
+    df = df.join(national_features(wp), ["item_id", "week"], "left")
+    df = vs_national(df)
     df = df.join(holiday_features(df.select("week").distinct(), main_holidays(spark)), "week", "left")
-    df = (df.withColumn("weekofyear", F.weekofyear("week")).withColumn("month", F.month("week")))
+    df = (df.withColumn("weekofyear", F.weekofyear("week")).withColumn("month", F.month("week"))
+            .withColumn("mkt_id", F.col("market_cd").cast("int")))
+    feats = [c for g in GROUPS.values() for c in g]
     # 지난주 거래가 없으면 그 주는 예측하지 않는다 (실험 코드와 같음). 시차는 위에서 빈 주까지 넣어 계산했다
-    return df.where(F.col("price_kg").isNotNull()).orderBy("item_id", "market_cd", "week")
+    return (df.where(F.col("price_kg").isNotNull())
+              .select("item_id", *ID_COLS, *feats, *TARGET_COLS)
+              .orderBy("item_id", "market_cd", "week"))
 
 
 def summary(pdf) -> None:
