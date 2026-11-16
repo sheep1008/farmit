@@ -5,7 +5,9 @@ import pandas as pd
 
 from farmit_ml import postprocess
 from farmit_ml.metrics import dir_acc, nmae
-from farmit_ml.settings import HORIZONS, MARKETS
+from farmit_ml.settings import HORIZONS
+
+MARKETS = ["250001", "250003", "340101", "330101"]
 
 
 def test_nmae_ignores_nan():
@@ -29,10 +31,10 @@ def test_shrink_market_weights():
     value["340101"] = 1400.0
     pred = _pred(weeks[-1:], value)
 
-    same = postprocess.apply(pred, hist, {"340101": 0.0})
+    same = postprocess.apply(pred, hist, {"340101": 0.0}, MARKETS)
     assert same.equals(pred)
 
-    half = postprocess.apply(pred, hist, {"340101": 0.5})
+    half = postprocess.apply(pred, hist, {"340101": 0.5}, MARKETS)
     ch = half[half["market_cd"] == "340101"]
     assert np.allclose(ch[[f"p{h}" for h in HORIZONS]].values, 1200.0)       # 0.5·1400 + 0.5·1000
     others = half[half["market_cd"] != "340101"]

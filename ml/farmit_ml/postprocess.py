@@ -9,24 +9,27 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from .settings import HORIZONS, MARKETS
+from .settings import HORIZONS
 
 
-def market_ratio(hist: pd.DataFrame, target: str, n: int = 26) -> pd.Series:
-    """주별 (target 시장 / 나머지 평균) 가격 비율의 지난 n주 이동 중앙값."""
+def market_ratio(hist: pd.DataFrame, target: str, others: list[str], n: int = 26) -> pd.Series:
+    """주별 (target 시장 / others 평균) 가격 비율의 지난 n주 이동 중앙값."""
     pk = hist.pivot_table(index="week", columns="market_cd", values="price_kg")
-    others = [m for m in MARKETS if m != target]
     return (pk[target] / pk[others].mean(axis=1)).rolling(n, min_periods=n // 2).median()
 
 
-def shrink_market(pred: pd.DataFrame, hist: pd.DataFrame, target: str, w: float, n: int = 26) -> pd.DataFrame:
-    """pred(열: week, market_cd, p1..p4)에서 target 시장 예측을 (1-w)·자기 예측 + w·대체 예측으로 바꾼다."""
+def shrink_market(pred: pd.DataFrame, hist: pd.DataFrame, target: str, w: float, markets: list[str],
+                  n: int = 26) -> pd.DataFrame:
+    """pred(열: week, market_cd, p1..p4)에서 target 시장 예측을 (1-w)·자기 예측 + w·대체 예측으로 바꾼다.
+
+    대체 예측 = markets 중 target을 뺀 시장들의 예측 평균 × 최근 가격 비율.
+    """
     out = pred.copy()
     if w <= 0:
         return out
     mk = out["market_cd"] == target
-    others = [m for m in MARKETS if m != target]
-    ratio = market_ratio(hist, target, n)
+    others = [m for m in markets if m != target]
+    ratio = market_ratio(hist, target, others, n)
     for h in HORIZONS:
         piv = pred.pivot_table(index="week", columns="market_cd", values=f"p{h}")
         if not set(others) <= set(piv.columns):
@@ -37,10 +40,10 @@ def shrink_market(pred: pd.DataFrame, hist: pd.DataFrame, target: str, w: float,
     return out
 
 
-def apply(pred: pd.DataFrame, hist: pd.DataFrame, weights: dict, n: int = 26) -> pd.DataFrame:
-    """시장별 w를 적용한다. 대체 예측은 항상 보정 전 예측으로 만든다 (적용 순서와 무관)."""
+def apply(pred: pd.DataFrame, hist: pd.DataFrame, weights: dict, markets: list[str], n: int = 26) -> pd.DataFrame:
+    """시장별 w를 적용한다 (weights가 비어 있으면 그대로). 대체 예측은 항상 보정 전 예측으로 만든다 (적용 순서와 무관)."""
     out = pred.copy()
     for mc, w in weights.items():
         sel = out["market_cd"] == mc
-        out.loc[sel] = shrink_market(pred, hist, mc, w, n).loc[sel]
+        out.loc[sel] = shrink_market(pred, hist, mc, w, markets, n).loc[sel]
     return out

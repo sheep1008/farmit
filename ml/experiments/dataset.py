@@ -2,7 +2,7 @@
 
 - 데이터: collect_items.py·collect_sub.py가 만든 data/items/{상품}_{YYYY-MM}.csv (날짜·시장별 합계)
 - 피처: aT 가격·물량, 시차·이동평균, 전국·가락 가격, 공급량, 달력(명절), 시장 (GROUPS)
-- 모델: RF·LightGBM·XGBoost h별 모델 평균 (ml/config/best_params.json = 사과 v3 하이퍼파라미터),
+- 모델: RF·LightGBM·XGBoost h별 모델 평균 (ml/config/0601_v3/best_params.json = 사과 v3 하이퍼파라미터),
   타깃 log(h주 뒤 가격 / 지난주 가격). 분할·지표는 사과 v3와 같다 (테스트 2025-01~).
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from common import DATA, ML_ROOT, RESULTS  # noqa: F401  (sys.path에 ml/ 추가
 from farmit_ml.metrics import nmae  # noqa: E402
 from farmit_ml.models import make_model  # noqa: E402
 
-BP = json.loads((ML_ROOT / "config" / "best_params.json").read_text(encoding="utf-8"))
+BP = json.loads((ML_ROOT / "config" / "0601_v3" / "best_params.json").read_text(encoding="utf-8"))
 H = (1, 2, 3, 4)
 # 상품 코드: aT 대분류+중분류. 뒤에 글자가 붙은 것은 소분류로 다시 정의한 상품 (collect_sub.py)
 ITEMS = {"0601": "사과", "0602": "배", "1201": "양파", "1209": "마늘", "0501": "감자", "0502": "고구마", "0605": "단감", "0614": "감귤",

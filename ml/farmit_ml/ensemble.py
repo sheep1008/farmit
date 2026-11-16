@@ -20,18 +20,23 @@ from .settings import HORIZONS, LSTM_NAME, STACKED_SUFFIX, TREE_NAMES, Bundle
 Predictor = Callable[[Bundle, pd.DataFrame, pd.DataFrame, pd.DataFrame], np.ndarray]
 
 
+def _tree_prep(b: Bundle) -> dict:
+    """트리 전처리 설정 + 시장 더미에 쓸 학습 시장 목록."""
+    return {**b.tree_prep, "markets": list(b.markets)}
+
+
 def _per_h(m: str) -> Predictor:
     return lambda b, df_all, trn, tst: models.predict_per_h(
-        m, b.tree_features, trn, tst, b.target_mode, b.best_params[m], b.tree_prep)
+        m, b.tree_features, trn, tst, b.target_mode, b.best_params[m], _tree_prep(b))
 
 
 def _stacked(m: str) -> Predictor:
     return lambda b, df_all, trn, tst: models.predict_stacked(
-        m, b.tree_features, trn, tst, b.target_mode, b.stack_params[m], b.tree_prep)
+        m, b.tree_features, trn, tst, b.target_mode, b.stack_params[m], _tree_prep(b))
 
 
 def _lstm(b: Bundle, df_all, trn, tst) -> np.ndarray:
-    return lstm.predict_avg(b.lstm_params, df_all, trn, tst, b.lin_features, b.lin_prep, b.lstm_seeds)
+    return lstm.predict_avg(b.lstm_params, df_all, trn, tst, b.lin_features, b.lin_prep, b.lstm_seeds, list(b.markets))
 
 
 COMPONENTS: dict[str, Predictor] = {
@@ -66,11 +71,14 @@ def predict(b: Bundle, df_all: pd.DataFrame, trn: pd.DataFrame, tst: pd.DataFram
     if use_postprocess:
         # 비율 계산에는 예측 시점까지의 실제 가격(price_kg)만 쓴다
         hist = df_all[df_all["week"] <= tst["week"].max()]
-        wide = postprocess.apply(wide, hist, b.pp_weights, b.pp_n_weeks)
+        wide = postprocess.apply(wide, hist, b.pp_weights, list(b.markets), b.pp_n_weeks)
     return wide, parts
 
 
-def interval(b: Bundle, pred: np.ndarray, h: int) -> tuple[np.ndarray, np.ndarray]:
-    """80% 구간 (REQ-PRD-002). 테스트 상대잔차 분위수를 예측값에 곱한다."""
-    lo, hi = b.interval_q[h]
+def interval(b: Bundle, pred: np.ndarray, h: int, market: str) -> tuple[np.ndarray, np.ndarray]:
+    """80% 구간 (REQ-PRD-002). 상대잔차 분위수를 예측값에 곱한다. 그 시장 값이 없으면 공통("*") 값."""
+    if not b.interval_q:
+        raise ValueError(f"{b.config_path}에 80% 구간이 없다. 먼저 python -m farmit_ml.intervals --item {b.item_code}")
+    q = b.interval_q.get(market, {}).get(h) or b.interval_q["*"][h]
+    lo, hi = q
     return pred * (1 + lo), pred * (1 + hi)

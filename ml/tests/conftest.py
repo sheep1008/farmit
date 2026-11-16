@@ -8,15 +8,15 @@ import pandas as pd
 import pytest
 
 from farmit_ml.preprocess import PRICE_LEVEL_COLS
-from farmit_ml.settings import HORIZONS, MARKETS, load_bundle
+from farmit_ml.settings import CONFIG_ROOT, HORIZONS, load_bundle
 
 N_WEEKS = 80
 
 
 @pytest.fixture(scope="session")
 def bundle():
-    """config/ 그대로에 모델 크기만 줄인 설정."""
-    b = load_bundle()
+    """v3 설정(config/0601_v3: 4개 시장, 모든 구성 모델)에 모델 크기만 줄인 설정."""
+    b = load_bundle(CONFIG_ROOT / "0601_v3")
     small = {"lgbm": {"n_estimators": 20}, "xgb": {"n_estimators": 20}, "rf": {"n_estimators": 10}}
     return dataclasses.replace(
         b,
@@ -33,7 +33,7 @@ def weekly(bundle) -> pd.DataFrame:
     feats = sorted(set(bundle.tree_features) | set(bundle.lin_features))
     weeks = pd.date_range("2022-01-03", periods=N_WEEKS, freq="7D")
     parts = []
-    for i, (cd, nm) in enumerate(MARKETS.items()):
+    for i, (cd, nm) in enumerate(bundle.markets.items()):
         price = 3000 * np.exp(np.cumsum(rng.normal(0, 0.05, N_WEEKS))) * (1 + 0.05 * i)
         d = pd.DataFrame({"market_cd": cd, "market_nm": nm, "week": weeks, "pred_date": weeks + pd.Timedelta(days=7)})
         for c in feats:
