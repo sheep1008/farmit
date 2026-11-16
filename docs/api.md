@@ -873,6 +873,19 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 ---
 
+### 2.9 통합 검색 (보도자료) — Y10
+
+#### `GET /api/search?q=&type=&page=&size=` — 검색 (REQ-SRC-001, REQ-SRC-002, 로그인 없음)
+`type`: `press`(기본, 보도자료 제목·요약, ES 한국어 형태소 검색, 점수 같으면 최신순) · `item`(품목 이름 일부) · `market`(시장 이름 일부). `page`는 1부터(page×size ≤ 10,000), `size` 기본 20·최대 100(1.3절). `market`은 `/api/markets?q`와 같은 범위(수집 대상·참고 시장). **200**
+```json
+{ "data": [ {"title": "...", "summary": "앞 200자", "published_date": "2026-11-16", "source": "농림축산식품부", "url": "https://www.korea.kr/briefing/pressReleaseView.do?newsId=..."} ],
+  "meta": { "type": "press", "q": "조류인플루엔자", "total": 7, "page": 1, "size": 10, "license": "공공누리 제1유형(출처표시) — 정책브리핑 보도자료" } }
+```
+`item`은 `{item_id, name, category}`, `market`은 `{market_id, name, sido}`. 결과가 없으면 `200` + `[]`. **오류**: `400 VALIDATION_ERROR`(`q` 없음·100자 초과), `400 INVALID_PARAMETER`(`type`·`size`·`page` 잘못), `503 SERVICE_UNAVAILABLE`(보도자료 검색 저장소 접속 불가). 첫 수집 전(인덱스 없음)에는 `200` + `[]`
+보도자료는 정책브리핑에서 농림축산식품부·농촌진흥청 것만 모은다 (제목·요약·날짜·원문 링크, 본문·사진·첨부 제외). `python manage.py press_collect [--days 3]`가 새 보도자료를 넣고(같은 `newsId`는 덮어씀), `collect_log`(source=`press`)에 남긴다. 한 번에 정책브리핑을 약 4회 요청한다(부처당 목록 1~2쪽, 요청 사이 1초).
+
+---
+
 ## 3. 2주차 이후 API (주소 목록)
 
 상세는 해당 주차 시작 전에 이 문서에 추가한다.
@@ -890,7 +903,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | GET | `/api/alerts/{id}` | 회원 | 알림 상세 + 대응 체크리스트 | SCR-009 | REQ-ALT-002 | 3 |
 | PATCH | `/api/alerts/{id}/read` | 회원 | 읽음 처리 | SCR-009 | REQ-ALT-003 | 3 |
 | GET | `/api/cases` | 전체 | **(2.4에 상세)** 과거 사례 (item_id, event_type) | SCR-010 | REQ-HIS-001, 002 | 3 |
-| GET | `/api/search` | 전체 | 통합 검색 (`type`: item·market·press) | SCR-014 | REQ-SRC-001, 002 | 3 |
+| GET | `/api/search` | 전체 | **(2.9에 상세)** 통합 검색 (`type`: item·market·press) | SCR-014 | REQ-SRC-001, 002 | 3 |
 | GET | `/api/notices` | 전체 | 시장 공지 (선택) | SCR-014 | REQ-SRC-003 | 3 |
 | POST | `/api/chat/messages` | 회원 | **(2.7에 상세)** 질문 보내기 → 스트리밍 응답(SSE: 진행 상태 → 답변 → 출처) | SCR-011 | REQ-CHT-001~007 | 4 |
 | GET | `/api/chat/sessions` | 회원 | **(2.7에 상세)** 이전 대화 목록 | SCR-011 | REQ-CHT-008 | 4 |
