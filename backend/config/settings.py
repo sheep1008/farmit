@@ -157,6 +157,7 @@ LLM_TIMEOUT_SECONDS = float(os.environ.get('LLM_TIMEOUT_SECONDS', '30'))
 
 RAG_ES_URL = os.environ.get('ES_URL', 'http://elasticsearch:9200')
 RAG_INDEX = os.environ.get('RAG_INDEX', 'rag_docs')
+PRESS_INDEX = os.environ.get('PRESS_INDEX', 'press_release')   # 보도자료 검색 (Y10)
 # 로컬 임베딩 모델 (결정 0011). 바꾸면 rag_index --recreate로 다시 색인한다
 RAG_EMBED_MODEL = os.environ.get('RAG_EMBED_MODEL', 'intfloat/multilingual-e5-small')
 RAG_EMBED_DIM = 384
