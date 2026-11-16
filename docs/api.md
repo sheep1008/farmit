@@ -663,6 +663,50 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 **오류**: `400 VALIDATION_ERROR`, `401 NOT_AUTHENTICATED`, `403 CSRF_FAILED`, `404 NOT_FOUND`(없는 품목), `503 DATA_NOT_READY`
 
+#### `POST /api/recommendations/now` — 전국 시장 "지금 팔면" 실수령액
+| 인증 | 화면 | REQ |
+|---|---|---|
+| 회원 (CSRF 필요) | SCR-005 | REQ-REC-007, REC-002, REC-003 |
+
+예측 없이 **최근 정산 가격**으로 수집 대상 시장(`is_collect` true, 참고 시장 제외) 전체의 실수령액을 비교한다. 예측 대상이 아닌 품목도 쓸 수 있다.
+
+| 본문 | 필수 | 설명 |
+|---|---|---|
+| `item_id` | O | 품목 |
+| `volume_kg` | O | 물량 (kg, 0.1 이상) |
+| `grade` | X | 등급. 기본 `ALL` (`/api/prices/compare`와 같은 값) |
+| `loss_rate`·`transport_cost_per_km`·`commission_rate` | X | `/api/recommendations`와 같다 (없으면 내 정보 값 → 0). 보관비는 없다(지금 판매) |
+
+계산: 가격 = 기준일 포함 최근 7일(기준일−6일~기준일) 정산의 **물량 가중 평균** `Σ(평균가×물량)/Σ물량`. 기준일 = 그 품목·등급의 전체 시장 중 가장 최근 정산일. 실수령액 = `가격 × 물량 × (1−감모율) − 수수료 − 운송비`(`/api/recommendations`와 같은 식, 보관비 0). `net_low_won`·`net_high_won`은 최근 14일 최저·최고 평균가로 같은 식을 계산한 값.
+
+**200**
+```json
+{
+  "data": {
+    "results": [
+      { "rank": 1, "market_id": "250001", "market_name": "대전오정", "price": 3120.5,
+        "recent_min_price": 2900.0, "recent_max_price": 3400.0, "recent_volume_kg": 52000.0, "trade_days": 11,
+        "distance_km": 12.3, "sellable_kg": 100.0, "revenue_won": 312050, "commission_won": 0,
+        "transport_won": 0, "net_won": 312050, "net_low_won": 290000, "net_high_won": 340000,
+        "low_trade": false, "volume_warning": false }
+    ]
+  },
+  "meta": { "item_id": 1, "grade": "ALL", "volume_kg": 100.0, "base_date": "2026-11-15", "is_stale": false,
+            "price_unit": "원/kg", "price_window_days": 7, "forecast_available": true,
+            "costs": { "loss_rate": 0.0, "transport_cost_per_km": 0, "commission_rate": 0.0, "transport_applied": false },
+            "warnings": ["내 위치 또는 운송비 단가가 없어 운송비를 반영하지 않았습니다."] }
+}
+```
+- `results`는 `net_won` 큰 순서(같으면 시장 코드). 최근 7일 거래가 없는 시장은 `results`에 넣지 않는다.
+- `trade_days`·`recent_volume_kg`: 최근 14일 거래일 수·총 물량. `low_trade`: 거래일 수·총 물량이 `settings`의 `SELL_NOW_MIN_TRADE_DAYS`·`SELL_NOW_MIN_VOLUME_KG` 미만. `volume_warning`: 내 물량이 최근 14일 일평균 물량의 `SELL_NOW_VOLUME_WARN_MULTIPLE`배를 넘음. 기준값은 8주치 데이터를 보고 조정한다(잠정).
+- `distance_km`: 내 위치가 없거나 시장 좌표가 비어 있으면(0·NULL) `null`, 그 시장 운송비는 0. `meta.costs.transport_applied`는 내 위치가 있고 단가가 0보다 클 때만 `true`, 아니면 `false`이고 `meta.warnings`에 안내가 들어간다.
+- `meta.is_stale`: 기준일이 오늘(KST)보다 `SELL_NOW_STALE_DAYS`일 넘게 오래됨. 이때도 `meta.warnings`에 안내.
+- `meta.forecast_available`: 품목의 가격 예측 제공 여부. 예측 대상이 아니면 `false`이고 `meta.message`에 "이 품목은 아직 가격 예측을 제공하지 않습니다."가 들어간다 (REQ-REC-003). 순위 계산은 같다.
+- `recent_min_price`·`recent_max_price`: 최근 14일 **하루 평균가** 중 최저·최고 (경매 한 건 값이 아님).
+- 이 품목·등급의 정산 데이터가 전혀 없으면 `200`, `results: []`, `base_date: null`.
+
+**오류**: `400 VALIDATION_ERROR`, `401 NOT_AUTHENTICATED`, `403 CSRF_FAILED`, `404 NOT_FOUND`(없는 품목)
+
 ---
 
 ### 2.6 판매 기록 (회원 전용)
@@ -841,6 +885,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | DELETE | `/api/sales/{id}` | 회원 | **(2.6에 상세)** 판매 기록 삭제 | SCR-007 | REQ-SAL-001 | 2 |
 | GET | `/api/forecasts` | 전체 | **(2.5에 상세)** 주간 예측 (item_id, market_id) — 예측값·80% 구간·명절 주의 | SCR-003, 005 | REQ-PRD-001~003 | 2 |
 | POST | `/api/recommendations` | 회원 | **(2.5에 상세)** 판매 추천 계산 (품목·물량·시기·비용) | SCR-005 | REQ-REC-001~006 | 2 |
+| POST | `/api/recommendations/now` | 회원 | **(2.5에 상세)** 전국 시장 "지금 팔면" 실수령액 | SCR-005 | REQ-REC-007 | 2 |
 | GET | `/api/alerts` | 회원 | 알림 목록 (`unread=true` 필터) | SCR-003, 008 | REQ-ALT-003 | 3 |
 | GET | `/api/alerts/{id}` | 회원 | 알림 상세 + 대응 체크리스트 | SCR-009 | REQ-ALT-002 | 3 |
 | PATCH | `/api/alerts/{id}/read` | 회원 | 읽음 처리 | SCR-009 | REQ-ALT-003 | 3 |
