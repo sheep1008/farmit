@@ -417,3 +417,55 @@ class ReviewerFollowupTests(ChatBase):
         self.assertIn('7순위: 시장7', text)
         self.assertIn('농가가 원한 판매 주', text)
         self.assertNotIn('8순위', text)
+
+
+class GuideLinkFlowTests(ChatBase):
+    """Y11 REQ-CHT-007: 재배·재해 답변 아래 원문 링크(최대 2개), 같은 질문 캐시에도 포함"""
+    LINKS = [{'book': '농업기술길잡이5_사과재배', 'title': '제7장 병해충 방제', 'page': 210, 'url': 'http://x/7',
+              'license': '농촌진흥청 농업기술길잡이, 공공누리 제4유형'}]
+
+    def test_rag_answer_done_event_has_guide_links_and_cache_keeps_them(self):
+        self.complete.return_value = classify_json()
+        self.stream.side_effect = stream_of('탄저병일 수 있습니다.[근거 1]\n')
+        with mock.patch('chat.service.guide.links_for', return_value=self.LINKS) as links:
+            done = dict(sse(self.ask('사과 열매에 둥근 반점이 생겨요', item_id=self.apple.item_id)))['done']
+            self.assertEqual(done['guide_links'], self.LINKS)
+            self.assertEqual(links.call_args.args[:3], ('사과', '병해충', '사과 열매에 둥근 반점이 생겨요'))
+            self.assertEqual(links.call_args.args[3], ['사과 탄저병'])  # 분류가 만든 검색어도 쓴다
+            cached = dict(sse(self.ask('사과 열매에 둥근 반점이 생겨요', item_id=self.apple.item_id)))['done']
+        self.assertTrue(cached['cached'])
+        self.assertEqual(cached['guide_links'], self.LINKS)
+
+    def test_notices_and_sales_have_no_guide_links(self):
+        self.complete.return_value = classify_json(intent='범위밖')
+        done = dict(sse(self.ask('오늘 점심 뭐 먹지', item_id=self.apple.item_id)))['done']
+        self.assertNotIn('guide_links', done)
+        self.complete.return_value = classify_json(intent='판매', volume_kg=None)
+        done = dict(sse(self.ask('사과 팔까요', item_id=self.apple.item_id)))['done']
+        self.assertNotIn('guide_links', done)
+
+    def test_broken_guide_file_does_not_lose_the_answer(self):
+        self.complete.return_value = classify_json()
+        self.stream.side_effect = stream_of('탄저병일 수 있습니다.[근거 1]\n')
+        with mock.patch('chat.service.guide.links_for', side_effect=ValueError('깨진 파일')):
+            done = dict(sse(self.ask('사과 열매에 둥근 반점이 생겨요', item_id=self.apple.item_id)))['done']
+        self.assertIn('탄저병', done['answer'])
+        self.assertEqual(done['guide_links'], [])
+
+    def test_crop_without_guide_gets_empty_list(self):
+        self.complete.return_value = classify_json()
+        self.stream.side_effect = stream_of('탄저병일 수 있습니다.[근거 1]\n')
+        with mock.patch('rag.guide_links.guides', return_value={}):
+            done = dict(sse(self.ask('사과 열매에 둥근 반점이 생겨요', item_id=self.apple.item_id)))['done']
+        self.assertEqual(done['guide_links'], [])
+
+    def test_real_matching_returns_at_most_two_links_for_chosen_crop(self):
+        self.complete.return_value = classify_json(intent='날씨재해', queries=['사과 늦서리'])
+        self.stream.side_effect = stream_of('서리 대비가 필요합니다.[근거 1]\n')
+        doc = {'title': '농업기술길잡이5_사과재배', 'rows': [
+            {'indexName': '제8장 기상재해', 'indexLevel': '1', 'indexPage': '312', 'ebookUrl': 'http://www.nongsaro.go.kr/u9', 'chapter': '제8장 기상재해'},
+            {'indexName': '늦서리', 'indexLevel': '2', 'indexPage': '318', 'ebookUrl': 'http://www.nongsaro.go.kr/u10', 'chapter': '제8장 기상재해'}]}
+        with mock.patch('rag.guide_links.guides', return_value={'사과': doc}):
+            done = dict(sse(self.ask('사과 늦서리가 걱정돼요', item_id=self.apple.item_id)))['done']
+        self.assertEqual([l['title'] for l in done['guide_links']], ['늦서리'])
+        self.assertLessEqual(len(done['guide_links']), 2)

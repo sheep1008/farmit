@@ -1,6 +1,6 @@
 """RAG 색인: data/rag/docs/*.jsonl → 조각 나누기 → 임베딩 → Elasticsearch rag_docs (Y12)
 
-사용: python manage.py rag_index [--recreate] [--source ncpms|fieldtech]
+사용: python manage.py rag_index [--recreate] [--source ncpms|fieldtech|disaster]
 - --recreate: 인덱스를 지우고 새로 만든다 (임베딩 모델·매핑을 바꿨을 때)
 - 조각 id는 {doc_id}:{순번}이라 다시 실행해도 같은 조각은 덮어쓴다 (건수가 늘지 않는다)
 - 본문 해시(text_hash)가 같은 조각은 임베딩을 건너뛴다 (2,300개 전체 임베딩은 개발 PC에서 약 22분)
@@ -9,12 +9,12 @@ import time
 
 from django.core.management.base import BaseCommand
 
-from chat.management.commands.rag_collect import SOURCES, read_docs
+from chat.management.commands.rag_collect import read_docs
 from rag import embed, store
 from rag.text import chunks_for_doc
 
 BATCH = 64
-SOURCE_TYPES = {'ncpms': 'ncpms_pest', 'fieldtech': 'fieldtech'}  # rag_collect 출처 → 조각의 source_type
+SOURCE_TYPES = {'ncpms': 'ncpms_pest', 'fieldtech': 'fieldtech', 'disaster': 'disaster'}  # rag_collect 출처 → 조각의 source_type
 
 
 class Command(BaseCommand):
@@ -22,12 +22,12 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--recreate', action='store_true')
-        parser.add_argument('--source', default='all', choices=['all', *SOURCES])
+        parser.add_argument('--source', default='all', choices=['all', *SOURCE_TYPES])
 
     def handle(self, *args, **opts):
         started = time.monotonic()
         store.ensure_index(recreate=opts['recreate'])
-        docs, sources = [], (list(SOURCES) if opts['source'] == 'all' else [opts['source']])
+        docs, sources = [], (list(SOURCE_TYPES) if opts['source'] == 'all' else [opts['source']])
         for source in sources:
             docs += read_docs(source)
         chunks = [c for doc in docs for c in chunks_for_doc(doc)]

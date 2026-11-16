@@ -110,6 +110,8 @@ def messages(request):
                 done = {'message_id': msg.id, 'session_id': session.id, 'intent': data['intent'],
                         'intent_label': P.INTENT_LABELS[data['intent']], 'answer': data['answer'],
                         'sources': data['sources'], 'remaining_today': remaining, 'cached': data['cached']}
+                if 'guide_links' in data:
+                    done['guide_links'] = data['guide_links']
                 if 'recommendation' in data:
                     done['recommendation'] = data['recommendation']
                 yield _sse('done', done)

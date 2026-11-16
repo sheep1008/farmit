@@ -3,6 +3,7 @@
 외부 API(Claude, NCPMS, 농사로)는 부르지 않는다. ES 검색 테스트는 rag_docs_test 인덱스를 쓰고, ES가 꺼져 있으면 건너뛴다.
 임베딩 모델은 올리지 않고 가짜 벡터를 쓴다.
 """
+import json
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -216,6 +217,20 @@ class HybridSearchTests(SimpleTestCase):
     def test_no_match_returns_empty_list(self):
         self.assertEqual(store.hybrid_search(['열매'], self.vec(0), crops=['딸기'], size=5), [])
 
+    def test_common_doc_is_found_for_any_crop_but_other_crop_docs_are_not(self):
+        v = self.vec(5)
+        store.index_chunks([{'chunk_id': 'z:0', 'doc_id': 'z', 'chunk_no': 0, 'source_type': 'disaster',
+                             'source_label': 'D', 'title': '재해예방 관리기술 정보', 'text': '서리 대비 관수 철저',
+                             'crop_names': []}], [v])
+        store.get_es().indices.refresh(index='rag_docs_test')
+        for crop in ('사과', '딸기'):
+            kw = store.hybrid_search(['서리 대비'], None, crops=[crop], size=5)
+            self.assertEqual([h['chunk_id'] for h in kw], ['z:0'], crop)
+            vec = store.hybrid_search([], v, crops=[crop], size=1)
+            self.assertEqual(vec[0]['chunk_id'], 'z:0', crop)
+        apple = store.hybrid_search(['열매 반점'], self.vec(0), crops=['사과'], size=5)
+        self.assertNotIn('c:0', [h['chunk_id'] for h in apple])  # 고추 문서는 여전히 빠진다
+
     def test_delete_stale_removes_chunks_not_in_latest_index(self):
         deleted = store.delete_stale('ncpms_pest', ['a:0', 'c:0'])
         self.assertEqual(deleted, 1)
@@ -369,3 +384,299 @@ class IndexSkipTests(SimpleTestCase):
             call_command('rag_index', stdout=StringIO())
         self.assertEqual([c['chunk_id'] for c in put.call_args.args[0]], ['b:0'])
         self.assertEqual(len(emb.call_args.args[0]), 1)
+
+
+# ---------- Y11: 재해예방정보·길잡이 목차 (REQ-COL-006, REQ-CHT-007) ----------
+
+DISASTER_ROWS = [
+    {'cntntsNo': '1', 'cntntsSj': '2026년 농작물 재해예방 관리기술 정보(제11호)', 'svcDtx': '2026-11-03',
+     'rtnOrginlFileNm': 'a.pdf', 'rtnFileSeCode': '185001', 'rtnFileSn': '1', 'updusrEsntlNm': '홍길동'},
+    {'cntntsNo': '2', 'cntntsSj': '2024년 농작물 재해예방 관리기술 정보(제12호)', 'svcDtx': '2024-12-02',
+     'rtnOrginlFileNm': 'b.hwpx'},
+    {'cntntsNo': '3', 'cntntsSj': '2024년 농작물 재해예방 관리기술 정보(제1호)', 'svcDtx': '2024-01-05',
+     'rtnOrginlFileNm': 'c.hwpx'},                                   # 24개월보다 오래됨
+    {'cntntsNo': '4', 'cntntsSj': '2026년 농작물 저온해(동해) 발생위험 예측 보고(3.27)', 'svcDtx': '2026-03-27',
+     'rtnOrginlFileNm': 'd.pdf'},                                    # 정기 호가 아님
+    {'cntntsNo': '5', 'cntntsSj': '2026년 농작물 재해예방 관리기술 정보(제10호)', 'svcDtx': '2026-10-05',
+     'rtnOrginlFileNm': 'e.hwp'},                                    # 지원하지 않는 형식
+]
+BODY = '재해 대비 관리 ' * 40
+
+
+class DisasterSourceTests(SimpleTestCase):
+    def test_pick_rows_recent_regular_supported_only(self):
+        import datetime
+
+        from rag.sources import disaster
+        picked, skipped = disaster.pick_rows(DISASTER_ROWS, datetime.date(2026, 11, 15))
+        self.assertEqual([r['cntntsNo'] for r in picked], ['1', '2'])  # 최신순
+        self.assertEqual(skipped, 1)
+
+    def test_section_text_keeps_only_prevention_section(self):
+        from rag.sources import disaster
+        text = ('목차 Ⅱ.농작물 피해 예방 관리기술 1. 저온 Ⅲ. 참고자료 기상 전망 이번 달 날씨 '
+                'Ⅱ 농작물 피해 예방 관리기술 서리 대비 방법 Ⅲ 참고자료 집필인 홍길동 전화 (063)238-1053')
+        out = disaster.section_text(text)
+        self.assertIn('서리 대비 방법', out)
+        self.assertNotIn('이번 달 날씨', out)
+        self.assertNotIn('홍길동', out)
+        self.assertIsNone(disaster.section_text('표시 없는 본문'))  # 전체를 쓰면 집필진이 들어간다
+        self.assertIsNone(disaster.to_doc(DISASTER_ROWS[0], '표시 없는 본문 ' * 100))
+
+    def test_to_doc_is_common_doc_with_masks(self):
+        from rag.sources import disaster
+        row = DISASTER_ROWS[0]
+        doc = disaster.to_doc(row, 'Ⅱ 농작물 피해 예방 관리기술 ○서리 대비 ○살균제 1,000배액 살포 문의 010-1234-5678 a@b.com ' + BODY)
+        self.assertEqual(doc['crop_names'], [])  # 공통 문서
+        self.assertEqual((doc['doc_id'], doc['source_type']), ('disaster_1', 'disaster'))
+        self.assertIn('(2026-11-03)', doc['title'])
+        self.assertIn(DOSE_TOKEN, doc['text'])
+        self.assertNotIn('1,000배액', doc['text'])
+        self.assertNotIn('010-1234-5678', doc['text'])
+        self.assertNotIn('a@b.com', doc['text'])
+        self.assertIn('\n○서리 대비', doc['text'])  # 항목 표시 앞에서 줄을 나눈다
+        self.assertNotIn('홍길동', json.dumps(doc, ensure_ascii=False))  # 등록자 실명 필드는 안 쓴다
+        self.assertNotIn('apiKey', doc['url'])
+        self.assertIsNone(disaster.to_doc(row, '너무 짧다'))
+
+    def test_collect_counts_calls_and_skips_bad_files(self):
+        import datetime
+
+        from rag.sources import disaster
+        from rag.sources.doc_extract import ExtractError
+
+        class FakeFetcher:
+            calls = 0
+            def get(self, url, params, cache_name=None, refresh=False):
+                self.calls += 1
+                rows = ''.join('<item>' + ''.join(f'<{k}>{v}</{k}>' for k, v in r.items()) + '</item>'
+                               for r in DISASTER_ROWS[:2])
+                return f'<response><header><resultCode>00</resultCode></header><body><items>{rows}</items></body></response>'
+            def get_bytes(self, url, params, cache_file, refresh=False):
+                self.calls += 1
+                return b'%PDF-1.4' if params['cntntsNo'] == '1' else b'PK\x03\x04'
+            def save(self, *a):
+                pass
+
+        texts = {'pdf': 'Ⅱ 농작물 피해 예방 관리기술 ' + BODY}
+
+        def fake_extract(path, ext):
+            if ext == 'hwpx':
+                raise ExtractError('hwpx 추출 실패')
+            return texts[ext]
+        with mock.patch.object(disaster, 'extract', fake_extract):
+            res = disaster._collect(FakeFetcher(), 'K', print, False, datetime.date(2026, 11, 15))
+        self.assertEqual([d['doc_id'] for d in res.docs], ['disaster_1'])
+        self.assertEqual((res.calls, res.errors), (3, 1))
+
+    def test_rows_with_non_numeric_ids_are_dropped(self):
+        from rag.sources import disaster
+        self.assertTrue(disaster.valid_row({'cntntsNo': '271359', 'rtnFileSeCode': '185001', 'rtnFileSn': '1'}))
+        self.assertFalse(disaster.valid_row({'cntntsNo': '../../x'}))
+        self.assertFalse(disaster.valid_row({'cntntsNo': '1', 'rtnFileSn': '1&x=2'}))
+
+    def test_phone_number_right_after_hangul_is_masked(self):
+        from rag.sources import disaster
+        doc = disaster.to_doc(DISASTER_ROWS[0], 'Ⅱ 농작물 피해 예방 관리기술 연락처063-238-1234 문의 ' + BODY)
+        self.assertNotIn('238-1234', doc['text'])
+
+    def test_collect_without_key_fails(self):
+        from rag.sources import disaster
+        with mock.patch.dict('os.environ', {'NONGSARO_API_KEY': ''}), self.assertRaises(disaster.SourceError):
+            disaster.collect([])
+
+    def test_hwpx_extract_reads_paragraph_text(self):
+        import tempfile
+        import zipfile
+
+        from rag.sources.doc_extract import extract
+        xml = ('<root xmlns:hp="x"><hp:p><hp:run><hp:t>서리 피해 예방</hp:t></hp:run></hp:p>'
+               '<hp:p><hp:run><hp:t>관수 철저</hp:t></hp:run></hp:p></root>')
+        with tempfile.NamedTemporaryFile(suffix='.hwpx') as f:
+            with zipfile.ZipFile(f.name, 'w') as z:
+                z.writestr('Contents/section0.xml', xml)
+            self.assertEqual(extract(f.name, 'hwpx'), '서리 피해 예방\n관수 철저')
+
+    def test_broken_file_is_extract_error(self):
+        import tempfile
+
+        from rag.sources.doc_extract import ExtractError, extract
+        with tempfile.NamedTemporaryFile(suffix='.pdf') as f:
+            f.write(b'not a pdf')
+            f.flush()
+            with self.assertRaises(ExtractError):
+                extract(f.name, 'pdf')
+
+
+class EbookSourceTests(SimpleTestCase):
+    BOOKS = [
+        {'ebookCode': '8', 'ebookName': '농업기술길잡이5_사과재배', 'stdItemNm': '사과', 'cropsEbookFileNo': '00001'},
+        {'ebookCode': '90', 'ebookName': '농업기술길잡이90_사과', 'stdItemNm': '사과,기타과수', 'cropsEbookFileNo': '00001'},
+        {'ebookCode': '9', 'ebookName': '식용버섯', 'stdItemNm': '양송이,표고버섯', 'cropsEbookFileNo': '00003'},
+        {'ebookCode': '10', 'ebookName': '단고추', 'stdItemNm': '단고추(피망)', 'cropsEbookFileNo': '00004'},
+    ]
+
+    def test_latest_book_is_highest_code_with_exact_crop_name(self):
+        from rag.sources import ebook
+        self.assertEqual(ebook.latest_book(self.BOOKS, '사과')['ebookCode'], '90')
+        self.assertEqual(ebook.latest_book(self.BOOKS, '표고버섯')['ebookCode'], '9')
+        self.assertIsNone(ebook.latest_book(self.BOOKS, '고추'))  # "단고추(피망)"은 고추가 아니다
+
+    def test_to_doc_adds_chapter_and_drops_registrant(self):
+        from rag.sources import ebook
+        rows = [{'indexName': '제8장 기상재해', 'indexLevel': '1', 'indexPage': '312', 'ebookUrl': 'http://www.nongsaro.go.kr/u1',
+                 'registerEsntlNm': '홍길동'},
+                {'indexName': '02 늦서리', 'indexLevel': '2', 'indexPage': '318', 'ebookUrl': 'http://www.nongsaro.go.kr/u2'}]
+        doc = ebook.to_doc('사과', self.BOOKS[1], rows)
+        self.assertEqual(doc['rows'][1]['chapter'], '제8장 기상재해')
+        self.assertNotIn('registerEsntlNm', doc['rows'][0])
+        self.assertEqual((doc['source_type'], doc['crop_names']), ('guide', ['사과']))
+        self.assertNotIn('text', doc)  # 본문은 받지 않는다
+
+    def test_only_nongsaro_urls_are_kept(self):
+        from rag.sources import ebook
+        rows = [{'indexName': 'a', 'indexLevel': '2', 'indexPage': '1', 'ebookUrl': 'javascript:alert(1)'},
+                {'indexName': 'b', 'indexLevel': '2', 'indexPage': '2', 'ebookUrl': 'http://evil.example/x'},
+                {'indexName': 'c', 'indexLevel': '2', 'indexPage': '3', 'ebookUrl': 'http://www.nongsaro.go.kr/p?x=1'}]
+        urls = [r['ebookUrl'] for r in ebook.to_doc('사과', self.BOOKS[1], rows)['rows']]
+        self.assertEqual(urls, ['', '', 'http://www.nongsaro.go.kr/p?x=1'])
+
+    def test_non_numeric_file_no_is_an_error_not_a_cache_path(self):
+        from rag.sources import ebook
+        books = [{'ebookCode': '8', 'ebookName': 'B', 'stdItemNm': '사과', 'cropsEbookFileNo': '../x'}]
+        with mock.patch.object(ebook, '_call', return_value=books):
+            res = ebook._collect(mock.Mock(calls=1), 'K', ['사과'], print, False)
+        self.assertEqual((res.docs, res.errors), ([], 1))
+
+    def test_crop_without_guide_is_not_an_error(self):
+        from rag.sources import ebook
+        with mock.patch.object(ebook, '_call', return_value=self.BOOKS):
+            res = ebook._collect(mock.Mock(calls=1), 'K', ['고추'], print, False)
+        self.assertEqual((res.docs, res.done_crops, res.errors), ([], ['고추'], 0))
+
+
+GUIDE_ROWS = [
+    {'indexName': '제5장 재배 기술', 'indexLevel': '1', 'indexPage': '105', 'ebookUrl': 'http://www.nongsaro.go.kr/u5', 'chapter': '제5장 재배 기술'},
+    {'indexName': '아주심기', 'indexLevel': '2', 'indexPage': '106', 'ebookUrl': 'http://www.nongsaro.go.kr/u6', 'chapter': '제5장 재배 기술'},
+    {'indexName': '제7장 병해충 방제', 'indexLevel': '1', 'indexPage': '210', 'ebookUrl': 'http://www.nongsaro.go.kr/u7', 'chapter': '제7장 병해충 방제'},
+    {'indexName': '탄저병', 'indexLevel': '2', 'indexPage': '212', 'ebookUrl': 'http://www.nongsaro.go.kr/u8', 'chapter': '제7장 병해충 방제'},
+    {'indexName': '제8장 기상재해', 'indexLevel': '1', 'indexPage': '312', 'ebookUrl': 'http://www.nongsaro.go.kr/u9', 'chapter': '제8장 기상재해'},
+    {'indexName': '늦서리', 'indexLevel': '2', 'indexPage': '318', 'ebookUrl': 'http://www.nongsaro.go.kr/u10', 'chapter': '제8장 기상재해'},
+    {'indexName': '저온저장고 관리', 'indexLevel': '2', 'indexPage': '360', 'ebookUrl': 'http://www.nongsaro.go.kr/u11', 'chapter': '제10장 수확 후 관리'},
+]
+
+
+class GuideLinksTests(SimpleTestCase):
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        from rag import guide_links
+        self.g = guide_links
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        (Path(tmp.name) / 'docs').mkdir()
+        doc = {'doc_id': 'guide_사과', 'crop_names': ['사과'], 'title': '농업기술길잡이5_사과재배', 'rows': GUIDE_ROWS}
+        (Path(tmp.name) / 'docs' / 'guide.jsonl').write_text(json.dumps(doc, ensure_ascii=False) + '\n', encoding='utf-8')
+        cm = override_settings(RAG_DATA_DIR=Path(tmp.name))
+        cm.enable()
+        self.addCleanup(cm.disable)
+
+    def test_weather_question_links_matching_item_with_url_and_page(self):
+        links = self.g.links_for('사과', '날씨재해', '늦서리 피해 예방은 어떻게 하나요')
+        self.assertEqual([(l['title'], l['page'], l['url']) for l in links], [('늦서리', 318, 'http://www.nongsaro.go.kr/u10')])
+        self.assertEqual(links[0]['book'], '농업기술길잡이5_사과재배')
+
+    def test_weather_role_ignores_items_outside_weather_chapters(self):
+        links = self.g.links_for('사과', '날씨재해', '저온저장고 관리가 궁금해요')
+        self.assertNotIn('저온저장고 관리', [l['title'] for l in links])
+        self.assertEqual([l['title'] for l in links], ['제8장 기상재해'])  # 맞는 항목이 없으면 대표 장
+
+    def test_pest_without_match_falls_back_to_chapter_and_max_two(self):
+        links = self.g.links_for('사과', '병해충', '열매가 이상해요')
+        self.assertEqual([l['title'] for l in links], ['제7장 병해충 방제'])
+        links = self.g.links_for('사과', '병해충', '탄저병 증상', ['탄저병'])
+        self.assertLessEqual(len(links), 2)
+        self.assertEqual(links[0]['title'], '탄저병')
+
+    def test_cultivation_uses_match_then_chapter(self):
+        self.assertEqual([l['title'] for l in self.g.links_for('사과', '재배', '아주심기는 언제 해요')], ['아주심기'])
+        self.assertEqual([l['title'] for l in self.g.links_for('사과', '재배', '뭘 해야 하나요')], ['제5장 재배 기술'])
+
+    def test_three_or_more_candidates_are_cut_to_exactly_two(self):
+        rows = [{'indexName': '제7장 병해충 방제', 'indexLevel': '1', 'indexPage': '210', 'ebookUrl': 'http://www.nongsaro.go.kr/u', 'chapter': '제7장 병해충 방제'}] + [
+            {'indexName': n, 'indexLevel': '2', 'indexPage': str(p), 'ebookUrl': f'http://www.nongsaro.go.kr/u{p}', 'chapter': '제7장 병해충 방제'}
+            for n, p in (('탄저병', 212), ('탄저병 방제 일정', 220), ('잎탄저병', 230), ('탄저병 약제', 240))]
+        with mock.patch.object(self.g, 'guides', return_value={'사과': {'title': 'B', 'rows': rows}}):
+            links = self.g.links_for('사과', '병해충', '탄저병이 걱정돼요')
+        self.assertEqual(len(links), 2)
+        self.assertEqual([l['page'] for l in links], [212, 220])  # 쪽 순
+
+    def test_javascript_url_in_stored_guide_is_never_returned(self):
+        rows = [{'indexName': '제7장 병해충 방제', 'indexLevel': '1', 'indexPage': '210', 'ebookUrl': 'javascript:x', 'chapter': '제7장 병해충 방제'}]
+        with mock.patch.object(self.g, 'guides', return_value={'사과': {'title': 'B', 'rows': rows}}):
+            self.assertEqual(self.g.links_for('사과', '병해충', '병해충'), [])
+
+    def test_no_guide_crop_or_non_rag_role_gives_nothing(self):
+        self.assertEqual(self.g.links_for('수박', '재배', '재배'), [])
+        self.assertEqual(self.g.links_for('사과', '판매', '얼마에 팔까'), [])
+        self.assertEqual(self.g.links_for(None, '재배', '재배'), [])
+
+
+class CommonSourceCommandTests(SimpleTestCase):
+    """rag_collect는 공통 출처(재해예방정보)를 통째로 바꾸고, 길잡이 목차는 색인하지 않는다"""
+
+    def test_common_source_replaces_all_docs_on_success_and_keeps_only_failed_on_error(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from chat.management.commands import rag_collect as cmd
+        from rag.sources.http import CollectResult
+        old = [{'doc_id': 'disaster_old', 'crop_names': []}, {'doc_id': 'disaster_1', 'crop_names': []}]
+        new = [{'doc_id': 'disaster_1', 'crop_names': []}]
+        for errors, expect in ((0, ['disaster_1']), (1, ['disaster_old', 'disaster_1'])):
+            written = {}
+            fake = mock.Mock(return_value=CollectResult(new, 3, [], errors))
+
+            class FakeLog:
+                def __init__(self, **kw):
+                    self.__dict__.update(kw)
+
+                def save(self):
+                    pass
+            with mock.patch.dict(cmd.SOURCES, {'disaster': ('rag_disaster', fake, None)}), \
+                    mock.patch.object(cmd, 'read_docs', return_value=old), \
+                    mock.patch.object(cmd, 'write_docs', side_effect=lambda s, d: written.update({s: d})), \
+                    mock.patch.object(cmd, 'CollectLog', FakeLog):
+                call_command('rag_collect', source='disaster', crops='사과', stdout=StringIO())
+            self.assertEqual([d['doc_id'] for d in written['disaster']], expect, errors)
+
+    def test_common_source_with_zero_docs_keeps_old_docs(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from chat.management.commands import rag_collect as cmd
+        from rag.sources.http import CollectResult
+        logs, written = [], []
+
+        class FakeLog:
+            def __init__(self, **kw):
+                self.__dict__.update(kw)
+
+            def save(self):
+                logs.append(dict(self.__dict__))
+        with mock.patch.dict(cmd.SOURCES, {'disaster': ('rag_disaster', mock.Mock(return_value=CollectResult([], 1, [], 0)), None)}), \
+                mock.patch.object(cmd, 'read_docs', return_value=[{'doc_id': 'old', 'crop_names': []}]), \
+                mock.patch.object(cmd, 'write_docs', side_effect=lambda s, d: written.append(d)), \
+                mock.patch.object(cmd, 'CollectLog', FakeLog):
+            call_command('rag_collect', source='disaster', crops='사과', stdout=StringIO(), stderr=StringIO())
+        self.assertEqual(written, [])  # 빈 결과로 옛 문서를 덮어쓰지 않는다
+        self.assertEqual(logs[0]['status'], 'partial')
+
+    def test_guide_is_collected_but_never_indexed(self):
+        from chat.management.commands import rag_collect, rag_index
+        self.assertIn('guide', rag_collect.SOURCES)
+        self.assertNotIn('guide', rag_index.SOURCE_TYPES)
+        self.assertEqual(rag_index.SOURCE_TYPES['disaster'], 'disaster')

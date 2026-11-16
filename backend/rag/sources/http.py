@@ -44,6 +44,18 @@ class Fetcher:
         path = self.cache_path(cache_name) if cache_name else None
         if path and path.exists() and not refresh:
             return json.loads(path.read_text(encoding='utf-8'))['body']
+        return self.mask(self._fetch(url, params, retries).decode('utf-8', errors='replace'))
+
+    def get_bytes(self, url, params, cache_file, refresh=False, retries=3):
+        """GET 원본 바이트 (첨부 파일). cache_file(Path)이 있으면 그것을 쓰고, 없으면 받아 저장한다."""
+        if cache_file.exists() and not refresh:
+            return cache_file.read_bytes()
+        data = self._fetch(url, params, retries)
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_bytes(data)
+        return data
+
+    def _fetch(self, url, params, retries):
         query = urllib.parse.urlencode(params)
         for attempt in range(retries):
             wait = self.interval - (time.monotonic() - self._last)
@@ -52,9 +64,8 @@ class Fetcher:
             self._last = time.monotonic()
             self.calls += 1
             try:
-                with urllib.request.urlopen(f'{url}?{query}', timeout=30) as resp:
-                    body = self.mask(resp.read().decode('utf-8', errors='replace'))
-                break
+                with urllib.request.urlopen(f'{url}?{query}', timeout=60) as resp:
+                    return resp.read()
             except urllib.error.HTTPError as e:
                 if e.code not in RETRY_STATUS or attempt == retries - 1:
                     raise SourceError(f'{self.source} HTTP {e.code}') from None
@@ -62,7 +73,6 @@ class Fetcher:
                 if attempt == retries - 1:
                     raise SourceError(f'{self.source} 접속 실패 {type(e).__name__}') from None
             time.sleep(2 ** attempt)
-        return body
 
     def mask(self, text):
         """응답에 키가 그대로 또는 URL 인코딩된 꼴로 들어 있으면 ***로 바꾼다."""

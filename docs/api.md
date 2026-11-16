@@ -749,10 +749,12 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
   "message_id": 12, "session_id": 3, "intent": "병해충", "intent_label": "병해충 상담",
   "answer": "탄저병일 수 있습니다.[근거 1] ...\n\n이 답변은 공개된 농업기술 자료와 ... 문의하세요.",
   "sources": [ ... ], "remaining_today": 17, "cached": false,
-  "recommendation": { "item_id": 10, "volume_kg": 500, "top": [ ... ] }
+  "recommendation": { "item_id": 10, "volume_kg": 500, "top": [ ... ] },
+  "guide_links": [ { "book": "농업기술길잡이5_사과재배", "title": "제7장 병해충 방제", "page": 210, "url": "http://www.nongsaro.go.kr/...", "license": "농촌진흥청 농업기술길잡이, 공공누리 제4유형" } ]
 }
 ```
 - `recommendation`은 판매 상담에서 추천을 계산했을 때만 있다 (`top` = `/api/recommendations` 결과 상위 3행).
+- `guide_links`는 병해충·날씨재해·재배 답변(자료로 답한 경우)에만 있다 (REQ-CHT-007). 농업기술길잡이의 관련 장·쪽 링크 최대 2개이고, 길잡이가 없는 작물이면 `[]`. 화면은 답변 아래에 `title`(`p.page`)을 `url`로 연결하고 `license`를 출처로 보여 준다. 판매·범위 밖 답변과 대화 기록(`GET /api/chat/sessions/{id}`)에는 없다.
 - `cached: true`면 같은 품목·같은 질문(새 대화의 첫 질문)의 저장된 답이다 (하루 보관, REQ-NFR-002).
 
 **흐름**
