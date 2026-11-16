@@ -31,8 +31,8 @@ class CollectResult:
 
 
 class Fetcher:
-    def __init__(self, source, key, interval=CALL_INTERVAL):
-        self.source, self.key, self.interval = source, key, interval
+    def __init__(self, source, key, interval=CALL_INTERVAL, timeout=60):
+        self.source, self.key, self.interval, self.timeout = source, key, interval, timeout
         self.calls = 0          # 실제 외부 호출 수 (캐시 사용은 세지 않는다, REQ-NFR-009)
         self._last = 0.0
 
@@ -64,7 +64,7 @@ class Fetcher:
             self._last = time.monotonic()
             self.calls += 1
             try:
-                with urllib.request.urlopen(f'{url}?{query}', timeout=60) as resp:
+                with urllib.request.urlopen(f'{url}?{query}', timeout=self.timeout) as resp:
                     return resp.read()
             except urllib.error.HTTPError as e:
                 if e.code not in RETRY_STATUS or attempt == retries - 1:

@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'prices',
     'alerts',
     'chat',
+    'farming',
 ]
 
 MIDDLEWARE = [
@@ -140,6 +141,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'api.exceptions.custom_exception_handler',
+    # 로그인 없이 외부 API를 부르는 용어 풀이만 제한한다 (ScopedRateThrottle, 접속 주소별)
+    # 앞단 프록시 수. 0이면 X-Forwarded-For 헤더를 믿지 않고 접속 주소만 쓴다 (헤더로 제한을 피하지 못하게). Nginx를 앞에 두면 1
+    'NUM_PROXIES': int(os.environ.get('NUM_PROXIES', '0')),
+    'DEFAULT_THROTTLE_RATES': {'glossary': os.environ.get('GLOSSARY_RATE', '30/min')},
 }
 
 
