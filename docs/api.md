@@ -777,6 +777,58 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 ---
 
+### 2.8 재배·진단
+증상 진단만 회원 전용(`401`), 나머지는 로그인 없이 쓴다. 모두 `data`/`meta` 모양(1.2절). 일정은 농촌진흥청 농사로 농작업일정이고, `meta`에 `source`·`license`가 있다. 일정이 없는 품목은 `200` + `available: false` + `meta.message`.
+공통 오류: `400 VALIDATION_ERROR`(`item_id` 없음·형식, `month` 1~12 아님), `404 NOT_FOUND`(없는 품목).
+
+#### `GET /api/farming/monthly?item_id=&month=` — 이번 달 할 일 (REQ-RAG-002)
+`month`를 생략하면 한국 시간 오늘의 월. LLM 없음. **200**
+```json
+{ "data": { "item": {"item_id": 10, "name": "사과"}, "month": 4, "available": true,
+    "start": [], "continue": [ {"task": "수분", "kind": "농작업", "period": "3월 상순~4월 하순"} ],
+    "next": [ {"task": "꽃솎기, 열매솎기", "kind": "농작업", "period": "5월 상순~5월 하순"} ],
+    "growth": [ {"task": "개화", "kind": "생육 단계", "period": "4월 중순~5월 상순"} ],
+    "caution": [ {"task": "병해충 발생", "kind": "주의 시기", "period": "4월 하순~9월 중순"} ] },
+  "meta": { "source": "농촌진흥청 농사로 농작업일정", "license": "이용허락범위 제한 없음" } }
+```
+`start`·`continue`·`next`는 농작업(이번 달 시작·계속·다음 달 시작), `growth`·`caution`은 이번 달에 걸친 생육 단계·주의 시기.
+
+#### `GET /api/farming/calendar?item_id=` — 연간 작업 일정 (REQ-RAG-003)
+월 × 상·중·하순 = 36칸(1월 상순 = 0)의 간트 막대. 해를 넘는 작업은 막대 두 개. **200**
+```json
+{ "data": { "item": {"item_id": 10, "name": "사과"}, "available": true,
+    "bars": [ {"task": "수분", "kind": "농작업", "period": "3월 상순~4월 하순", "start": 6, "end": 12} ] },
+  "meta": { "today": "2026-11-16", "today_index": 31, "slots": 36, "source": "...", "license": "..." } }
+```
+`start`는 시작 칸, `end`는 끝 칸의 다음 칸(막대 길이 = end − start). `today_index`가 현재 시점 선의 칸.
+
+#### `GET /api/farming/summary?item_id=` — 품목 요약 (REQ-RAG-006)
+**200** `data` = `{item, crop_name, pest_count(주요 병해충 수), fieldtech_count(현장기술지원 건수), schedule: {available, task_count, first_task, last_task}}`
+
+#### `GET /api/farming/guide?item_id=` — 처음 할 일 (REQ-RAG-004)
+농작업을 시작 시기 순으로 나열한다 (LLM 없음). **200** `data` = `{item, available, steps: [{task, kind, period, start_month}]}`
+
+#### `GET /api/farming/search?q=` — 조건 탐색 (REQ-RAG-005)
+"봄에 심는 채소", "8월에 수확하는 과일" 같은 문장에서 월·계절·작업·분류를 규칙으로 읽어 맞는 품목을 최대 6개. **200** `data` = `[{item_id, name, category, schedule: [{task, period}]}]`, `meta.condition` = 읽은 조건 `{task, months, category}`. **오류**: `400`(`q` 없음·100자 초과, 시기·작업이 없는 문장)
+
+#### `GET /api/farming/glossary?q=` — 용어 풀이 (REQ-RAG-007)
+농업용어사전(알기쉬운농업용어 우선) → 없으면 한국어 위키백과. **200** `data` = `{term, found, definition, source, url, license}`. 못 찾으면 `found: false`(다른 값 없음). **오류**: `400`(`q` 없음·30자 초과), `429 RATE_LIMITED`(접속 주소별 분당 30회, 로그인 없이 외부 API를 부르므로)
+
+#### `POST /api/farming/diagnose` — 증상 진단 (REQ-RAG-001, 회원)
+본문 `{"item_id": 10, "symptom": "잎에 갈색 둥근 반점이 생겨요"}` (`symptom` 1~300자). 병해충·현장기술지원 자료를 검색해 근거로만 후보를 만든다. **200**
+```json
+{ "data": { "item": {"item_id": 10, "name": "사과"}, "symptom": "...",
+    "candidates": [ {"name": "갈색무늬병", "matching": "맞는 증상", "distinguish": "구분점", "action": "대응 요약", "evidence": [4]} ],
+    "sources": [ {"n": 4, "title": "사과 갈색무늬병 (병)", "source_label": "...", "url": "", "license": "..."} ],
+    "notice": "약제 사용은 등록된 사용 기준을 확인하세요.", "disclaimer": "..." },
+  "meta": { "remaining_today": 19 } }
+```
+후보는 최대 3개이고 근거 번호가 없는 후보는 뺀다. 근거가 없으면 `candidates: []` + `data.message`. 약제 사용량 수치는 `[사용량: 등록 기준 확인]`으로 바뀐다.
+**채팅 한도에 포함된다**: 진단 1번 = 질문 1번(하루 20회, `429 CHAT_DAILY_LIMIT`). 대화 기록(`/api/chat/sessions`)에 `[증상 진단]`으로 남는다. 진단에 실패하거나(`502 UPSTREAM_ERROR`·`504 UPSTREAM_TIMEOUT`·`503 SERVICE_UNAVAILABLE`·500) 근거가 없어 LLM을 부르지 않았으면 그 기록을 지워 한도를 돌려준다.
+**오류**: `400`(입력, 진단 자료가 없는 품목), `401`, `403 CSRF_FAILED`, `404`, `429`
+
+---
+
 ## 3. 2주차 이후 API (주소 목록)
 
 상세는 해당 주차 시작 전에 이 문서에 추가한다.
@@ -798,11 +850,13 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | POST | `/api/chat/messages` | 회원 | **(2.7에 상세)** 질문 보내기 → 스트리밍 응답(SSE: 진행 상태 → 답변 → 출처) | SCR-011 | REQ-CHT-001~007 | 4 |
 | GET | `/api/chat/sessions` | 회원 | **(2.7에 상세)** 이전 대화 목록 | SCR-011 | REQ-CHT-008 | 4 |
 | GET | `/api/chat/sessions/{id}` | 회원 | **(2.7에 상세)** 대화 내용 | SCR-011 | REQ-CHT-008 | 4 |
-| GET | `/api/farming/monthly` | 전체 | 이번 달 할 일 (item_id, month) | SCR-003, 012 | REQ-RAG-002 | 4 |
-| GET | `/api/farming/calendar` | 전체 | 연간 작업 일정 | SCR-012 | REQ-RAG-003 | 4 |
-| GET | `/api/farming/summary` | 전체 | 품목 요약 | SCR-012 | REQ-RAG-006 | 4 |
-| GET | `/api/farming/guide` | 전체 | 처음 할 일 요약 (선택) | SCR-012 | REQ-RAG-004 | 4 |
-| POST | `/api/farming/diagnose` | 회원 | 증상 진단 (채팅 한도에 포함) | SCR-013 | REQ-RAG-001 | 4 |
+| GET | `/api/farming/monthly` | 전체 | **(2.8에 상세)** 이번 달 할 일 (item_id, month) | SCR-003, 012 | REQ-RAG-002 | 4 |
+| GET | `/api/farming/calendar` | 전체 | **(2.8에 상세)** 연간 작업 일정 | SCR-012 | REQ-RAG-003 | 4 |
+| GET | `/api/farming/summary` | 전체 | **(2.8에 상세)** 품목 요약 | SCR-012 | REQ-RAG-006 | 4 |
+| GET | `/api/farming/guide` | 전체 | **(2.8에 상세)** 처음 할 일 요약 (선택) | SCR-012 | REQ-RAG-004 | 4 |
+| GET | `/api/farming/search` | 전체 | **(2.8에 상세)** 조건 탐색 ("봄에 심는 채소") | SCR-012 | REQ-RAG-005 | 4 |
+| GET | `/api/farming/glossary` | 전체 | **(2.8에 상세)** 용어 풀이 (농업용어사전 → 위키백과) | SCR-012, 011 | REQ-RAG-007 | 4 |
+| POST | `/api/farming/diagnose` | 회원 | **(2.8에 상세)** 증상 진단 (채팅 한도에 포함) | SCR-013 | REQ-RAG-001 | 4 |
 | GET | `/api/prices/retail` | 전체 | KAMIS 도·소매 참고 가격 (선택) | SCR-004 | REQ-PRC-006 | 12월 |
 | POST | `/api/sales/ocr` | 회원 | 정산서 사진 → 입력값 추출 (선택) | SCR-007 | REQ-SAL-004 | 12월 |
 | POST | `/api/price-alerts` | 회원 | 목표가격 알림 설정 (선택) | SCR-008 | REQ-ALT-007 | 12월 |
