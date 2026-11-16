@@ -162,3 +162,11 @@ RAG_EMBED_MODEL = os.environ.get('RAG_EMBED_MODEL', 'intfloat/multilingual-e5-sm
 RAG_EMBED_DIM = 384
 # 수집 원본 캐시·문서 파일 (git 제외 data/)
 RAG_DATA_DIR = BASE_DIR / 'data' / 'rag'
+
+
+# ── 지금 팔면 실수령액 (Y16, REQ-REC-007) ──────────────────────────
+# 아래 기준값은 잠정값이다. 전국 정산 8주치가 채워지면 분포를 보고 다시 정한다 (결정 0015)
+SELL_NOW_MIN_TRADE_DAYS = 5          # 최근 14일 거래일 수가 이보다 적으면 "거래 적음"
+SELL_NOW_MIN_VOLUME_KG = 1000        # 최근 14일 총 물량이 이보다 적으면 "거래 적음"
+SELL_NOW_VOLUME_WARN_MULTIPLE = 1    # 내 물량이 최근 14일 일평균 물량의 이 배수를 넘으면 물량 경고
+SELL_NOW_STALE_DAYS = 3              # 기준일이 오늘보다 이 일수 넘게 오래되면 "오래된 데이터" 경고

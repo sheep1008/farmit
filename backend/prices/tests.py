@@ -720,3 +720,211 @@ class RecommendationApiTest(TestCase):
     def test_쿼리_수(self):
         with self.assertNumQueries(8):
             self.post()
+
+
+# ── 지금 팔면 실수령액 (Y16, REQ-REC-007) ──────────────────────────
+SELL_NOW_URL = '/api/recommendations/now'
+NOW = date(2026, 11, 16)
+
+
+def settle(item, market, day, price, volume, lo=None, hi=None, grade='ALL'):
+    SettlePrice.objects.create(trade_date=day, market=market, item=item, grade=grade, avg_price=Decimal(price),
+                               min_price=Decimal(lo if lo is not None else price),
+                               max_price=Decimal(hi if hi is not None else price), volume_kg=Decimal(volume))
+
+
+class SellNowApiTest(TestCase):
+    """POST /api/recommendations/now (REQ-REC-007)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        # 위도 0 / 경도 1° = 약 111.19km
+        cls.near = Market.objects.create(market_id='250001', name='가까운시장', sido='대전', lat=0.001, lng=0.001,
+                                         is_collect=True)
+        cls.far = Market.objects.create(market_id='340101', name='먼시장', sido='충남', lat=0.001, lng=1.001,
+                                        is_collect=True)
+        cls.nocoord = Market.objects.create(market_id='110001', name='좌표없음', sido='서울', lat=0, lng=0,
+                                            is_collect=True)
+        cls.ref = Market.objects.create(market_id='110002', name='참고', sido='서울', lat=1, lng=1,
+                                        is_collect=True, is_reference=True)
+        cls.apple = Item.objects.create(at_code='0601', name='사과', category='과일', is_forecast=True)
+        cls.cabbage = Item.objects.create(at_code='1101', name='배추', category='채소', is_forecast=False)
+        for item in (cls.apple, cls.cabbage):
+            for m, price in ((cls.near, 3000), (cls.far, 3500), (cls.nocoord, 4000), (cls.ref, 9000)):
+                for i in range(10):      # 11/6 ~ 11/15 매일 거래, 하루 1000kg
+                    settle(item, m, NOW - timedelta(days=1 + i), price, 1000, lo=price - 200, hi=price + 200)
+        cls.user = get_user_model().objects.create_user('farmer', password='pw12345678')
+        cls.profile = UserProfile.objects.create(user=cls.user, sido='대전', sigungu='서구', lat=0, lng=0)
+
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=False)
+        self.client.force_login(self.user)
+        patcher = mock.patch('prices.sell_now._today_kst', return_value=NOW)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def post(self, **body):
+        body.setdefault('item_id', self.apple.pk)
+        body.setdefault('volume_kg', 100)
+        return self.client.post(SELL_NOW_URL, body, content_type='application/json')
+
+    def test_수집_대상_시장_전체가_수령액_순이고_참고_시장은_없다(self):
+        res = self.post()
+        self.assertEqual(res.status_code, 200)
+        results = res.json()['data']['results']
+        self.assertEqual([r['market_id'] for r in results], ['110001', '340101', '250001'])
+        self.assertEqual([r['rank'] for r in results], [1, 2, 3])
+        self.assertEqual(results[0]['net_won'], 400000)
+
+    def test_예측_대상이_아닌_품목도_계산된다(self):
+        res = self.post(item_id=self.cabbage.pk)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()['data']['results']), 3)
+
+    def test_7일_밖_거래는_가격에_섞이지_않는다(self):
+        SettlePrice.objects.filter(item=self.apple, market=self.near, trade_date=NOW - timedelta(days=9)).update(
+            avg_price=1000, volume_kg=99000)
+        near = {r['market_id']: r for r in self.post().json()['data']['results']}['250001']
+        self.assertEqual(near['price'], 3000.0)
+
+    def test_가중평균_계산(self):
+        m = Market.objects.create(market_id='999999', name='새시장', sido='경기', lat=0.5, lng=0.5, is_collect=True)
+        settle(self.apple, m, NOW - timedelta(days=1), 1000, 1000)
+        settle(self.apple, m, NOW - timedelta(days=2), 2000, 3000)
+        row = {r['market_id']: r for r in self.post().json()['data']['results']}['999999']
+        self.assertEqual(row['price'], 1750.0)      # (1000×1000 + 2000×3000) / 4000 = 1750
+        self.assertEqual((row['recent_min_price'], row['recent_max_price']), (1000.0, 2000.0))
+
+    def test_최저_최고는_하루_평균가_기준(self):
+        m = Market.objects.create(market_id='999999', name='새시장', sido='경기', lat=0.5, lng=0.5, is_collect=True)
+        settle(self.apple, m, NOW - timedelta(days=1), 2000, 1000, lo=100, hi=9000)
+        row = {r['market_id']: r for r in self.post().json()['data']['results']}['999999']
+        self.assertEqual((row['recent_min_price'], row['recent_max_price']), (2000.0, 2000.0))
+
+    def test_물량_0인_행은_거래일에_세지_않는다(self):
+        m = Market.objects.create(market_id='999999', name='새시장', sido='경기', lat=0.5, lng=0.5, is_collect=True)
+        settle(self.apple, m, NOW - timedelta(days=1), 2000, 1000)
+        settle(self.apple, m, NOW - timedelta(days=2), 0, 0)
+        row = {r['market_id']: r for r in self.post().json()['data']['results']}['999999']
+        self.assertEqual((row['trade_days'], row['recent_min_price']), (1, 2000.0))
+
+    def test_예측_대상_아닌_품목은_안내_문구(self):
+        meta = self.post(item_id=self.cabbage.pk).json()['meta']
+        self.assertFalse(meta['forecast_available'])
+        self.assertEqual(meta['message'], '이 품목은 아직 가격 예측을 제공하지 않습니다.')
+        meta = self.post().json()['meta']
+        self.assertTrue(meta['forecast_available'])
+        self.assertNotIn('message', meta)
+
+    def test_쿼리_수(self):
+        with self.assertNumQueries(7):
+            self.post()
+
+    def test_비용_수식과_운송비(self):
+        for days, price in ((3, 3000), (4, 4000)):      # 먼 시장 하루 평균가를 흔들어 최저·최고를 벌린다
+            SettlePrice.objects.filter(item=self.apple, market=self.far, trade_date=NOW - timedelta(days=days)
+                                       ).update(avg_price=price)
+        res = self.post(loss_rate=10, commission_rate=5, transport_cost_per_km=10)
+        rows = {r['market_id']: r for r in res.json()['data']['results']}
+        r = rows['340101']      # 3500원, 판매량 90kg → 매출 315000, 수수료 15750, 운송비 111.2km×10=1113
+        self.assertEqual((r['sellable_kg'], r['revenue_won'], r['commission_won'], r['transport_won']),
+                         (90.0, 315000, 15750, 1113))
+        self.assertEqual(r['net_won'], 315000 - 15750 - 1113)
+        self.assertEqual(r['distance_km'], 111.3)
+        self.assertNotIn('storage_won', r)
+        self.assertLess(r['net_low_won'], r['net_won'])
+        self.assertGreater(r['net_high_won'], r['net_won'])
+
+    def test_좌표_0인_시장은_거리_없음이고_맨_아래로_밀리지_않는다(self):
+        res = self.post(transport_cost_per_km=10)
+        body = res.json()
+        rows = {r['market_id']: r for r in body['data']['results']}
+        self.assertIsNone(rows['110001']['distance_km'])
+        self.assertEqual(rows['110001']['transport_won'], 0)
+        self.assertTrue(any('위치 정보가 없는 시장' in w for w in body['meta']['warnings']))
+
+    def test_내_위치나_운송비_단가가_없으면_운송비_미반영_경고(self):
+        res = self.post()      # 단가 0
+        meta = res.json()['meta']
+        self.assertFalse(meta['costs']['transport_applied'])
+        self.assertIn('내 위치 또는 운송비 단가가 없어 운송비를 반영하지 않았습니다.', meta['warnings'])
+        self.profile.lat = None
+        self.profile.lng = None
+        self.profile.save()
+        res = self.post(transport_cost_per_km=10)
+        self.assertFalse(res.json()['meta']['costs']['transport_applied'])
+        self.assertTrue(res.json()['meta']['warnings'])
+        # 단가와 위치가 있으면 경고 없음 (좌표 없는 시장 경고만 남을 수 있다)
+        self.profile.lat = 0
+        self.profile.lng = 0
+        self.profile.save()
+        meta = self.post(transport_cost_per_km=10).json()['meta']
+        self.assertTrue(meta['costs']['transport_applied'])
+        self.assertNotIn('내 위치 또는 운송비 단가가 없어 운송비를 반영하지 않았습니다.', meta['warnings'])
+
+    def test_거래가_적은_시장과_물량_경고(self):
+        m = Market.objects.create(market_id='999999', name='한산한시장', sido='경기', lat=0.5, lng=0.5, is_collect=True)
+        settle(self.apple, m, NOW - timedelta(days=1), 5000, 300)
+        rows = {r['market_id']: r for r in self.post(volume_kg=5000).json()['data']['results']}
+        self.assertTrue(rows['999999']['low_trade'])
+        self.assertEqual((rows['999999']['trade_days'], rows['999999']['recent_volume_kg']), (1, 300.0))
+        self.assertFalse(rows['250001']['low_trade'])
+        # 5000kg는 가까운 시장 일평균 1000kg보다 많다 → 물량 경고. 100kg은 아니다
+        self.assertTrue(rows['250001']['volume_warning'])
+        rows = {r['market_id']: r for r in self.post(volume_kg=100).json()['data']['results']}
+        self.assertFalse(rows['250001']['volume_warning'])
+
+    def test_기준일이_오래되면_표시(self):
+        meta = self.post().json()['meta']
+        self.assertEqual(meta['base_date'], '2026-11-15')
+        self.assertFalse(meta['is_stale'])
+        with mock.patch('prices.sell_now._today_kst', return_value=NOW + timedelta(days=10)):
+            body = self.post().json()
+        self.assertTrue(body['meta']['is_stale'])
+        self.assertTrue(any('오래되어' in w for w in body['meta']['warnings']))
+
+    def test_최근_7일_거래_없는_시장은_빠진다(self):
+        m = Market.objects.create(market_id='999999', name='옛시장', sido='경기', lat=0.5, lng=0.5, is_collect=True)
+        settle(self.apple, m, NOW - timedelta(days=12), 5000, 1000)
+        ids = [r['market_id'] for r in self.post().json()['data']['results']]
+        self.assertNotIn('999999', ids)
+
+    def test_정산_데이터가_없으면_빈_결과(self):
+        other = Item.objects.create(at_code='9999', name='없는품목', category='기타', is_forecast=False)
+        res = self.post(item_id=other.pk)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['data']['results'], [])
+        self.assertIsNone(res.json()['meta']['base_date'])
+
+    def test_등급을_고르면_그_등급만_쓴다(self):
+        settle(self.apple, self.near, NOW - timedelta(days=1), 8000, 500, grade='특')
+        res = self.post(grade='특')
+        self.assertEqual([r['market_id'] for r in res.json()['data']['results']], ['250001'])
+        self.assertEqual(res.json()['data']['results'][0]['price'], 8000.0)
+
+    def test_로그인_필요(self):
+        res = Client().post(SELL_NOW_URL, {'item_id': 1, 'volume_kg': 1}, content_type='application/json')
+        self.assertEqual((res.status_code, res.json()['error']['code']), (401, 'NOT_AUTHENTICATED'))
+
+    def test_CSRF_없으면_403(self):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(self.user)
+        res = c.post(SELL_NOW_URL, {'item_id': 1, 'volume_kg': 1}, content_type='application/json')
+        self.assertEqual((res.status_code, res.json()['error']['code']), (403, 'CSRF_FAILED'))
+
+    def test_입력_오류_400과_없는_품목_404(self):
+        for body in ({}, {'item_id': 1}, {'item_id': 1, 'volume_kg': 0}, {'item_id': 'x', 'volume_kg': 5},
+                     {'item_id': 1, 'volume_kg': 5, 'loss_rate': 101}, {'item_id': 1, 'volume_kg': 'abc'},
+                     {'item_id': 1, 'volume_kg': 0.09}, {'item_id': 1, 'volume_kg': 5, 'commission_rate': -1},
+                     {'item_id': 1, 'volume_kg': 5, 'transport_cost_per_km': -1}, []):
+            res = self.client.post(SELL_NOW_URL, body, content_type='application/json')
+            self.assertEqual((res.status_code, res.json()['error']['code']), (400, 'VALIDATION_ERROR'), body)
+        res = self.post(item_id=99999)
+        self.assertEqual((res.status_code, res.json()['error']['code']), (404, 'NOT_FOUND'))
+
+    def test_프로필이_없는_계정도_계산된다(self):
+        user = get_user_model().objects.create_user('noprofile', password='pw12345678')
+        self.client.force_login(user)
+        res = self.post()
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.json()['meta']['costs']['transport_applied'])
