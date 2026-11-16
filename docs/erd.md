@@ -428,7 +428,7 @@ erDiagram
 | 인덱스 | 내용 | 관련 REQ |
 |---|---|---|
 | `press_release` | 보도자료 제목·본문·날짜·출처·URL | REQ-SRC-002, REQ-ALT-006 |
-| `rag_docs` | 문서 조각 1개 = 1문서. chunk_id(`{doc_id}:{순번}`, ES `_id`), doc_id, chunk_no, source_type(`ncpms_pest`·`fieldtech`), source_label, title·text(nori 분석), crop_names(keyword, 작물 필터), pest_name, url, license, vector(dense_vector 384, cosine). **구현됨** (Y12: NCPMS 병해충·현장기술지원. 재해예방정보·길잡이 목차는 Y11) | REQ-CHT-001~007, REQ-RAG-001 |
+| `rag_docs` | 문서 조각 1개 = 1문서. chunk_id(`{doc_id}:{순번}`, ES `_id`), doc_id, chunk_no, source_type(`ncpms_pest`·`fieldtech`·`disaster`), source_label, title·text(nori 분석), crop_names(keyword, 작물 필터), pest_name, url, license, vector(dense_vector 384, cosine). **구현됨** (Y12: NCPMS 병해충·현장기술지원, Y11: 농작물재해예방정보 최근 24개월 정기 호. `disaster` 문서는 여러 작물을 함께 다뤄 `crop_names`가 비어 있고(공통 문서), 작물 필터는 고른 작물 + 공통 문서를 모두 찾는다. 농업기술길잡이 목차는 색인하지 않고 `data/rag/docs/guide.jsonl`에 두어 원문 링크에만 쓴다 — 공공누리 제4유형) | REQ-CHT-001~007, REQ-RAG-001 |
 | `collect_log` | MySQL `collect_log`를 옮겨 Kibana에서 시각화 | REQ-COL-008 |
 
 벡터 검색 저장소는 **ES 통합**으로 정했다 (2026-11-15, 결정 0011). 임베딩은 로컬 `intfloat/multilingual-e5-small`(384차원), 검색은 nori 키워드(BM25) + 벡터(kNN)를 RRF로 합친다. 색인: `python manage.py rag_collect` → `rag_index`. ES는 `infra/elasticsearch`(8.19.3 + analysis-nori) 컨테이너, 127.0.0.1:9200에만 열린다.

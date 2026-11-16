@@ -7,6 +7,7 @@
 run()은 (이벤트 이름, dict)를 차례로 내는 제너레이터다. 뷰가 SSE로 바꿔 보낸다. DB 저장은 뷰가 한다.
 """
 import hashlib
+import logging
 import math
 import re
 from dataclasses import dataclass, field
@@ -17,8 +18,11 @@ from django.core.cache import cache
 from chat import prompts as P
 from codes.models import Item
 from rag import crops as crop_util
+from rag import guide_links as guide
 from rag import llm, retrieve
 from rag.dose_filter import SENT_SPLIT_RE, is_dose, mask_sentence
+
+logger = logging.getLogger(__name__)
 
 CITE_RE = re.compile(r'\[근거\s*(\d+(?:\s*[,·]\s*\d+)*)\]')
 HISTORY_TURNS = 4            # 역할 판단에 넣는 이전 메시지 수
@@ -244,10 +248,13 @@ def run(user, question, item, history, today, recommend):
     crop = crop_util.crop_name(item.name) if item else None
     known = known_crop_names()
 
-    def done(intent, text, sources, disclaimer=True, evidence=None, cached=False):
+    def done(intent, text, sources, disclaimer=True, evidence=None, cached=False, guide_links=None):
         body, cites = _final(text, evidence or [], disclaimer)
-        return 'final', {'intent': intent, 'answer': body, 'sources': sources if sources is not None else cites,
-                         'usage': usage, 'cached': cached}
+        data = {'intent': intent, 'answer': body, 'sources': sources if sources is not None else cites,
+                'usage': usage, 'cached': cached}
+        if guide_links is not None:
+            data['guide_links'] = guide_links
+        return 'final', data
 
     # 1) 규칙: 다른 품목·범위 밖 (LLM 없음, REQ-CHT-004)
     notice = rule_check(question, crop, known)
@@ -336,7 +343,13 @@ def run(user, question, item, history, today, recommend):
             text = value['text']
         else:
             yield kind, value
-    result = done(intent, text, None, evidence=evidence)
+    # 원문 링크 (REQ-CHT-007): 선택·질문 작물의 길잡이 목차에서 찾는다. 길잡이가 없으면 빈 목록
+    try:
+        links = guide.links_for(q_crop, intent, question, c['queries'])
+    except Exception:  # 링크는 덤이라 목차 파일 문제로 답변을 잃지 않는다
+        logger.exception('guide links failed')
+        links = []
+    result = done(intent, text, None, evidence=evidence, guide_links=links)
     if not history:
-        cache.set(key, {k: result[1][k] for k in ('intent', 'answer', 'sources')}, ANSWER_CACHE_SECONDS)
+        cache.set(key, {k: result[1][k] for k in ('intent', 'answer', 'sources', 'guide_links')}, ANSWER_CACHE_SECONDS)
     yield result

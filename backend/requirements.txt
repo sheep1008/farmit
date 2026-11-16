@@ -5,3 +5,4 @@ confluent-kafka==2.12.2
 anthropic==2.8.0
 elasticsearch==8.19.3
 fastembed==0.9.1
+pypdf==5.1.0

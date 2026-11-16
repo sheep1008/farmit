@@ -104,7 +104,10 @@ def count():
 def _filters(crops, source_types):
     f = []
     if crops:
-        f.append({'terms': {'crop_names': list(crops)}})
+        # 고른 작물의 문서 + 작물에 묶이지 않은 공통 문서(crop_names 없음, 재해예방정보 등)
+        f.append({'bool': {'should': [{'terms': {'crop_names': list(crops)}},
+                                      {'bool': {'must_not': {'exists': {'field': 'crop_names'}}}}],
+                           'minimum_should_match': 1}})
     if source_types:
         f.append({'terms': {'source_type': list(source_types)}})
     return f

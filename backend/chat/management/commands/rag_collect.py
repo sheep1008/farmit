@@ -1,6 +1,6 @@
 """RAG 문서 수집: NCPMS 병해충 + 농사로 현장기술지원 → data/rag/docs/{source}.jsonl (Y12, REQ-COL-006 일부)
 
-사용: python manage.py rag_collect [--source ncpms|fieldtech|all] [--crops 사과,배] [--max-per-crop N]
+사용: python manage.py rag_collect [--source ncpms|fieldtech|disaster|guide|all] [--crops 사과,배] [--max-per-crop N]
 - 작물은 기본으로 item 테이블의 모든 품목을 작물 이름으로 바꿔 쓴다 (rag/crop_names.json)
 - API 응답은 data/rag/raw/에 캐시해 다시 실행하면 호출하지 않는다. 실행 기록은 collect_log에 남긴다
 - --crops로 일부만 받으면 그 작물 문서만 바꾸고 나머지는 그대로 둔다
@@ -14,13 +14,16 @@ from django.utils import timezone
 from api.models import CollectLog
 from codes.models import Item
 from rag import crops as crop_util
-from rag.sources import ncpms, nongsaro
+from rag.sources import disaster, ebook, ncpms, nongsaro
 from rag.sources.http import SourceError
 
 SOURCES = {
     'ncpms': ('rag_ncpms', ncpms.collect, None),
     'fieldtech': ('rag_fieldtech', nongsaro.collect, 8),
+    'disaster': ('rag_disaster', disaster.collect, None),
+    'guide': ('rag_guide', ebook.collect, None),   # 색인하지 않는 길잡이 목차 (원문 링크용)
 }
+COMMON = {'disaster'}  # 작물에 묶이지 않는 공통 문서: 작물별로 바꾸지 않고 doc_id로 합친다
 
 
 def docs_path(source):
@@ -71,7 +74,20 @@ class Command(BaseCommand):
                 continue
             # 오류 없이 끝낸 작물의 문서만 바꾼다. 오류 난 작물·못 다룬 작물의 기존 문서는 그대로 둔다
             done = set(result.done_crops)
-            kept = [d for d in read_docs(source) if not set(d['crop_names']) & done]
+            if source in COMMON and not result.docs:
+                # 문서를 하나도 못 만들었으면 옛 문서를 지우지 않는다 (목록이 비어 오거나 전부 건너뛴 경우)
+                log.status, log.error_msg, log.finished_at = 'partial', '문서 0건, 기존 문서 유지', timezone.now()
+                log.api_calls = result.calls
+                log.save()
+                self.stderr.write(f'{source}: 문서 0건 — 기존 문서를 그대로 둡니다')
+                continue
+            if source in COMMON:
+                # 공통 문서는 오류 없이 끝나면 통째로 바꾸고, 오류가 있으면 못 받은 문서만 옛것을 남긴다
+                new_ids = {d['doc_id'] for d in result.docs}
+                kept = [d for d in read_docs(source) if result.errors and d['doc_id'] not in new_ids]
+                done = set(crops)
+            else:
+                kept = [d for d in read_docs(source) if not set(d['crop_names']) & done]
             write_docs(source, kept + result.docs)
             log.status = 'partial' if result.errors else 'success'
             log.error_msg = f'오류 {result.errors}건, 반영 못 한 작물 {len(crops) - len(done)}개' if result.errors else None
