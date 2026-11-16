@@ -206,7 +206,7 @@ erDiagram
 | name | varchar(50) | | 시장명 |
 | sido | varchar(20) | | 시도 |
 | lat, lng | decimal(9,6) | | 위치 (직접 입력, 거리 계산용) |
-| is_collect | boolean | | 수집 대상 여부. 4개 시장 + 가락만 true. 33곳 모두 등록 |
+| is_collect | boolean | | 수집 대상 여부. 4개 시장 + 가락만 true. 전국 32곳 모두 등록 (aT 정산에 나오는 공영도매시장, 2026-11 기준. 부산국제수산은 최근 거래가 없어 뺐다) |
 | is_reference | boolean | | 참고용 시장 여부 (가락) |
 
 **item** — 품목. 출처마다 코드가 달라 한 행에 모아 둔다
@@ -267,7 +267,7 @@ erDiagram
 - **예외: `전남광주통합특별시`는 쓰지 않고 `광주광역시`·`전라남도`로 나눈다.** 기상청·aT 주소는 통합 이름으로 오지만, 특보구역 코드표(`warning_zone`)가 아직 옛 구역이기 때문이다. 나누는 규칙: 두 번째 칸이 `구`로 끝나면(북구 등) 광주광역시, 시·군이면 전라남도.
 - 통합 이름을 나누는 코드: `build_weather_station.py`(`weather_station`), `collectors/weather/producing_area.py`(`item_producing_area`). `warning_zone`은 원본 엑셀이 옛 이름이라 그대로 맞는다. 특보구역 코드표가 통합 구역으로 바뀌면 이 예외를 없애고 모든 테이블을 함께 바꾼다.
 - `user_profile.sido`는 회원이 고르는 값이라, 화면에서 이 표기의 목록으로만 고르게 해야 특보 알림 대상과 맞는다.
-- 아직 맞지 않는 곳: `market.sido`(`markets_collect.json`)는 줄임말(서울·충남)이다. 지금은 시도로 조인하지 않아 문제가 없고, 시장 33곳 초기 데이터(Y01)를 넣을 때 맞춘다.
+- `market.sido`도 이 표기를 따른다 (`markets_collect.json`·`markets_national.json`). 울산 시장(380201)은 코드가 경남 체계지만 `울산광역시`로 둔다.
 
 ### 2.2 회원
 

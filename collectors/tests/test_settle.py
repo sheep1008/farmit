@@ -74,6 +74,15 @@ class MainTest(unittest.TestCase):
             at_settle.main([])
         c.assert_called_once_with(date(2026, 11, 13), date(2026, 11, 13))
 
+    def test_national_flag_uses_national_collect(self):
+        with mock.patch.object(at_settle, "yesterday", return_value=date(2026, 11, 13)), \
+                mock.patch.object(at_settle, "collect") as c, mock.patch.object(at_settle, "collect_national") as n:
+            n.return_value.rows = n.return_value.api_calls = 0
+            n.return_value.skipped = {}
+            at_settle.main(["--national", "--backfill"])
+        c.assert_not_called()
+        n.assert_called_once_with(at_settle.BACKFILL_FROM, date(2026, 11, 13))
+
 
 class SettleDbTest(DbTestCase):
     """완료 기준: 같은 기간을 두 번 돌려도 settle_price 행이 늘지 않고, 시장 하나가 실패해도 나머지는 저장된다."""
@@ -175,6 +184,30 @@ class SettleDbTest(DbTestCase):
             at_settle.collect(date(2026, 10, 30), date(2026, 10, 30), conn=self.conn)
         self.assertEqual(self.sql("SELECT status FROM collect_log"), (("success",),))
         self.assertEqual(self.sql("SELECT COUNT(*) FROM settle_price"), ((0,),))   # 기간 밖·누락 행은 저장하지 않는다
+
+    def test_national_forecast_items_by_market(self):
+        """전국 모드: 예측 품목만 품목 조건으로 부르고, 응답 행의 시장별로 저장한다. 등록되지 않은 시장은 건너뛴다."""
+        self.sql("INSERT INTO item (item_id, at_code, name, category, is_storable, is_forecast) VALUES "
+                 "(10, '0601', '사과', '과일류', 1, 1)")
+        apple = dict(item=("06", "01"))
+        resp = body([{**row(**apple), "whsl_mrkt_cd": "250001"}, {**row(**apple), "whsl_mrkt_cd": "999999"},
+                     {**row(**apple), "whsl_mrkt_cd": "123456"}])   # 123456은 market에 없다
+        sent = []
+        with self.fake_get(lambda p: sent.append(p) or resp):
+            at_settle.collect_national(date(2026, 10, 30), date(2026, 10, 30), conn=self.conn)
+            run = at_settle.collect_national(date(2026, 10, 30), date(2026, 10, 30), conn=self.conn)
+
+        self.assertEqual(len(sent), 2)   # 예측 품목 1개 × 한 달 × 두 번 (강낭콩은 부르지 않는다)
+        self.assertEqual({(p["cond[gds_lclsf_cd::EQ]"], p["cond[gds_mclsf_cd::EQ]"]) for p in sent}, {("06", "01")})
+        self.assertNotIn("cond[whsl_mrkt_cd::EQ]", sent[0])
+        self.assertEqual(self.sql("SELECT market_id, item_id, COUNT(*) FROM settle_price GROUP BY market_id, item_id "
+                                  "ORDER BY market_id"),
+                         (("250001", 10, 2), ("999999", 10, 2)))   # 등급 + ALL, 두 번 돌려도 그대로
+        self.assertEqual(dict(run.skipped), {"시장_없음": 1})
+
+    def test_national_without_forecast_item_fails(self):
+        with self.assertRaisesRegex(RuntimeError, "is_forecast"):
+            at_settle.collect_national(date(2026, 10, 30), date(2026, 10, 30), conn=self.conn)
 
     def test_no_market_fails(self):
         self.sql("DELETE FROM market")
