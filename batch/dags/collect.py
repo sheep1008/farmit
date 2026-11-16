@@ -3,6 +3,7 @@
 - collect_daily            매일 22:00 UTC(한국 07:00): 어제(한국 날짜) 정산·ASOS → 남은 한도로 과거 적재 이어 받기
 - collect_customs_monthly  매월 14일 22:00 UTC(한국 15일 07:00): 관세청 수입량 (전월분이 보통 중순에 공표된다)
 - collect_ncpms_weekly     매주 화 22:00 UTC(한국 수 07:00): NCPMS 예찰 (예찰은 보통 매월 1일·16일 기준)
+  위 두 DAG는 수집 뒤에 alert_rules(수입량 급증·예찰 증가 판정 + 회원 알림, K17)를 돌린다
 
 재시도·기록:
 - 수집기가 예외로 끝나면 태스크가 실패하고 retries만큼 다시 돈다. 시도마다 collect_run이 collect_log에 fail 한 줄을 남긴다.
@@ -18,6 +19,7 @@ from airflow.providers.standard.operators.bash import BashOperator
 from airflow.sdk import DAG, Variable, task
 
 COLLECTORS = "/opt/farmit/collectors"   # compose가 collectors/를 읽기 전용으로 붙여 둔 곳
+SPARK = "/opt/farmit/spark"             # batch/spark (읽기 전용)
 KST = ZoneInfo("Asia/Seoul")
 START = pendulum.datetime(2026, 11, 1, tz="UTC")
 DEFAULT_ARGS = {"retries": 3, "retry_delay": timedelta(minutes=5), "execution_timeout": timedelta(hours=1)}
@@ -34,6 +36,12 @@ def kst_yesterday(run_after):
 def module(task_id, args, **kw):
     """python -m <args>를 collectors/ 에서 실행하는 태스크. 손으로 돌릴 때와 같은 명령이다."""
     return BashOperator(task_id=task_id, bash_command=f"cd {COLLECTORS} && python -m {args}", **kw)
+
+
+def alert_rules():
+    """수입량 급증·예찰 증가 판정 + 회원 알림 (K17, batch/spark/alert_rules.py). 두 판정을 같이 돌려도 몇십 초다.
+    수집이 일부만 실패해도(partial) 받은 자료로 판정하도록 수집 태스크 뒤에 붙인다."""
+    return BashOperator(task_id="alert_rules", bash_command=f"cd {SPARK} && python -m alert_rules")
 
 
 def backfill(name, chunks):  # chunks: 수집기 모듈의 기간 자르기 함수 이름 (month_chunks·year_chunks)
@@ -95,7 +103,7 @@ with DAG(
     default_args=DEFAULT_ARGS,
     tags=["collect"],
 ):
-    module("customs", "imports.customs")   # 기본: 작년·올해를 다시 받는다 (1월에도 작년 12월분이 들어온다)
+    module("customs", "imports.customs") >> alert_rules()   # 기본: 작년·올해를 다시 받는다 (1월에도 작년 12월분이 들어온다)
 
 
 with DAG(
@@ -106,4 +114,4 @@ with DAG(
     default_args=DEFAULT_ARGS,
     tags=["collect"],
 ):
-    module("ncpms", "pests.ncpms")   # 새 회차 + 최근 회차만 다시 받는다 (수집기 안에서 고른다)
+    module("ncpms", "pests.ncpms") >> alert_rules()   # 새 회차 + 최근 회차만 다시 받는다 (수집기 안에서 고른다)
