@@ -34,7 +34,7 @@ const router = createRouter({
     {
       path: '/chat', // SCR-011
       name: 'chat',
-      component: Placeholder,
+      component: () => import('../views/ChatView.vue'),
       meta: { title: '채팅', requiresAuth: true },
     },
     { path: '/search', name: 'search', component: Placeholder, meta: { title: '검색' } }, // SCR-014
