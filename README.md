@@ -70,11 +70,12 @@ docker compose -f infra/docker-compose.yml down -v                            # 
 docker compose -f infra/docker-compose.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
 docker compose -f infra/docker-compose.yml exec flink-jobmanager ./bin/sql-client.sh
 
-# 코드 테이블 초기 데이터 (수집 대상 시장 5곳, 품목 155개). 여러 번 실행해도 중복되지 않는다
-docker compose -f infra/docker-compose.yml exec backend python manage.py loaddata markets_collect items
+# 코드 테이블 초기 데이터 (시장 32곳 = 수집 대상 5곳 + 나머지 27곳, 품목 155개). 여러 번 실행해도 중복되지 않는다
+docker compose -f infra/docker-compose.yml exec backend python manage.py loaddata markets_collect markets_national items
 ```
 
-- `markets_collect.json`의 시장 위도·경도는 `0`(임시)이다. 실제 좌표는 Y01(시장 33곳 초기 데이터)에서 채운다.
+- `markets_collect.json`은 수집 대상(4곳 + 가락), `markets_national.json`은 나머지 전국 시장이다. 나머지 시장은 예측 품목 정산을 전국으로 받을 때만 쓴다 (K31).
+- 시장 위도·경도는 `0`(임시)이다. 실제 좌표는 직접 채운다.
 - `.env`의 `MYSQL_*` 값과 `infra/mysql/init/` 스크립트는 **DB 볼륨이 비어 있을 때(첫 실행)만** 적용된다. 바꾼 뒤에는 `down -v`로 볼륨을 지우고 다시 띄운다.
 - backend는 시작할 때 `migrate`를 먼저 실행한다.
 

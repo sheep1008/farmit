@@ -10,6 +10,14 @@
     ... python -m settle.at_settle --start 2026-11-01 --end 2026-11-13
     # 과거 적재: 2018-01-02부터 어제까지. 한도(10,000건)에 닿으면 멈추니 --start로 이어서 받는다
     ... python -m settle.at_settle --backfill
+
+전국 모드(--national, K31): 예측 품목(item.is_forecast)만 market 테이블에 등록된 전국 시장으로 받는다.
+가격 예측의 전국 가격·물량 피처(docs/ml.md 7절)용이다. 수집 대상 시장(is_collect)은 실시간 경매·화면이 같이 쓰므로 건드리지 않는다.
+품목 하나를 한 달씩 전국 시장 범위로 받아(사과 한 달 3~9건) 응답의 시장 코드별로 묶는다. 등록되지 않은 시장은 건너뛴다.
+같은 API라 하루 한도를 같이 쓰도록 collect_log 출처도 at_settle로 같다.
+
+    ... python -m settle.at_settle --national                       # 어제 하루
+    ... python -m settle.at_settle --national --backfill            # 2018-01-02부터 (사과 651건)
 """
 import argparse
 import json
@@ -68,16 +76,25 @@ def parse(text):
 
 
 class Agg:
-    """페이지마다 들어오는 원본 행을 (날짜, 시장, 품목, 등급)별 합계로 모은다. 원본 전체를 메모리에 두지 않는다."""
+    """페이지마다 들어오는 원본 행을 (날짜, 시장, 품목, 등급)별 합계로 모은다. 원본 전체를 메모리에 두지 않는다.
 
-    def __init__(self, market_id, item_ids, start=None, end=None):
+    market_id를 주면 모든 행을 그 시장으로 본다 (시장 하나씩 받는 기본 모드).
+    None이면 행의 whsl_mrkt_cd를 쓰고, markets(등록된 시장 코드)에 없는 시장은 건너뛴다 (전국 모드).
+    """
+
+    def __init__(self, market_id, item_ids, start=None, end=None, markets=None):
         self.market_id = market_id
+        self.markets = markets
         self.start, self.end = start, end   # 요청한 기간. 밖의 날짜가 오면 건너뛴다
         self.item_ids = item_ids      # {at_code: item_id}
         self.groups = {}              # key → [총금액, 총물량, 최저(kg당), 최고(kg당)]
         self.skipped = Counter()
 
     def add(self, r):
+        market = self.market_id or r.get("whsl_mrkt_cd")
+        if self.markets is not None and market not in self.markets:
+            self.skipped["시장_없음"] += 1   # settle_price.market_id가 FK라 등록되지 않은 시장은 저장할 수 없다
+            return
         item_id = self.item_ids.get(f"{r.get('gds_lclsf_cd')}{r.get('gds_mclsf_cd')}")
         if item_id is None:
             self.skipped["item_없음"] += 1
@@ -103,7 +120,7 @@ class Agg:
             return
         grade = (r.get("grd_nm") or "").strip()[:10] or "."
         for g in (grade, "ALL"):
-            key = (r["trd_clcln_ymd"], item_id, g)
+            key = (r["trd_clcln_ymd"], market, item_id, g)
             a = self.groups.setdefault(key, [D(0), D(0), None, None])
             a[0] += tot
             a[1] += qty
@@ -114,9 +131,9 @@ class Agg:
 
     def rows(self):
         out = []
-        for (day, item_id, grade), (tot, qty, low, high) in sorted(self.groups.items()):
+        for (day, market, item_id, grade), (tot, qty, low, high) in sorted(self.groups.items()):
             avg = (tot / qty).quantize(ONE)
-            out.append({"trade_date": day, "market_id": self.market_id, "item_id": item_id, "grade": grade,
+            out.append({"trade_date": day, "market_id": market, "item_id": item_id, "grade": grade,
                         "avg_price": avg, "min_price": (low if low is not None else avg).quantize(ONE),
                         "max_price": (high if high is not None else avg).quantize(ONE),
                         "volume_kg": qty.quantize(ONE)})
@@ -133,6 +150,44 @@ def targets(conn):
     return markets, items
 
 
+def national_targets(conn):
+    """전국 모드: (등록된 전체 시장 코드 집합, 예측 품목 {at_code: item_id})."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT market_id FROM market")
+        markets = {r[0] for r in cur.fetchall()}
+        cur.execute("SELECT at_code, item_id FROM item WHERE is_forecast = 1 ORDER BY at_code")
+        items = {r[0]: r[1] for r in cur.fetchall()}
+    return markets, items
+
+
+def fetch_into(run, agg, cond, label, s, e):
+    """cond 조건으로 s~e 정산을 모든 페이지 받아 agg에 넣고 저장한다.
+
+    API·HTTP 오류는 이 묶음만 건너뛰고(아무것도 쓰지 않음) partial로 남긴다. 한도에 닿으면 이어 받을 날짜를 알려 주고 멈춘다.
+    """
+    try:
+        page, seen = 1, 0
+        while True:
+            text = run.get(URL, {
+                "returnType": "json", "pageNo": page, "numOfRows": PAGE,
+                "cond[trd_clcln_ymd::GTE]": s.isoformat(), "cond[trd_clcln_ymd::LTE]": e.isoformat(), **cond,
+            }, key=("serviceKey", datagokr.service_key()))
+            rows, total = parse(text)
+            for r in rows:
+                agg.add(r)
+            seen += len(rows)
+            if not rows or seen >= total:
+                break
+            page += 1
+    except (datagokr.ApiError, HttpError) as ex:
+        run.errors.append(f"{label} {s}~{e}: {ex}")
+        return
+    except LimitReached as ex:
+        raise LimitReached(f"{ex}. {label} {s}~{e}에서 멈춤 → 내일 --start {s}로 이어 받는다") from None
+    run.skipped += agg.skipped
+    run.rows += upsert(run.conn, "settle_price", agg.rows(), ["avg_price", "min_price", "max_price", "volume_kg"])
+
+
 def collect(start, end, conn=None):
     """start~end(포함) 정산을 수집 시장마다 받아 저장한다. collect_log에는 한 줄, target_date는 end."""
     @collect_run(SOURCE, daily_limit=DAILY_LIMIT)
@@ -144,31 +199,24 @@ def collect(start, end, conn=None):
         # 달이 바깥, 시장이 안쪽: 한도에 걸려 멈춰도 "그 달 앞"은 모든 시장이 끝나 있어 --start로 빈 구간 없이 이어 받는다
         for s, e in month_chunks(start, end):
             for m in markets:
-                agg = Agg(m, item_ids, s, e)
-                try:
-                    page, seen = 1, 0
-                    while True:
-                        text = run.get(URL, {
-                            "returnType": "json", "pageNo": page, "numOfRows": PAGE,
-                            "cond[trd_clcln_ymd::GTE]": s.isoformat(), "cond[trd_clcln_ymd::LTE]": e.isoformat(),
-                            "cond[whsl_mrkt_cd::EQ]": m,   # 시장 조건이 없으면 0건이 온다
-                        }, key=("serviceKey", datagokr.service_key()))
-                        rows, total = parse(text)
-                        for r in rows:
-                            agg.add(r)
-                        seen += len(rows)
-                        if not rows or seen >= total:
-                            break
-                        page += 1
-                except (datagokr.ApiError, HttpError) as ex:
-                    # 이 시장·기간만 건너뛰고(아무것도 쓰지 않음) 나머지는 계속 받는다 → partial
-                    run.errors.append(f"시장 {m} {s}~{e}: {ex}")
-                    continue
-                except LimitReached as ex:
-                    raise LimitReached(f"{ex}. 시장 {m} {s}~{e}에서 멈춤 → 내일 --start {s}로 이어 받는다") from None
-                run.skipped += agg.skipped
-                run.rows += upsert(run.conn, "settle_price", agg.rows(),
-                                   ["avg_price", "min_price", "max_price", "volume_kg"])
+                fetch_into(run, Agg(m, item_ids, s, e), {"cond[whsl_mrkt_cd::EQ]": m},   # 시장 조건이 없으면 0건이 온다
+                           f"시장 {m}", s, e)
+    return run_(end, conn=conn)
+
+
+def collect_national(start, end, conn=None):
+    """전국 모드: 예측 품목을 등록된 전국 시장으로 받아 저장한다. 달이 바깥, 품목이 안쪽 (이어 받기는 collect와 같다)."""
+    @collect_run(SOURCE, daily_limit=DAILY_LIMIT)
+    def run_(run):
+        markets, items = national_targets(run.conn)
+        if not markets or not items:
+            raise RuntimeError("market이나 예측 품목(item.is_forecast)이 비어 있다 (초기 데이터를 먼저 넣어야 한다)")
+        run.skipped = Counter()
+        for s, e in month_chunks(start, end):
+            for code, item_id in items.items():
+                cond = {"cond[gds_lclsf_cd::EQ]": code[:2], "cond[gds_mclsf_cd::EQ]": code[2:],
+                        "cond[whsl_mrkt_cd::GTE]": "100000", "cond[whsl_mrkt_cd::LTE]": "999999"}   # 전국 시장 범위
+                fetch_into(run, Agg(None, {code: item_id}, s, e, markets=markets), cond, f"전국 품목 {code}", s, e)
     return run_(end, conn=conn)
 
 
@@ -177,10 +225,11 @@ def main(argv=None):
     p.add_argument("--start", type=date.fromisoformat)
     p.add_argument("--end", type=date.fromisoformat)
     p.add_argument("--backfill", action="store_true", help=f"{BACKFILL_FROM}부터 받는다 (--start가 있으면 그날부터)")
+    p.add_argument("--national", action="store_true", help="예측 품목만 전국 시장으로 받는다 (K31)")
     a = p.parse_args(argv)
     end = a.end or yesterday()
     start = a.start or (BACKFILL_FROM if a.backfill else end)
-    run = collect(start, end)
+    run = (collect_national if a.national else collect)(start, end)
     print(f"{start}~{end}: {run.rows}행, API {run.api_calls}건, 건너뜀 {dict(run.skipped)}")
 
 
