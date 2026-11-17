@@ -1,6 +1,6 @@
 """수집 DAG (K11, REQ-COL-001·003·005). collectors/ 수집기를 고치지 않고 그대로 실행한다.
 
-- collect_daily            매일 22:00 UTC(한국 07:00): 어제(한국 날짜) 정산(수집 시장 5곳 + 예측 품목 전국)·ASOS
+- collect_daily            매일 22:00 UTC(한국 07:00): 어제(한국 날짜) 정산(전국 시장 × 전 품목, K32)·ASOS
                            → 남은 한도로 과거 적재 이어 받기
 - collect_customs_monthly  매월 14일 22:00 UTC(한국 15일 07:00): 관세청 수입량 (전월분이 보통 중순에 공표된다)
 - collect_ncpms_weekly     매주 화 22:00 UTC(한국 수 07:00): NCPMS 예찰 (예찰은 보통 매월 1일·16일 기준)
@@ -80,10 +80,9 @@ with DAG(
     tags=["collect"],
 ):
     day = "{{ kst_yesterday(dag_run.run_after) }}"
-    settle = module("at_settle", f"settle.at_settle --start {day} --end {day}")
-    # 예측 품목만 전국 시장으로 (K31, 가격 예측의 전국 피처용). 과거분은 손으로 한 번 받았다 (--national --backfill, 사과 651건)
-    settle_national = module("at_settle_national", f"settle.at_settle --national --start {day} --end {day}",
-                             trigger_rule="all_done")   # 5곳 수집이 실패해도 전국은 받는다
+    # 전국 시장 × 전 품목 하루치 (K32, 약 4건). 수집 시장 5곳·예측 품목(K31)도 이 응답에 들어 있어 따로 받지 않는다.
+    # 예측 품목 전국 과거분은 손으로 한 번 받았다 (--national --backfill, 사과 651건)
+    settle = module("at_settle_all", f"settle.at_settle --all-items --start {day} --end {day}")
     asos = module("asos", f"weather.asos --start {day} --end {day}")
 
     # 하루치를 먼저 받고 남은 한도로 과거를 받는다. 하루치가 실패해도 과거 적재는 돈다
@@ -95,7 +94,7 @@ with DAG(
     def backfill_asos():
         backfill("weather.asos", "year_chunks")
 
-    settle >> settle_national >> backfill_at_settle()   # 하루치(5곳 → 전국) 뒤에 남은 한도로 과거 적재
+    settle >> backfill_at_settle()   # 하루치 뒤에 남은 한도로 과거 적재 (수집 시장 5곳, 2018년부터)
     asos >> backfill_asos()
 
 
