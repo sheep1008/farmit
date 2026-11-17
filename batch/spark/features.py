@@ -22,7 +22,7 @@ from pyspark.sql import functions as F
 from common import read, session
 from weekly_price import build as weekly_price
 
-OUT_DIR = Path(os.environ.get("FARMIT_ML_DATA_DIR", "/opt/farmit/ml-data"))   # compose가 ml/data를 붙여 둔 곳
+OUT_DIR = Path(os.environ.get("FARMIT_ML_DATA_DIR", "/opt/farmit/ml/data"))   # compose가 ml/을 붙여 둔 곳의 data/
 H = (1, 2, 3, 4)
 DAY_CAP = 400        # 명절까지 일수 상한 (실험 코드와 같음)
 OFFSET_CLIP = 35     # 타깃 주와 가장 가까운 명절의 일수 차이를 ±35일로 자름

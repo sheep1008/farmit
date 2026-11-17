@@ -13,6 +13,7 @@ pip install -r requirements.txt
 python -m farmit_ml.selection --item 0601  # 학습·노출 시장 선별, OOF·테스트 → config/0601/markets.json
 python -m farmit_ml.intervals --item 0601  # OOF 잔차로 시장별 80% 구간 → config/0601/intervals.json
 python -m farmit_ml.forecast --item 0601   # 주간 예측 → outputs/forecast_0601_<base_week>.csv (--to-db: forecast 테이블에 UPSERT)
+python -m farmit_ml.monitor --item 0601    # 지난 예측 vs 실제 → outputs/monitor_0601.csv, 지난주 오차를 MLflow에
 python -m farmit_ml.evaluate --item 0601   # 테스트 평가
 python -m farmit_ml.evaluate --config config/0601_v3   # v3 재현 (data/apple_weekly.csv 필요. Windows 0.0984)
 python -m pytest -q                        # 단위 테스트 (가짜 데이터)
