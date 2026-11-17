@@ -292,7 +292,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
             내 정보에 위치가 없어 운송비를 반영하지 않았습니다. 내 정보에서 위치를 넣으면 시장까지 거리로 계산합니다.
           </p>
           <div class="table-wrap">
-            <table>
+            <table class="stack-on-mobile">
               <thead>
                 <tr>
                   <th scope="col" class="num">순위</th>
@@ -307,24 +307,24 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
               </thead>
               <tbody>
                 <tr v-for="r in shownRows" :key="`${r.market_id}-${r.horizon}`" :class="{ desired: r.is_desired }">
-                  <td class="num">{{ r.rank }}</td>
-                  <td>
+                  <td class="num" data-label="순위">{{ r.rank }}</td>
+                  <td data-label="시장">
                     {{ r.market_name }}
                     <span v-if="r.distance_km != null" class="sub">{{ fmt(r.distance_km, 1) }}km</span>
                     <!-- 휴장 (REQ-REC-005): 순위에서 빼지 않고 표시만 -->
                     <span v-if="r.is_closed" class="badge closed">{{ closedText(r.closed_dates) }}</span>
                   </td>
-                  <td>
+                  <td data-label="시점">
                     {{ horizonLabel(r.horizon) }}
                     <span class="sub">{{ weekRange(r.target_week) }}</span>
                     <span v-if="r.is_desired" class="badge">희망</span>
                     <span v-if="r.holiday_notice" class="badge warn" :title="r.holiday_notice">명절 주의</span>
                   </td>
-                  <td class="num">
+                  <td class="num" data-label="예측가 (원/kg)">
                     {{ fmt(r.pred_price) }}
                     <span class="line">{{ fmt(r.lower80) }}~{{ fmt(r.upper80) }}</span>
                   </td>
-                  <td class="num">
+                  <td class="num" data-label="지난주 시세">
                     <template v-if="r.last_week_price">
                       {{ fmt(r.last_week_price) }}
                       <span class="line" :class="`vs ${vsLastWeek(r.pred_price, r.last_week_price).tone}`">
@@ -333,12 +333,12 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                     </template>
                     <span v-else class="sub">없음</span>
                   </td>
-                  <td class="num">
+                  <td class="num" data-label="예상 수령액">
                     <span class="strong">{{ fmt(r.net_won) }}원</span>
                     <span class="line">{{ fmt(r.net_low_won) }}~{{ fmt(r.net_high_won) }}</span>
                   </td>
-                  <td class="num">{{ fmt(r.transport_won) }}원</td>
-                  <td class="num">{{ fmt(r.storage_won) }}원</td>
+                  <td class="num" data-label="운송비">{{ fmt(r.transport_won) }}원</td>
+                  <td class="num" data-label="보관비">{{ fmt(r.storage_won) }}원</td>
                 </tr>
               </tbody>
             </table>
@@ -376,7 +376,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
             description="이 품목은 최근 7일 동안 수집 대상 시장에서 거래가 없었습니다."
           />
           <div v-else class="table-wrap">
-            <table>
+            <table class="stack-on-mobile">
               <thead>
                 <tr>
                   <th scope="col" class="num">순위</th>
@@ -389,8 +389,8 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
               </thead>
               <tbody>
                 <tr v-for="r in shownNowRows" :key="r.market_id">
-                  <td class="num">{{ r.rank }}</td>
-                  <td>
+                  <td class="num" data-label="순위">{{ r.rank }}</td>
+                  <td data-label="시장">
                     {{ r.market_name }}
                     <span v-if="r.distance_km != null" class="sub">{{ fmt(r.distance_km, 1) }}km</span>
                     <span v-if="r.low_trade" class="badge closed" title="최근 거래일·물량이 적어 가격이 흔들릴 수 있습니다">
@@ -404,19 +404,19 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                       물량 과다
                     </span>
                   </td>
-                  <td class="num">
+                  <td class="num" data-label="최근 7일 가격 (원/kg)">
                     {{ fmt(r.price) }}
                     <span class="line">{{ fmt(r.recent_min_price) }}~{{ fmt(r.recent_max_price) }}</span>
                   </td>
-                  <td class="num">
+                  <td class="num" data-label="최근 14일 거래">
                     {{ r.trade_days }}일
                     <span class="line">{{ fmt(r.recent_volume_kg) }}kg</span>
                   </td>
-                  <td class="num">
+                  <td class="num" data-label="실수령액">
                     <span class="strong">{{ fmt(r.net_won) }}원</span>
                     <span class="line">{{ fmt(r.net_low_won) }}~{{ fmt(r.net_high_won) }}</span>
                   </td>
-                  <td class="num">{{ fmt(r.transport_won) }}원</td>
+                  <td class="num" data-label="운송비">{{ fmt(r.transport_won) }}원</td>
                 </tr>
               </tbody>
             </table>
