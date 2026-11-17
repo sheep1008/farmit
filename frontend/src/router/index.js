@@ -30,14 +30,20 @@ const router = createRouter({
       component: () => import('../views/SalesView.vue'),
       meta: { title: '판매 기록', requiresAuth: true },
     },
-    { path: '/farming', name: 'farming', component: Placeholder, meta: { title: '재배 정보' } }, // SCR-012
+    { path: '/farming', name: 'farming', component: () => import('../views/FarmingView.vue'), meta: { title: '재배 정보' } }, // SCR-012
+    {
+      path: '/farming/diagnose', // SCR-013 (채팅 하루 한도를 같이 써서 회원 전용)
+      name: 'diagnose',
+      component: () => import('../views/DiagnoseView.vue'),
+      meta: { title: '증상 진단', requiresAuth: true },
+    },
     {
       path: '/chat', // SCR-011
       name: 'chat',
       component: () => import('../views/ChatView.vue'),
       meta: { title: '채팅', requiresAuth: true },
     },
-    { path: '/search', name: 'search', component: Placeholder, meta: { title: '검색' } }, // SCR-014
+    { path: '/search', name: 'search', component: () => import('../views/SearchView.vue'), meta: { title: '검색' } }, // SCR-014
     {
       path: '/alerts', // SCR-008
       name: 'alerts',
