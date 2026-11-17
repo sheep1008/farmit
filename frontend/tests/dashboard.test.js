@@ -1,6 +1,34 @@
 import { describe, expect, it } from 'vitest'
 import { CHAT_MAX_LENGTH, chatPrefillRoute } from '@/utils/chat'
-import { formatWon, sortRealtimeRows, summarizeMonthly } from '@/utils/dashboard'
+import { formatWon, sortRealtimeRows, summarizeForecast, summarizeMonthly } from '@/utils/dashboard'
+
+describe('이번 주 예측 카드', () => {
+  const row = (market_id, horizon, pred_price, last_week_price, holiday_notice = null) => ({
+    market_id, market_name: market_id, horizon, target_week: '2026-11-16', pred_price,
+    lower80: pred_price - 100, upper80: pred_price + 100, last_week_price, holiday_notice,
+  })
+
+  it('이번 주(horizon 1)만 보고 예측가가 높은 시장 3곳, 지난주 대비 %', () => {
+    const s = summarizeForecast([
+      row('a', 1, 3000, 3000), row('b', 1, 3500, 2800), row('c', 1, 2000, 2500), row('d', 1, 3200, null),
+      row('b', 2, 9999, 2800), // 다음 주 예측은 순위에 넣지 않는다
+    ])
+    expect(s.top.map((r) => r.market_id)).toEqual(['b', 'd', 'a'])
+    expect(s.top[0].change_pct).toBeCloseTo(25)
+    expect(s.top[1].change_pct).toBeNull() // 지난주 가격이 없으면 계산하지 않는다
+    expect(s.marketCount).toBe(4)
+    expect(s.targetWeek).toBe('2026-11-16')
+  })
+
+  it('명절 주의 문구가 있으면 하나 꺼낸다', () => {
+    expect(summarizeForecast([row('a', 1, 3000, 3000, '설 21일 전')]).holidayNotice).toBe('설 21일 전')
+    expect(summarizeForecast([row('a', 1, 3000, 3000)]).holidayNotice).toBeNull()
+  })
+
+  it('예측이 없으면 빈 요약', () => {
+    expect(summarizeForecast([])).toEqual({ top: [], marketCount: 0, targetWeek: null, holidayNotice: null })
+  })
+})
 
 describe('채팅 입력창 카드', () => {
   it('앞뒤 공백을 지우고 /chat?q=로 보낸다', () => {

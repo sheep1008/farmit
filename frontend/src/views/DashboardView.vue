@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { fetchAlerts, fetchCases } from '@/api/alerts'
 import { fetchMonthlyTasks } from '@/api/farming'
-import { fetchRealtimePrices } from '@/api/prices'
+import { fetchForecasts, fetchRealtimePrices } from '@/api/prices'
 import BaseButton from '@/components/common/BaseButton.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useAlertStore } from '@/stores/alerts'
@@ -11,15 +11,15 @@ import { useAuthStore } from '@/stores/auth'
 import { formatKstDateTime } from '@/utils/dates'
 import { CASE_TYPES, alertTypeLabel, formatPct, regionText } from '@/utils/alerts'
 import { CHAT_MAX_LENGTH, chatPrefillRoute } from '@/utils/chat'
-import { formatWon, sortRealtimeRows, summarizeMonthly } from '@/utils/dashboard'
+import { formatWon, sortRealtimeRows, summarizeForecast, summarizeMonthly } from '@/utils/dashboard'
 import { realtimeStatusText } from '@/utils/realtime'
 
 // SCR-003 대시보드 (docs/screens.md).
 // ① 관심 품목 오늘 경매가: 첫 관심 품목의 시장별 평균가와 마지막 수집 시각 (K33, REQ-PRC-004, GET /api/prices/realtime)
-// ② 안 읽은 알림 3개 (K20, REQ-ALT-003, GET /api/alerts?unread=true&size=3)
-// ③ 이번 달 할 일: 첫 관심 품목의 이번 달 시작·계속 농작업과 주의 시기 (K33, REQ-RAG-002, GET /api/farming/monthly)
-// ④ 특수 상황 과거 사례 요약: 첫 관심 품목의 사건 종류별 건수와 4주 뒤 평균 변화 (K20, REQ-HIS-001·002, GET /api/cases)
-// ⑤ 이번 주 예측: K13 예측 API로 따로 채운다 (지금은 자리만)
+// ② 이번 주 예측: 첫 관심 품목의 이번 주 예측가 상위 3개 시장·80% 구간·명절 주의 (K33, REQ-PRD-001·003, GET /api/forecasts)
+// ③ 안 읽은 알림 3개 (K20, REQ-ALT-003, GET /api/alerts?unread=true&size=3)
+// ④ 이번 달 할 일: 첫 관심 품목의 이번 달 시작·계속 농작업과 주의 시기 (K33, REQ-RAG-002, GET /api/farming/monthly)
+// ⑤ 특수 상황 과거 사례 요약: 첫 관심 품목의 사건 종류별 건수와 4주 뒤 평균 변화 (K20, REQ-HIS-001·002, GET /api/cases)
 // ⑥ 채팅 입력창: 입력 후 /chat?q=로 이동, 채팅 화면이 질문 칸을 채운다 (K33, REQ-CHT-001)
 const auth = useAuthStore()
 const alertStore = useAlertStore()
@@ -125,8 +125,33 @@ function onChatKeydown(e) {
   }
 }
 
+// 이번 주 예측. 503 DATA_NOT_READY(예측 대상인데 아직 예측 행이 없음)는 안내로
+const forecast = ref(null) // { data, meta }
+const forecastLoading = ref(false)
+const forecastNotReady = ref('')
+const forecastError = ref(false)
+
+async function loadForecast() {
+  if (!item.value) return
+  forecastLoading.value = true
+  forecastNotReady.value = ''
+  forecastError.value = false
+  try {
+    forecast.value = await fetchForecasts(item.value.item_id)
+  } catch (e) {
+    forecast.value = null
+    if (e.apiError?.code === 'DATA_NOT_READY') forecastNotReady.value = e.apiError.message
+    else forecastError.value = true
+  } finally {
+    forecastLoading.value = false
+  }
+}
+
+const forecastSummary = computed(() => summarizeForecast(forecast.value?.data))
+
 onMounted(() => {
   loadRealtime()
+  loadForecast()
   loadAlerts()
   loadMonthly()
   loadCases()
@@ -179,7 +204,46 @@ const caseRows = computed(() =>
         </template>
       </article>
 
-      <!-- ② 안 읽은 알림 -->
+      <!-- ② 이번 주 예측 (K13): 이번 주 예측가가 높은 시장 3곳 -->
+      <article class="card">
+        <header class="card-head">
+          <h2>이번 주 예측{{ item ? ` (${item.name})` : '' }}</h2>
+          <RouterLink v-if="item" :to="{ name: 'recommend', query: { item_id: item.item_id } }" class="more">
+            판매 추천
+          </RouterLink>
+        </header>
+        <div v-if="!item" class="state">
+          <p class="muted">관심 품목을 등록하면 그 품목의 주간 가격 예측을 보여 드립니다.</p>
+          <BaseButton :to="{ name: 'mypage' }">관심 품목 등록</BaseButton>
+        </div>
+        <LoadingSpinner v-else-if="forecastLoading" size="sm" label="가격 예측을 불러오는 중…" />
+        <p v-else-if="forecastNotReady" class="state muted">{{ forecastNotReady }}</p>
+        <div v-else-if="forecastError" class="state">
+          <p class="error">가격 예측을 불러오지 못했습니다.</p>
+          <BaseButton @click="loadForecast">다시 시도</BaseButton>
+        </div>
+        <p v-else-if="forecast && !forecast.meta.forecast_available" class="state muted">
+          {{ forecast.meta.message || `${item.name}은(는) 아직 가격 예측을 제공하지 않습니다.` }}
+        </p>
+        <p v-else-if="forecast && !forecastSummary.top.length" class="state muted">이번 주 예측이 없습니다.</p>
+        <template v-else-if="forecast">
+          <p class="sub muted">예측가가 높은 시장 (전체 {{ forecastSummary.marketCount }}곳)</p>
+          <ul class="markets">
+            <li v-for="r in forecastSummary.top" :key="r.market_id">
+              <span class="market">{{ r.market_name }}</span>
+              <span class="num price">{{ formatWon(r.pred_price) }}</span>
+              <span class="status">
+                80% 구간 {{ formatWon(r.lower80) }}~{{ formatWon(r.upper80) }} · 지난주 대비 {{ formatPct(r.change_pct) }}
+              </span>
+            </li>
+          </ul>
+          <p v-if="forecastSummary.holidayNotice" class="caution">{{ forecastSummary.holidayNotice }}</p>
+          <p v-if="forecast.meta.is_stale" class="caution">이번 주 예측이 아직 갱신되지 않아 지난 예측을 보여 드립니다.</p>
+          <p class="notice">원/kg, 기준 주 {{ forecast.meta.base_week }}. 예측은 참고용이며 실제 가격과 다를 수 있습니다.</p>
+        </template>
+      </article>
+
+      <!-- ③ 안 읽은 알림 -->
       <article class="card">
         <header class="card-head">
           <h2>
@@ -207,7 +271,7 @@ const caseRows = computed(() =>
         </ul>
       </article>
 
-      <!-- ③ 이번 달 할 일 -->
+      <!-- ④ 이번 달 할 일 -->
       <article class="card">
         <header class="card-head">
           <h2>
@@ -246,7 +310,7 @@ const caseRows = computed(() =>
         </template>
       </article>
 
-      <!-- ④ 특수 상황 과거 사례 요약 -->
+      <!-- ⑤ 특수 상황 과거 사례 요약 -->
       <article class="card">
         <header class="card-head">
           <h2>특수 상황 뒤 가격{{ item ? ` (${item.name})` : '' }}</h2>
@@ -289,13 +353,6 @@ const caseRows = computed(() =>
         </template>
       </article>
 
-      <!-- ⑤ 이번 주 예측: K13(가격 예측) 결과가 나오면 GET /api/forecasts로 채운다 -->
-      <article class="card placeholder">
-        <header class="card-head">
-          <h2>이번 주 예측</h2>
-        </header>
-        <p class="state muted">사과 주간 가격 예측은 준비 중입니다.</p>
-      </article>
 
       <!-- ⑥ 채팅 입력창: 보내면 채팅 화면으로 가서 질문 칸을 채운다 (실제 전송은 채팅 화면에서) -->
       <article class="card">
@@ -338,9 +395,6 @@ h1 {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-background);
-}
-.card.placeholder {
-  border-style: dashed;
 }
 .card-head {
   display: flex;
@@ -536,6 +590,10 @@ h2 {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: var(--focus-ring);
+}
+.sub {
+  margin-bottom: 4px;
+  font-size: var(--font-size-sm);
 }
 .notice {
   margin-top: 10px;
