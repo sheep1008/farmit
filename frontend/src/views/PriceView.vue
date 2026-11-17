@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import http from '@/api/http'
 import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
@@ -33,6 +34,7 @@ const DAY_MAX_MONTHS = 12
 
 const items = ref([])
 const markets = ref([])
+const route = useRoute()
 const filters = ref({ itemId: null, marketId: '', unit: 'day', months: 3, grade: 'ALL' })
 
 const rows = ref([])
@@ -70,8 +72,9 @@ async function loadCodes() {
   const [itemRes, marketRes] = await Promise.all([http.get('/items'), http.get('/markets')])
   items.value = itemRes.data.data
   markets.value = marketRes.data.data
-  // 처음 고른 값: 품목은 가격 예측 대상(사과), 시장은 참고 시장(가락)이 아닌 첫 수집 시장
-  filters.value.itemId = (items.value.find((it) => it.is_forecast) ?? items.value[0])?.item_id ?? null
+  // 처음 고른 값: 품목은 ?item_id=(대시보드에서 올 때) → 가격 예측 대상(사과), 시장은 참고 시장(가락)이 아닌 첫 수집 시장
+  const fromQuery = items.value.find((it) => it.item_id === Number(route.query.item_id))
+  filters.value.itemId = (fromQuery ?? items.value.find((it) => it.is_forecast) ?? items.value[0])?.item_id ?? null
   filters.value.marketId = (markets.value.find((m) => !m.is_reference) ?? markets.value[0])?.market_id ?? ''
 }
 
