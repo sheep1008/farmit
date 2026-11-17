@@ -107,7 +107,7 @@ docker compose -f infra/docker-compose.yml exec mysql sh -c 'mysql -u"$MYSQL_USE
 | `collect_daily` | 매일 22:00 (한국 07:00) | 어제 정산·ASOS → 남은 한도로 과거 적재 이어 받기 |
 | `collect_customs_monthly` | 매월 14일 22:00 | 관세청 수입량 (작년·올해) |
 | `collect_ncpms_weekly` | 매주 화 22:00 | NCPMS 예찰 |
-| `build_features_weekly` | 매주 일 23:00 (한국 월 08:00) | Spark로 예측 피처 테이블 → `ml/data/weekly_<품목코드>.csv` (`batch/dags/features.py`, `batch/spark/`) |
+| `forecast_weekly` | 매주 일 23:00 (한국 월 08:00) | 데이터 점검 → Spark 피처 테이블(`ml/data/weekly_<품목코드>.csv`) → 품목마다 예측·`forecast` 저장, 과거 사례 다시 계산 (`batch/dags/forecast.py`, 점검이 실패하면 예측하지 않는다) |
 
 ```bash
 docker compose -f infra/docker-compose.yml --profile airflow up --build -d

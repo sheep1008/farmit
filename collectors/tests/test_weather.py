@@ -227,7 +227,7 @@ class CheckUnitTest(unittest.TestCase):
 class CheckDbTest(DbTestCase):
     """완료 기준(REQ-COL-003): 지난주까지 빠짐없이 있으면 통과, 하나라도 빠지면 무엇이 빠졌는지 알려 준다."""
 
-    TABLES = ["item", "item_producing_area", "weather_daily", "holiday", "crop_production"]
+    TABLES = ["item", "item_producing_area", "weather_daily", "holiday", "crop_production", "settle_price"]
     SINCE, UNTIL = date(2026, 11, 2), date(2026, 11, 8)
 
     def setUp(self):
@@ -242,6 +242,8 @@ class CheckDbTest(DbTestCase):
                          (stn, self.SINCE + timedelta(days=i)))
         self.sql("INSERT INTO holiday VALUES ('2026-12-25', '기독탄신일'), ('2027-01-01', '1월1일')")
         self.sql("INSERT INTO crop_production (item_id, year, kosis_updated_on) VALUES (10, 2024, '2025-10-29')")
+        self.sql("INSERT INTO settle_price (trade_date, grade, avg_price, min_price, max_price, volume_kg, item_id, market_id) "
+                 "VALUES ('2026-11-07', '특', 5000, 4000, 6000, 100, 10, '110001')")
 
     def test_complete_passes(self):
         self.assertEqual(check.check(self.conn, self.SINCE, self.UNTIL), [])
@@ -251,12 +253,25 @@ class CheckDbTest(DbTestCase):
         self.sql("DELETE FROM holiday WHERE YEAR(holiday_date) = 2027")
         self.sql("DELETE FROM crop_production")
         self.assertEqual(check.check(self.conn, self.SINCE, date(2026, 12, 6)), [
+            "settle_price: 사과 2026-11-30~2026-12-06 정산이 없다",   # 정산은 11/7에만 있다
             # 12/6까지로 늘리면 두 관측소 모두 11/9~12/6이 비어 있다
             "weather_daily: 관측소 127 31일 빠짐 (2026-11-03~2026-11-04, 2026-11-08~2026-12-06)",
             "weather_daily: 관측소 136 28일 빠짐 (2026-11-09~2026-12-06)",
             "holiday: 2027년 공휴일이 없다",   # 12/6 + 4주 = 2027-01-03이라 2027년이 필요하다
             "crop_production: 사과 2024년 값이 없다 (마지막 없음)",  # 배는 예측 품목이 아니라 보지 않는다
         ])
+
+    def test_price_needs_last_week(self):
+        """지난주(월~일)에 정산이 한 건도 없으면 실패. 그 전 주에만 있어도 실패다 (예측 기준 주가 밀린다)."""
+        self.sql("UPDATE settle_price SET trade_date = '2026-11-01'")   # 점검 주(11/2~11/8) 바로 전날
+        self.assertEqual(check.check(self.conn, self.SINCE, self.UNTIL),
+                         ["settle_price: 사과 2026-11-02~2026-11-08 정산이 없다"])
+
+    def test_only_selected(self):
+        """--only: 고른 점검만 본다. 주간 예측은 생산량을 쓰지 않아 빠져 있어도 통과해야 한다."""
+        self.sql("DELETE FROM crop_production")
+        self.assertEqual(check.check(self.conn, self.SINCE, self.UNTIL, ["price", "holiday"]), [])
+        self.assertEqual(len(check.check(self.conn, self.SINCE, self.UNTIL, ["production"])), 1)
 
 if __name__ == "__main__":
     unittest.main()

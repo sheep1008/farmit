@@ -227,11 +227,16 @@ services:
         # 로그인 없이 모두 관리자. 포트를 127.0.0.1에만 열기 때문에 로컬 개발용으로만 쓴다
         AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
         PYTHONDONTWRITEBYTECODE: "1"   # 읽기 전용 collectors/ 에 .pyc를 쓰려 하지 않게
+        # 주간 예측(K19)의 MLflow 기록. 내 PC에서 직접 돌린 기록(ml/mlruns/mlflow.db)과 나눈다:
+        # 그쪽 실험은 산출물 경로가 Windows 경로(file:///C:/...)로 저장돼 있어 컨테이너에서 쓰면 산출물이 컨테이너 안에 버려진다
+        MLFLOW_TRACKING_URI: sqlite:////opt/farmit/ml/mlruns/airflow.db
+        MLFLOW_ARTIFACT_LOCATION: file:///opt/farmit/ml/mlruns/airflow-artifacts
       volumes:
         - ../batch/dags:/opt/airflow/dags
         - ../collectors:/opt/farmit/collectors:ro   # 태스크가 cd 해서 python -m <모듈> 로 실행
         - ../batch/spark:/opt/farmit/spark:ro       # Spark 작업(K12). 이미지 안의 pyspark가 local 모드로 실행
-        - ../ml/data:/opt/farmit/ml-data            # Spark가 만든 피처 CSV를 ml/farmit_ml이 읽는 곳 (커밋 제외)
+        # 가격 예측(K19): config/ 설정을 읽고, data/(Spark가 만든 피처 CSV)·outputs/·mlruns/에 쓴다 (셋 다 커밋 제외)
+        - ../ml:/opt/farmit/ml
         - airflow-logs:/opt/airflow/logs
       depends_on:
         airflow-db:

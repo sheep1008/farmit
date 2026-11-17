@@ -123,7 +123,7 @@ flowchart LR
 | `preprocess.json`의 피처 | 가중치가 0보다 큰 구성 모델이 쓰는 것만 검사한다: 트리 모델이 있으면 `tree.features`, LSTM이 있으면 `linear.features` (v3: 트리 77개 + LSTM 71개) |
 
 - **이 데이터셋은 레포에 없다.** 실험 저장소의 `scripts/run_all.py`(수집) → `build_dataset.py`(통합·누수 검사)로 만든다. 운영에서는 `batch/`로 옮겨야 한다 ([8장](#8-다음-단계)).
-- **옮기는 중 (K12, 2026-11-15):** `batch/spark/features.py`(Airflow `build_features_weekly`, 매주 일 23:00 UTC)가 MySQL에서 읽어
+- **옮기는 중 (K12, 2026-11-15):** `batch/spark/features.py`(Airflow `build_features_weekly`, 매주 일 23:00 UTC → K19에서 `forecast_weekly`에 합침)가 MySQL에서 읽어
   `ml/data/weekly_<품목코드>.csv`(사과 `weekly_0601.csv`)를 만든다. 지금은 필요한 컬럼 89개 중 54개만 있어 `check_columns()`를 통과하지 못한다.
   나머지는 실험 저장소 정의를 확인하거나(24개), DB에 원천이 없거나(8개: 품종 비중·`n_records`·일조·면적 3종), 생산량을 몇 년도 값으로 붙일지 정해야 한다(3개).
   **2026-11-16 방향 변경:** 나머지 35개를 채우는 대신, 운영 피처를 v3 77개가 아니라 7장 실험의 **공통 피처**(`ml/experiments/dataset.py`)로 맞춘다 (양정호와 합의, WBS K30). 아래 3.1절.
@@ -201,7 +201,7 @@ flowchart LR
 **적재:** `farmit_ml.store`가 CSV를 `forecast` 테이블에 UPSERT한다 (수집기와 같은 PyMySQL + 환경 변수 `MYSQL_*`·`DB_HOST`·`DB_PORT`).
 - UK `uk_forecast`(item_id, market_id, base_week, horizon)로 덮어쓴다. 같은 기준 주를 다시 돌려도 행이 늘지 않고, 지난 기준 주는 그대로 남는다.
 - `item_code`(aT 코드)로 `item.item_id`를 찾고, `item.is_forecast`가 false거나 `market`에 없는 시장이 있으면 아무것도 쓰지 않고 멈춘다.
-- 표준 라이브러리 + PyMySQL만 써서 수집기 컨테이너에서도 돈다. 2026-11-16 첫 적재: 기준 주 2026-11-16, 32개 시장 × h1~h4 = 128행, `GET /api/forecasts?item_id=10`으로 확인. 매주 자동 실행은 K19.
+- 표준 라이브러리 + PyMySQL만 써서 수집기 컨테이너에서도 돈다. 2026-11-16 첫 적재: 기준 주 2026-11-16, 32개 시장 × h1~h4 = 128행, `GET /api/forecasts?item_id=10`으로 확인. 매주 자동 실행은 아래 "자동 실행".
 
 ---
 
@@ -237,6 +237,35 @@ python -m farmit_ml.evaluate --item 0601                          # 테스트 �
 python -m farmit_ml.evaluate --config config/0601_v3
 ```
 - Windows와 Linux의 차이는 XGBoost·LSTM 부동소수점 연산 차이다. 같은 OS·같은 스레드 수에서는 매번 같다.
+
+### 자동 실행 (Airflow `forecast_weekly`, K19)
+매주 일 23:00 UTC(한국 월 08:00) `batch/dags/forecast.py`가 돈다: 점검(`weather.check`) → 피처(`batch/spark/features.py`) → 예측 품목(`item.is_forecast`)마다
+`farmit_ml.forecast --item <품목> --base-week <이번 주 월요일> --to-db`. 점검이 실패하면 예측하지 않는다(태스크 로그에 빠진 것이 남는다).
+- 점검은 예측 피처가 실제로 쓰는 원천만 본다: 지난주 예측 품목 정산(`settle_price`)과 공휴일(`--only price holiday`). v4는 날씨·생산량을 쓰지 않는다(3.1절).
+  날씨 점검(`--only weather`)은 과거 사례(`past_case`) 앞에만 둔다. 피처에 날씨·생산량을 다시 넣으면 DAG의 `--only`에도 더한다.
+- 예측은 Airflow 이미지 안의 **별도 가상환경**(`/home/airflow/ml-venv`, `batch/airflow/Dockerfile`)에서 돈다. pandas 3·MLflow가 Airflow 고정 버전과 부딪치지 않게 나눴다.
+  torch는 넣지 않았다(LSTM 가중치 0). LSTM을 다시 쓰면 그 Dockerfile에 torch CPU를 더한다.
+- compose가 `ml/`을 `/opt/farmit/ml`에 붙인다. MLflow 기록은 내 PC 실행분(`mlruns/mlflow.db`)과 나눠 `mlruns/airflow.db`(산출물 `mlruns/airflow-artifacts/`)에 쌓인다.
+  `mlflow.db`의 실험은 산출물 경로가 Windows 경로라 컨테이너에서 쓰면 산출물이 컨테이너 안에 버려지기 때문이다.
+```bash
+# 레포 루트에서. 지난 기준 주 다시 예측(백필) — Git Bash는 앞에 MSYS_NO_PATHCONV=1
+docker compose -f infra/docker-compose.yml exec airflow-scheduler sh -c   "cd /opt/farmit/ml && /home/airflow/ml-venv/bin/python -m farmit_ml.forecast --item 0601 --base-week 2026-11-09 --to-db"
+# 자동 실행 기록 보기 (ml/ 폴더에서)
+mlflow ui --backend-store-uri sqlite:///mlruns/airflow.db
+```
+
+### 예측 이력 (REQ-PRD-005, K19)
+`forecast` 테이블은 지난 기준 주를 지우지 않는다. `farmit_ml.monitor`가 지난 예측과 실제 주평균을 나란히 놓는다 (Airflow `forecast_weekly`의 `monitor` 태스크가 매주 돈다).
+```bash
+python -m farmit_ml.monitor --item 0601                     # 실제가 있는 가장 최근 주(지난주)를 채점
+python -m farmit_ml.monitor --item 0601 --week 2026-11-09   # 그 주를 다시 채점
+```
+- **실제 주평균:** 피처 CSV의 `price_kg` (모델 정답과 같은 정의). 이번 주(한국 날짜 월요일)부터는 진행 중이라 실제로 치지 않는다.
+- **`outputs/monitor_<품목>.csv`:** 예측 한 행(시장 × 기준 주 × h)마다 `actual`·`error`(예측 − 실제)·`abs_pct_error`(%)·`in_80`(80% 구간 안 1/0). 실제가 아직 없으면 비어 있다.
+- **MLflow `monitor <품목> <주>`** (stage=monitor): 그 주가 대상인 예측들의 `nmae`·`nmae_h1~4`, 기준선(지난주 가격 그대로) `base_nmae`·`base_nmae_h1~4`, `coverage80`, `n_rows`·`n_markets`.
+  8.1 운영 감시: `nmae`가 `base_nmae`보다 나쁜 주가 이어지는지, `coverage80`이 80%에서 멀어지는지 본다.
+- 2026-11-17 첫 확인: 기준 주 10/19~11/09를 백필(`forecast --base-week`, 그 시점까지의 데이터로만 학습)한 뒤 11/09 대상 주 채점 — 32개 시장 × h1~h4 128행,
+  NMAE 0.109 (기준선 0.137), h1 0.094 / h2 0.092 / h3 0.130 / h4 0.122, 80% 커버리지 82.8%. 한 주 결과라 흔들림이 크다 (h1·h4는 이 주에 기준선보다 나빴다).
 
 ### 단위 테스트·MLflow
 ```bash
@@ -568,6 +597,6 @@ v3 구간은 4개 시장 **테스트** 잔차로 만들어 전국 시장에 쓸 
 | 데이터셋 만들기 | `experiments/dataset.py`의 데이터셋 생성을 `batch/`(Airflow·Spark)로 옮긴다. 원천은 수집기가 MySQL에 쌓은 aT 정산 데이터 | REQ-COL-003 |
 | `farmit_ml` 일반화 | 사과·4개 시장 고정을 **상품 정의·시장 목록 설정형**으로 바꾸고, 시장 × 상품 선별 결과(7.4 규칙)를 설정으로 둔다 | REQ-NFR-010 |
 | 상품·시장별 80% 구간 | OOF 잔차로 상품 × 시장(또는 거래량 구간)별 분위수 | REQ-PRD-002 |
-| DB 적재·자동 실행 | 예측 CSV → `forecast` 테이블(**K13에서 만듦**: `farmit_ml.store`, `forecast --to-db`), Airflow 월요일 DAG (`farmit_ml` Docker, K19) | REQ-PRD-001, 005 |
-| 성능 감시 | 지난 예측 vs 실제 가격 NMAE를 시장 × 상품별로 매주 계산하고, 기준선보다 나쁜 곳은 노출을 멈춘다 (8.1) | REQ-PRD-005 |
+| DB 적재·자동 실행 | 예측 CSV → `forecast` 테이블(**K13에서 만듦**: `farmit_ml.store`, `forecast --to-db`), Airflow 월요일 DAG `forecast_weekly` (**K19에서 만듦**, Airflow 이미지 안 가상환경) | REQ-PRD-001, 005 |
+| 성능 감시 | 지난 예측 vs 실제 가격 NMAE를 시장 × 상품별로 매주 계산하고, 기준선보다 나쁜 곳은 노출을 멈춘다 (8.1). **K19에서 매주 채점·MLflow 기록까지 만듦** (`farmit_ml.monitor`, 5장). 노출 멈춤은 아직 없음 | REQ-PRD-005 |
 | 분기 재검증 | `experiments/run_oof.py`의 OOF·시장 선별을 운영 작업으로 옮겨 분기마다 설정을 다시 정한다. 첫 재검증은 2026-11 이후 실제 가격으로 | REQ-PRD-004, 005 |
