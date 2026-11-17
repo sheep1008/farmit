@@ -18,6 +18,7 @@
 
     ... python -m settle.at_settle --national                       # 어제 하루
     ... python -m settle.at_settle --national --backfill            # 2018-01-02부터 (사과 651건)
+    ... python -m settle.at_settle --national --backfill --item 0501 --item 0502   # 새로 켠 예측 품목만 (K28)
 
 전 품목 전국 모드(--all-items, K32): 품목 조건 없이 전국 시장 범위로 하루씩 받는다 (하루 원본 약 3.5만 행 = 4건).
 전국 시장 "지금 팔면" 실수령액(REQ-REC-007)용이다. 수집 시장 5곳·예측 품목도 이 응답에 다 들어 있어서
@@ -211,11 +212,19 @@ def collect(start, end, conn=None):
     return run_(end, conn=conn)
 
 
-def collect_national(start, end, conn=None):
-    """전국 모드: 예측 품목을 등록된 전국 시장으로 받아 저장한다. 달이 바깥, 품목이 안쪽 (이어 받기는 collect와 같다)."""
+def collect_national(start, end, conn=None, only=None):
+    """전국 모드: 예측 품목을 등록된 전국 시장으로 받아 저장한다. 달이 바깥, 품목이 안쪽 (이어 받기는 collect와 같다).
+
+    only(aT 코드 목록)를 주면 예측 품목 중 그 품목만 받는다. 새로 켠 품목의 과거 적재에서 이미 받은 품목을 다시 받지 않으려는 것이다.
+    """
     @collect_run(SOURCE, daily_limit=DAILY_LIMIT)
     def run_(run):
         markets, items = national_targets(run.conn)
+        if only:
+            missing = set(only) - set(items)
+            if missing:
+                raise RuntimeError(f"예측 품목(item.is_forecast)이 아니다: {sorted(missing)}")
+            items = {c: i for c, i in items.items() if c in only}
         if not markets or not items:
             raise RuntimeError("market이나 예측 품목(item.is_forecast)이 비어 있다 (초기 데이터를 먼저 넣어야 한다)")
         run.skipped = Counter()
@@ -255,10 +264,16 @@ def main(argv=None):
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--national", action="store_true", help="예측 품목만 전국 시장으로 받는다 (K31)")
     mode.add_argument("--all-items", action="store_true", help="전 품목을 전국 시장으로 하루씩 받는다 (K32)")
+    p.add_argument("--item", action="append", help="--national에서 이 예측 품목(aT 코드)만 받는다. 여러 번 줄 수 있다")
     a = p.parse_args(argv)
+    if a.item and not a.national:
+        p.error("--item은 --national과 함께 쓴다")
     end = a.end or yesterday()
     start = a.start or (BACKFILL_FROM if a.backfill else end)
-    run = (collect_all if a.all_items else collect_national if a.national else collect)(start, end)
+    if a.national:
+        run = collect_national(start, end, only=a.item)
+    else:
+        run = (collect_all if a.all_items else collect)(start, end)
     print(f"{start}~{end}: {run.rows}행, API {run.api_calls}건, 건너뜀 {dict(run.skipped)}")
 
 

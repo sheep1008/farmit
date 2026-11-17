@@ -216,8 +216,8 @@ erDiagram
 | at_code | varchar(10) | UK | aT 품목 코드. 표준코드의 **대분류(`gds_lclsf_cd`) + 중분류(`gds_mclsf_cd`) 4자리** (예: 깻잎 `1011`). 소분류(품종)는 품목으로 나누지 않는다. 실시간 경매 API 응답으로 확인함. 정산 API도 포털 명세상 같은 코드 필드를 쓰지만, 정산 담당자가 실제 응답으로 확인 필요 |
 | name | varchar(50) | | 품목명 |
 | category | varchar(20) | | 과일·채소 등 |
-| is_storable | boolean | | 저장 후 출하 시점을 고를 수 있는 품목 |
-| is_forecast | boolean | | 가격 예측 제공 여부. 처음엔 사과만 true로 검증하고 전 품목으로 넓힌다 (REQ-PRD-006). 예측 대상 판단은 이 값으로만 한다 (품목 이름·코드로 분기하지 않음) |
+| is_storable | boolean | | 저장 후 출하 시점을 고를 수 있는 품목. 기준은 "예측 범위(3~4주) 이상 저장할 수 있는가" (`docs/ml.md` 8.2). 지금 사과·감자·고구마만 true |
+| is_forecast | boolean | | 가격 예측 제공 여부. 사과로 검증한 뒤 저장성 품목으로 넓힌다 (REQ-PRD-006, 지금 사과·감자·고구마). 예측 대상 판단은 이 값으로만 한다 (품목 이름·코드로 분기하지 않음) |
 | hs_code | varchar(10) | | 관세청 HS 코드 (수입량 알림) |
 | ncpms_crop_code | varchar(10) | | NCPMS 작물 코드 |
 | nongsaro_code | varchar(10) | | 농사로 품목 코드 |

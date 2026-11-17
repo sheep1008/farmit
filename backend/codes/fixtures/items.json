@@ -84,8 +84,8 @@
       "at_code": "0501",
       "name": "감자",
       "category": "서류",
-      "is_storable": false,
-      "is_forecast": false
+      "is_storable": true,
+      "is_forecast": true
     }
   },
   {
@@ -95,8 +95,8 @@
       "at_code": "0502",
       "name": "고구마",
       "category": "서류",
-      "is_storable": false,
-      "is_forecast": false
+      "is_storable": true,
+      "is_forecast": true
     }
   },
   {

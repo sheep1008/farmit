@@ -6,7 +6,7 @@
 2. 2021~2024 OOF(확장 윈도우): 설정의 앙상블로 연도마다 다시 학습해 예측한다.
 3. 노출 시장: OOF에서 기준선(B1·B2 중 그 시장 OOF에서 나은 쪽)을 min_wins개 연도 이상 이긴 시장.
 4. 테스트(2025-01~): 위 선택을 고정한 뒤 한 번만 본다.
-결과: config/<품목>/markets.json(train·serve), outputs/select_<품목>_<버전>.csv(시장별 표),
+결과: config/<품목>/markets.json(train·serve·excluded 사유),outputs/select_<품목>_<버전>.csv(시장별 표),
       outputs/oof_<품목>_<버전>.csv(OOF 예측, 80% 구간 계산용), outputs/test_<품목>_<버전>.csv(테스트 예측,
       구간 커버리지 확인용), MLflow(stage=select). 구간은 다음에 python -m farmit_ml.intervals로 만든다.
 """
@@ -82,6 +82,24 @@ def market_table(V: pd.DataFrame, P: np.ndarray, min_wins: int) -> pd.DataFrame:
     t = pd.DataFrame(rows)
     t["serve"] = t["wins"] >= min(min_wins, t["years"].max())   # 연도가 더 적으면 전부 이겨야 한다
     return t
+
+
+def exclusion_reasons(res: pd.DataFrame, sel: dict) -> dict:
+    """노출하지 않는 시장 → 사유 (REQ-PRD-006 "예측하지 못한 시장은 사유를 남긴다"). res는 시장별 선별 표."""
+    out = {}
+    for r in res.itertuples():
+        if not r.train:
+            why = []
+            if r.coverage < sel["min_coverage"]:
+                why.append(f"학습 기간 제철 주 거래 {r.coverage:.1%} < {sel['min_coverage']:.0%}")
+            if r.trade_days < sel["min_trade_days"]:
+                why.append(f"주당 거래일 수 중앙값 {r.trade_days:g}일 < {sel['min_trade_days']}일")
+            out[r.market_cd] = f"{r.market_nm}: 학습 제외 ({', '.join(why)})"
+        elif r.serve is not True:
+            # 학습 제외 시장이 NaN이라 열이 float이다 → 정수로 찍는다
+            out[r.market_cd] = (f"{r.market_nm}: 노출 제외 (OOF {int(r.years)}개 연도 중 {int(r.wins)}개 연도만 "
+                                f"기준선 {r.base_name}을 이김, 기준 {sel['min_wins']}개)")
+    return out
 
 
 def test_table(b: Bundle, df: pd.DataFrame, mt: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
@@ -168,6 +186,7 @@ def main(argv=None):
     if not a.dry_run:
         markets = {
             "train": b.markets, "serve": serve,
+            "excluded": exclusion_reasons(res, sel),   # 사람이 읽는 기록. 예측 코드는 train·serve만 쓴다
             "selection": f"{date.today()} farmit_ml.selection, 데이터 {data_path.name}. {sel['rule']}",
             "summary": {k: round(v, 4) if isinstance(v, float) else v for k, v in summary.items()},
         }
