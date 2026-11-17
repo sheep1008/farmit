@@ -341,6 +341,7 @@ select:focus-visible {
   cursor: pointer;
 }
 .table-wrap {
+  position: relative; /* 안쪽 caption.sr-only(절대 위치)가 스크롤 상자 밖으로 빠져 페이지를 넓히지 않게 (K24) */
   margin-top: 12px;
   overflow-x: auto;
 }

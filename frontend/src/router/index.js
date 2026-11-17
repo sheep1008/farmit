@@ -3,9 +3,6 @@ import DashboardView from '../views/DashboardView.vue'
 import ErrorView from '../views/ErrorView.vue' // 오류 화면은 네트워크가 나빠도 떠야 하므로 처음부터 같이 싣는다
 import { requireAuth } from './guards'
 
-// 아직 만들지 않은 화면은 PlaceholderView로 자리만 잡는다. 화면 카드에서 component만 바꾸면 된다.
-const Placeholder = () => import('../views/PlaceholderView.vue')
-
 // 회원 전용 화면은 route에 meta: { requiresAuth: true }를 단다 (guards.js가 막는다). 접근 구분은 docs/screens.md 2절.
 // meta.title은 빈 화면 제목과 메뉴 이름에 쓴다.
 const router = createRouter({
@@ -68,7 +65,8 @@ const router = createRouter({
       // SCR-016 한 화면의 세 탭: terms(이용약관) · privacy(개인정보처리방침) · sources(데이터 출처)
       path: '/policies/:tab(terms|privacy|sources)',
       name: 'policies',
-      component: Placeholder,
+      component: () => import('../views/PolicyView.vue'),
+      props: true,
       meta: { title: '약관·개인정보·데이터 출처' },
     },
     {
