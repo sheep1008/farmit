@@ -75,7 +75,7 @@ docker compose -f infra/docker-compose.yml exec backend python manage.py loaddat
 ```
 
 - `markets_collect.json`은 수집 대상(4곳 + 가락), `markets_national.json`은 나머지 전국 시장이다. 나머지 시장은 예측 품목 정산을 전국으로 받을 때만 쓴다 (K31).
-- 시장 위도·경도는 `0`(임시)이다. 실제 좌표는 직접 채운다.
+- 시장 위도·경도는 도매시장 위치(OpenStreetMap 기준, 2026-11-17)다. 강릉·전주·정읍·안동 4곳은 주소가 있는 도로나 마을 위치라서 수백 m~1km쯤 어긋날 수 있다. 좌표가 `0`인 시장이 생기면 `/api/recommendations/now`는 거리를 비우고 운송비를 반영하지 않는다.
 - `.env`의 `MYSQL_*` 값과 `infra/mysql/init/` 스크립트는 **DB 볼륨이 비어 있을 때(첫 실행)만** 적용된다. 바꾼 뒤에는 `down -v`로 볼륨을 지우고 다시 띄운다.
 - backend는 시작할 때 `migrate`를 먼저 실행한다.
 
