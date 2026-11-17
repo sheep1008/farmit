@@ -21,7 +21,7 @@ const router = createRouter({
     {
       path: '/recommend', // SCR-005
       name: 'recommend',
-      component: Placeholder,
+      component: () => import('../views/RecommendView.vue'),
       meta: { title: '판매 추천', requiresAuth: true },
     },
     {
