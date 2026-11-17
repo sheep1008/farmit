@@ -60,6 +60,22 @@ services:
       retries: 20
       start_period: 30s
 
+  # 수집 상태 대시보드 (K23, REQ-COL-008). Airflow DAG collect_log_to_es가 옮긴 collect_log 인덱스를 본다
+  # 관리 도구라 기본으로는 뜨지 않는다. 켤 때: --profile kibana up -d  → http://localhost:5601
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.19.3   # ES와 같은 버전이어야 한다
+    profiles: ["kibana"]
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      NODE_OPTIONS: --max-old-space-size=512        # ES처럼 메모리를 묶는다
+      TELEMETRY_OPTIN: "false"                      # Elastic으로 사용 통계를 보내지 않는다
+    ports:
+      # 내 PC에서만 접속한다 (REQ-NFR-005). 배포 서버에서는 이 ports 줄을 지우고 SSH 터널로 본다
+      - "127.0.0.1:5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
   # Vue 3 + Vite dev server. /api 요청은 Vite 프록시가 backend:8000 으로 넘긴다 (K05)
   frontend:
     build: ../frontend
@@ -231,6 +247,7 @@ services:
         # 그쪽 실험은 산출물 경로가 Windows 경로(file:///C:/...)로 저장돼 있어 컨테이너에서 쓰면 산출물이 컨테이너 안에 버려진다
         MLFLOW_TRACKING_URI: sqlite:////opt/farmit/ml/mlruns/airflow.db
         MLFLOW_ARTIFACT_LOCATION: file:///opt/farmit/ml/mlruns/airflow-artifacts
+        ES_URL: http://elasticsearch:9200   # collect_log를 ES로 옮기는 DAG (K23, batch/dags/collect_log_es.py)
       volumes:
         - ../batch/dags:/opt/airflow/dags
         - ../collectors:/opt/farmit/collectors:ro   # 태스크가 cd 해서 python -m <모듈> 로 실행
