@@ -5,14 +5,14 @@ import { fetchChatSession, fetchChatSessions, sendChatMessage } from '@/api/chat
 import BaseButton from '@/components/common/BaseButton.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useAuthStore } from '@/stores/auth'
-import { applyChatEvent, failReply, newReply, splitCitations, toViewMessages } from '@/utils/chat'
+import { CHAT_MAX_LENGTH, applyChatEvent, failReply, newReply, splitCitations, toViewMessages } from '@/utils/chat'
 import { formatKstDateTime } from '@/utils/dates'
 
 // SCR-011 채팅 (REQ-CHT-001~006, 008, REQ-NFR-008, docs/api.md 2.7).
 // 질문을 보내면 답변 칸을 바로 넣어 진행 상태를 보이고(REQ-CHT-006), SSE 이벤트가 오는 대로
 // 역할 배지 → 답변 조각 → 인용된 출처 순서로 채운다.
 // 왼쪽(모바일은 접는 목록)에 이전 대화 목록과 새 대화 버튼을 둔다 (REQ-CHT-008).
-const MAX_LENGTH = 1000
+const MAX_LENGTH = CHAT_MAX_LENGTH
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()

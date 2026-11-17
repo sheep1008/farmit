@@ -1,5 +1,17 @@
 // 채팅 화면(SCR-011)의 화면 밖 로직. 컴포넌트 없이 테스트할 수 있게 여기 둔다.
 
+/** 질문 최대 글자 수 (채팅 화면·대시보드 입력창 공통) */
+export const CHAT_MAX_LENGTH = 1000
+
+/**
+ * 다른 화면에서 채팅으로 질문을 넘길 때의 이동 위치. 채팅 화면은 ?q=로 질문 칸만 채우고, 보내기는 사용자가 누른다.
+ * 공백뿐이면 null (이동하지 않는다).
+ */
+export function chatPrefillRoute(text) {
+  const q = (text ?? '').trim().slice(0, CHAT_MAX_LENGTH)
+  return q ? { name: 'chat', query: { q } } : null
+}
+
 /** 답변 하나의 처음 상태. 질문을 보내자마자 화면에 넣어 진행 상태를 바로 보여 준다 (REQ-CHT-006). */
 export function newReply() {
   return {
