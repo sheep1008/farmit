@@ -80,8 +80,12 @@ class MainTest(unittest.TestCase):
             n.return_value.rows = n.return_value.api_calls = 0
             n.return_value.skipped = {}
             at_settle.main(["--national", "--backfill"])
+            at_settle.main(["--national", "--backfill", "--item", "0501", "--item", "0502"])
+            with self.assertRaises(SystemExit):   # --item은 --national 전용
+                at_settle.main(["--item", "0501"])
         c.assert_not_called()
-        n.assert_called_once_with(at_settle.BACKFILL_FROM, date(2026, 11, 13))
+        self.assertEqual(n.call_args_list, [mock.call(at_settle.BACKFILL_FROM, date(2026, 11, 13), only=None),
+                                            mock.call(at_settle.BACKFILL_FROM, date(2026, 11, 13), only=["0501", "0502"])])
 
     def test_all_items_flag_uses_collect_all(self):
         with mock.patch.object(at_settle, "yesterday", return_value=date(2026, 11, 13)), \
@@ -240,6 +244,17 @@ class SettleDbTest(DbTestCase):
                          (("250001", 10, 4), ("999999", 5, 4)))   # 2일 × (등급 + ALL), 두 번 돌려도 그대로
         self.assertEqual(dict(run.skipped), {"시장_없음": 2, "item_없음": 2})
         self.assertEqual(run.api_calls, 2)
+
+    def test_national_only_given_items(self):
+        """전국 모드 --item(K28): 새로 켠 예측 품목만 부른다. 예측 품목이 아닌 코드를 주면 아무것도 부르지 않고 멈춘다."""
+        self.sql("INSERT INTO item (item_id, at_code, name, category, is_storable, is_forecast) VALUES "
+                 "(10, '0601', '사과', '과일류', 1, 1), (8, '0501', '감자', '서류', 1, 1)")
+        sent = []
+        with self.fake_get(lambda p: sent.append(p) or body([])):
+            at_settle.collect_national(date(2026, 10, 30), date(2026, 10, 30), conn=self.conn, only=["0501"])
+            with self.assertRaisesRegex(RuntimeError, "0302"):
+                at_settle.collect_national(date(2026, 10, 30), date(2026, 10, 30), conn=self.conn, only=["0302"])
+        self.assertEqual([(p["cond[gds_lclsf_cd::EQ]"], p["cond[gds_mclsf_cd::EQ]"]) for p in sent], [("05", "01")])
 
     def test_national_without_forecast_item_fails(self):
         with self.assertRaisesRegex(RuntimeError, "is_forecast"):

@@ -1,0 +1,13 @@
+{
+ "final": "h별 트리 3종 같은 비중",
+ "weights": {
+  "RandomForest": 0.3333333333,
+  "LightGBM": 0.3333333334,
+  "XGBoost": 0.3333333333,
+  "RandomForest(통합)": 0.0,
+  "LightGBM(통합)": 0.0,
+  "XGBoost(통합)": 0.0,
+  "LSTM": 0.0
+ },
+ "selection": "docs/ml.md 7장 실험 구성 그대로 (experiments/dataset.py predict: 세 모델 평균). 통합 트리·LSTM은 전국 시장으로 다시 검증하지 않아 0"
+}

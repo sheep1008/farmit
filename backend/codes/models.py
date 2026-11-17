@@ -36,7 +36,7 @@ class Item(models.Model):
 
     # is_storable: 저장 후 출하 시점을 고를 수 있는 품목인지
     is_storable = models.BooleanField(default=False)
-    # is_forecast: 가격 예측을 제공하는 품목인지 (현재는 사과만 True)
+    # is_forecast: 가격 예측을 제공하는 품목인지 (저장성 품목만, docs/ml.md 7장. 지금은 사과·감자·고구마)
     is_forecast = models.BooleanField(default=False)
     # hs_code: 관세청 HS 코드 (수입량 알림용, 비어도 됨)
     hs_code = models.CharField(max_length=10, null=True, blank=True)

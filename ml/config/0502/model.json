@@ -1,0 +1,21 @@
+{
+ "version": "v4",
+ "item_code": "0502",
+ "item_name": "고구마",
+ "horizons": [1, 2, 3, 4],
+ "seed": 42,
+ "lstm_seeds": 5,
+ "selection": {
+  "train_end": "2023-12-31",
+  "min_coverage": 0.8,
+  "min_trade_days": 4,
+  "oof_years": [2021, 2022, 2023, 2024],
+  "min_wins": 3,
+  "rule": "학습 시장: 학습 기간(~2023)에 제철 주(전국 물량 ≥ 중앙값의 10%)의 80% 이상 거래가 있고 주당 거래일 수 중앙값 ≥ 4. 노출 시장: 2021~2024 OOF에서 기준선(B1·B2 중 OOF에서 나은 쪽)을 3개 연도 이상 이긴 시장 (docs/ml.md 7.4)"
+ },
+ "interval": {
+  "level": 0.8,
+  "method": "시장 × h별 분위수는 intervals.json (python -m farmit_ml.intervals가 OOF 잔차로 만든다)"
+ },
+ "source": "사과 v4(config/0601) 구성을 그대로 복사 (K28). docs/ml.md 7.3에서 고구마는 공통 피처로 검증됨. 하이퍼파라미터도 사과 v3 값. 입력은 K30 batch/spark/features.py의 weekly_0502.csv"
+}

@@ -6,7 +6,7 @@ import pandas as pd
 
 from farmit_ml.data import needed_features
 from farmit_ml.preprocess import Preprocessor
-from farmit_ml.selection import market_table, pick_train_markets
+from farmit_ml.selection import exclusion_reasons, market_table, pick_train_markets
 from farmit_ml.settings import CONFIG_ROOT, HORIZONS, load_bundle
 
 
@@ -63,3 +63,20 @@ def test_market_table_serves_markets_that_beat_baseline_in_enough_years():
     t = market_table(pd.DataFrame(rows), np.array(preds), min_wins=3).set_index("market_cd")
     assert t.loc["good", "wins"] == 3 and t.loc["good", "serve"]
     assert t.loc["bad", "wins"] == 2 and not t.loc["bad", "serve"]
+
+
+def test_exclusion_reasons_explain_each_market_not_served():
+    """학습에서 빠진 시장(커버리지·거래일)과 노출에서 빠진 시장(기준선) 모두 사유가 남고, 노출 시장은 없다."""
+    nan = float("nan")
+    res = pd.DataFrame([
+        {"market_cd": "1", "market_nm": "가", "coverage": 1.0, "trade_days": 6, "train": True,
+         "years": 4, "wins": 4, "base_name": "B1_last", "serve": True},
+        {"market_cd": "2", "market_nm": "나", "coverage": 0.799, "trade_days": 3, "train": False,
+         "years": nan, "wins": nan, "base_name": nan, "serve": nan},
+        {"market_cd": "3", "market_nm": "다", "coverage": 1.0, "trade_days": 6, "train": True,
+         "years": 4, "wins": 2, "base_name": "B2_ma4", "serve": False},
+    ])
+    r = exclusion_reasons(res, {"min_coverage": 0.8, "min_trade_days": 4, "min_wins": 3})
+    assert set(r) == {"2", "3"}
+    assert "79.9%" in r["2"] and "3일" in r["2"] and r["2"].startswith("나: 학습 제외")
+    assert "4개 연도 중 2개" in r["3"] and "B2_ma4" in r["3"]
