@@ -121,6 +121,31 @@ docker compose -f infra/docker-compose.yml exec airflow-scheduler airflow variab
 - Spark 작업은 따로 Spark 서버 없이 scheduler 컨테이너 안에서 local 모드로 돈다. 손으로 실행:
   `docker compose -f infra/docker-compose.yml exec airflow-scheduler sh -c "cd /opt/farmit/spark && python -m features"`
 
+#### 수집 상태 대시보드 (Kibana, K23)
+
+Airflow DAG `collect_log_to_es`(`batch/dags/collect_log_es.py`)가 10분마다 MySQL `collect_log`의 새 행을 Elasticsearch `collect_log` 인덱스로 옮기고, Kibana 대시보드 **팜잇 수집 상태**가 이를 보여 준다. 이 DAG는 외부 API를 부르지 않아 처음부터 켜져 있다. 문서 id가 `collect_log.id`라서 다시 돌려도 중복되지 않는다.
+
+| 패널 | 내용 |
+|---|---|
+| 소스별 성공·실패 | 출처마다 성공(초록)과 실패·부분 실패(빨강) 실행 수 |
+| 출처별 마지막 수집 | 마지막 수집 시각·상태·저장 건수·API 호출 수 |
+| 일별 API 호출 수 | 출처별 하루 호출 수와 aT 하루 한도 10,000 기준선 |
+| 수집 실패·부분 실패 목록 | `success`가 아닌 실행과 실패 사유(`error_msg`) |
+
+```bash
+# Kibana도 관리 도구라 기본으로는 뜨지 않는다. Airflow(옮기는 DAG)와 같이 켠다
+docker compose -f infra/docker-compose.yml --profile airflow --profile kibana up -d
+# 대시보드 불러오기 (처음 한 번. 이미 있으면 덮어쓴다)
+curl -X POST "localhost:5601/api/saved_objects/_import?overwrite=true" -H "kbn-xsrf: true" --form file=@infra/kibana/collect_status.ndjson
+# 바로 옮기기 (10분을 기다리지 않을 때)
+docker compose -f infra/docker-compose.yml exec airflow-scheduler airflow dags test collect_log_to_es
+```
+
+- 화면: http://localhost:5601/app/dashboards#/view/farmit-collect-status (내 PC에서만 열린다). 시각은 브라우저 시간대(한국)로 보인다.
+- 대시보드를 화면에서 고쳤으면 다시 내보내 `infra/kibana/collect_status.ndjson`을 바꿔 커밋한다:
+  `curl -X POST localhost:5601/api/saved_objects/_export -H "kbn-xsrf: true" -H "Content-Type: application/json" -d '{"objects":[{"type":"dashboard","id":"farmit-collect-status"}],"includeReferencesDeep":true,"excludeExportDetails":true}' -o infra/kibana/collect_status.ndjson`
+- ES 인덱스를 지웠으면(`down -v` 등) 다음 실행이 `collect_log`를 처음부터 다시 옮긴다.
+
 ### 실시간 수집 (수집기 → Kafka → Flink → MySQL·알림)
 
 ```
