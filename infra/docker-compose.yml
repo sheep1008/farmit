@@ -26,6 +26,7 @@ services:
 
   backend:
     build: ../backend
+    image: farmit-backend          # alert-consumer도 이 이미지를 쓴다 (따로 빌드하면 의존성이 어긋남, TS-37)
     env_file: ../.env
     environment:
       ES_URL: http://elasticsearch:9200   # RAG 문서 검색 (rag_docs 인덱스)
@@ -303,7 +304,7 @@ services:
   # 기상특보 알림: weather.warning.event를 읽어 special_event·alert를 만든다 (REQ-ALT-001)
   # backend 이미지·코드를 그대로 쓴다. 테이블은 backend가 시작할 때 migrate로 만든다
   alert-consumer:
-    build: ../backend
+    image: farmit-backend          # build 없이 backend가 만든 이미지를 그대로 쓴다
     env_file: ../.env
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
