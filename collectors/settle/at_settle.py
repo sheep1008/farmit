@@ -18,6 +18,13 @@
 
     ... python -m settle.at_settle --national                       # 어제 하루
     ... python -m settle.at_settle --national --backfill            # 2018-01-02부터 (사과 651건)
+
+전 품목 전국 모드(--all-items, K32): 품목 조건 없이 전국 시장 범위로 하루씩 받는다 (하루 원본 약 3.5만 행 = 4건).
+전국 시장 "지금 팔면" 실수령액(REQ-REC-007)용이다. 수집 시장 5곳·예측 품목도 이 응답에 다 들어 있어서
+매일 수집(collect_daily)은 이 모드 하나로 받는다. item 테이블에 없는 품목은 건너뛴다.
+
+    ... python -m settle.at_settle --all-items                      # 어제 하루
+    ... python -m settle.at_settle --all-items --start 2026-09-21   # 최근 8주 (약 220건)
 """
 import argparse
 import json
@@ -220,16 +227,38 @@ def collect_national(start, end, conn=None):
     return run_(end, conn=conn)
 
 
+def collect_all(start, end, conn=None):
+    """전 품목 전국 모드: 하루씩 품목 조건 없이 전국 시장 범위로 받아 등록된 시장·품목만 저장한다.
+
+    하루 단위인 이유: 호출 수는 행 수에 비례해 달로 묶어도 줄지 않고, 하루씩 끊어야 한도에 걸렸을 때 그날부터 이어 받는다.
+    """
+    @collect_run(SOURCE, daily_limit=DAILY_LIMIT)
+    def run_(run):
+        markets, _ = national_targets(run.conn)
+        _, items = targets(run.conn)   # 전 품목 {at_code: item_id}
+        if not markets or not items:
+            raise RuntimeError("market이나 item이 비어 있다 (초기 데이터를 먼저 넣어야 한다)")
+        run.skipped = Counter()
+        cond = {"cond[whsl_mrkt_cd::GTE]": "100000", "cond[whsl_mrkt_cd::LTE]": "999999"}   # 시장 조건이 없으면 0건
+        day = start
+        while day <= end:
+            fetch_into(run, Agg(None, items, day, day, markets=markets), cond, "전국 전 품목", day, day)
+            day += timedelta(days=1)
+    return run_(end, conn=conn)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description="aT 정산정보 수집 → settle_price")
     p.add_argument("--start", type=date.fromisoformat)
     p.add_argument("--end", type=date.fromisoformat)
     p.add_argument("--backfill", action="store_true", help=f"{BACKFILL_FROM}부터 받는다 (--start가 있으면 그날부터)")
-    p.add_argument("--national", action="store_true", help="예측 품목만 전국 시장으로 받는다 (K31)")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--national", action="store_true", help="예측 품목만 전국 시장으로 받는다 (K31)")
+    mode.add_argument("--all-items", action="store_true", help="전 품목을 전국 시장으로 하루씩 받는다 (K32)")
     a = p.parse_args(argv)
     end = a.end or yesterday()
     start = a.start or (BACKFILL_FROM if a.backfill else end)
-    run = (collect_national if a.national else collect)(start, end)
+    run = (collect_all if a.all_items else collect_national if a.national else collect)(start, end)
     print(f"{start}~{end}: {run.rows}행, API {run.api_calls}건, 건너뜀 {dict(run.skipped)}")
 
 

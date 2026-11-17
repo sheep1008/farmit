@@ -83,6 +83,16 @@ class MainTest(unittest.TestCase):
         c.assert_not_called()
         n.assert_called_once_with(at_settle.BACKFILL_FROM, date(2026, 11, 13))
 
+    def test_all_items_flag_uses_collect_all(self):
+        with mock.patch.object(at_settle, "yesterday", return_value=date(2026, 11, 13)), \
+                mock.patch.object(at_settle, "collect_all") as a:
+            a.return_value.rows = a.return_value.api_calls = 0
+            a.return_value.skipped = {}
+            at_settle.main(["--all-items", "--start", "2026-09-21"])
+        a.assert_called_once_with(date(2026, 9, 21), date(2026, 11, 13))
+        with self.assertRaises(SystemExit):   # --national과 같이 쓸 수 없다
+            at_settle.main(["--all-items", "--national"])
+
 
 class SettleDbTest(DbTestCase):
     """완료 기준: 같은 기간을 두 번 돌려도 settle_price 행이 늘지 않고, 시장 하나가 실패해도 나머지는 저장된다."""
@@ -204,6 +214,32 @@ class SettleDbTest(DbTestCase):
                                   "ORDER BY market_id"),
                          (("250001", 10, 2), ("999999", 10, 2)))   # 등급 + ALL, 두 번 돌려도 그대로
         self.assertEqual(dict(run.skipped), {"시장_없음": 1})
+
+    def test_all_items_national_by_day(self):
+        """전 품목 전국 모드(K32): 품목 조건 없이 하루에 한 번씩 부르고, 등록된 시장·품목만 저장한다. 다시 돌려도 행이 같다."""
+        self.sql("INSERT INTO item (item_id, at_code, name, category, is_storable, is_forecast) VALUES "
+                 "(10, '0601', '사과', '과일류', 1, 1)")
+
+        def respond(p):
+            sent.append(p)
+            d = p["cond[trd_clcln_ymd::GTE]"]
+            return body([{**row(day=d), "whsl_mrkt_cd": "999999"},                 # is_collect가 아닌 시장도 저장
+                         {**row(day=d, item=("06", "01")), "whsl_mrkt_cd": "250001"},
+                         {**row(day=d), "whsl_mrkt_cd": "123456"},                 # market에 없다
+                         {**row(day=d, item=("99", "99")), "whsl_mrkt_cd": "250001"}])   # item에 없다
+        sent = []
+        with self.fake_get(respond):
+            at_settle.collect_all(date(2026, 10, 30), date(2026, 10, 31), conn=self.conn)
+            run = at_settle.collect_all(date(2026, 10, 30), date(2026, 10, 31), conn=self.conn)
+
+        self.assertEqual([(p["cond[trd_clcln_ymd::GTE]"], p["cond[trd_clcln_ymd::LTE]"]) for p in sent],
+                         [("2026-10-30", "2026-10-30"), ("2026-10-31", "2026-10-31")] * 2)   # 하루에 한 번
+        self.assertFalse(any(k.startswith("cond[gds_") or k == "cond[whsl_mrkt_cd::EQ]" for k in sent[0]))
+        self.assertEqual(self.sql("SELECT market_id, item_id, COUNT(*) FROM settle_price GROUP BY market_id, item_id "
+                                  "ORDER BY market_id"),
+                         (("250001", 10, 4), ("999999", 5, 4)))   # 2일 × (등급 + ALL), 두 번 돌려도 그대로
+        self.assertEqual(dict(run.skipped), {"시장_없음": 2, "item_없음": 2})
+        self.assertEqual(run.api_calls, 2)
 
     def test_national_without_forecast_item_fails(self):
         with self.assertRaisesRegex(RuntimeError, "is_forecast"):
