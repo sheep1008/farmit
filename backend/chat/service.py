@@ -256,8 +256,8 @@ def _sales_result_text(data, meta, results=None, notes=()):
         if r['holiday_notice']:
             extra.append(r['holiday_notice'])
         lines.append(
-            f"{r['rank']}순위: {r['market_name']}, {r['target_week']} 주, 예측가 {r['pred_price']}원/kg "
-            f"(80% 범위 {r['lower80']}~{r['upper80']}), 손에 남는 돈 {r['net_won']:,}원 "
+            f"{r['rank']}순위: {r['market_name']}, {r['target_week']} 주, 예측가 {r['pred_price']:,.0f}원/kg "
+            f"(80% 범위 {r['lower80']:,.0f}~{r['upper80']:,.0f}), 손에 남는 돈 {r['net_won']:,}원 "
             f"(범위 {r['net_low_won']:,}~{r['net_high_won']:,}원), 운송비 {r['transport_won']:,}원, "
             f"보관비 {r['storage_won']:,}원" + (f" / 주의: {'; '.join(extra)}" if extra else ''))
     return '\n'.join(lines)

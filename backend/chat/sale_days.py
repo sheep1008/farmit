@@ -65,7 +65,7 @@ def days_text(item, market_name, pattern, picks, asked):
     for i, p in enumerate(picks, 1):
         wd = WEEKDAYS[p['date'].weekday()]
         r = p['row']
-        line = (f"- {i}. {p['date'].isoformat()}({wd}): 그 주({r['target_week']} 주) 예측가 {r['pred_price']}원/kg, "
+        line = (f"- {i}. {p['date'].isoformat()}({wd}): 그 주({r['target_week']} 주) 예측가 {r['pred_price']:,.0f}원/kg, "
                 f"손에 남는 돈 {r['net_won']:,}원(그 주 기준). 최근 {LOOKBACK_WEEKS}주 중 {p['weeks']}주 {wd}요일 거래, "
                 f"{wd}요일 가격은 주 평균보다 평균 {(p['ratio'] - 1) * 100:+.1f}%")
         if r.get('holiday_notice'):
