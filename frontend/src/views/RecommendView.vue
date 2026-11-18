@@ -4,10 +4,12 @@ import { useRoute } from 'vue-router'
 import http from '@/api/http'
 import { fieldErrors } from '@/api/interceptors'
 import BaseButton from '@/components/common/BaseButton.vue'
+import InfoTip from '@/components/common/InfoTip.vue'
 import BaseInput from '@/components/common/BaseInput.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useCurrentItemStore } from '@/stores/currentItem'
 import { chatPrefillRoute } from '@/utils/chat'
 import { todayKst } from '@/utils/dates'
 import {
@@ -36,6 +38,7 @@ import {
 const TOP = 10 // 처음에는 상위 10개만, "전체 보기"로 나머지 (사과는 32개 시장 × 4주 = 128행)
 const route = useRoute()
 const auth = useAuthStore()
+const currentItem = useCurrentItemStore()
 
 const items = ref([])
 const form = ref(null)
@@ -66,12 +69,8 @@ onMounted(async () => {
     formError.value = '품목 목록을 불러오지 못했습니다.'
     return
   }
-  // 처음 품목: ?item_id=(가격·대시보드에서 올 때) → 가격 예측 대상(사과) → 첫 품목
-  const pick =
-    items.value.find((it) => it.item_id === Number(route.query.item_id)) ??
-    items.value.find((it) => it.is_forecast) ??
-    items.value[0]
-  form.value = recommendForm(auth.user, pick?.item_id ?? null)
+  // 처음 품목: 주소(?item_id=) → 다른 화면에서 고른 품목 → 관심 품목 → 예측 대상 (stores/currentItem)
+  form.value = recommendForm(auth.user, currentItem.initial(items.value, route.query.item_id))
 })
 
 const selectedItem = computed(() => items.value.find((it) => it.item_id === form.value?.item_id) ?? null)
@@ -140,6 +139,11 @@ watch(
 )
 // 예측 대상이 아닌 품목을 고르면 "지금 팔면" 탭으로, 예측 대상을 고르면 주간 추천 탭으로
 watch(isForecast, (forecast) => (tab.value = forecast ? 'weekly' : 'now'))
+// 품목을 바꾸면 다른 화면에서도 이어 보이게 기억한다
+watch(
+  () => form.value?.item_id,
+  (id) => currentItem.set(id),
+)
 
 // ── 추천 근거 (REQ-REC-004·006, REQ-SAL-003) ───────────────
 // 추천 API에는 특수 상황·수확 시기가 아직 없어서(api.md 2.5, 결정 0009) 화면이 따로 불러온다.
@@ -244,7 +248,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
           max="100"
           step="0.1"
           :error="first('loss_rate')"
-          hint="팔 수 없게 되는 비율"
+          hint="보관·운송 중 상해서 팔 수 없게 되는 비율"
         />
       </div>
       <p class="hint">비용 칸의 처음 값은 내 정보에 저장한 값입니다. 비워 두면 내 정보 값(없으면 0)으로 계산합니다.</p>
@@ -257,7 +261,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
     <div v-if="hasResult || resultError.now" class="card" :class="{ dim: loading }">
       <!-- 예측 대상이 아닌 품목은 "지금 팔면" 탭만 (REQ-REC-003) -->
       <p v-if="!isForecast" class="notice" role="note">
-        {{ nowResult?.meta.message ?? '이 품목은 아직 가격 예측을 제공하지 않습니다.' }} 최근 정산 가격으로 지금 팔 때의
+        {{ nowResult?.meta.message ?? '이 품목은 아직 가격 예측을 제공하지 않습니다.' }} 최근 확정 가격으로 지금 팔 때의
         실수령액만 비교합니다.
       </p>
       <div v-else class="tabs" role="tablist" aria-label="추천 방식">
@@ -282,7 +286,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
           <div class="result-head">
             <h2>주간 추천 · 예상 수령액 순위</h2>
             <p class="meta">
-              물량 {{ fmt(result.meta.volume_kg, 1) }}kg · 기준 주 {{ result.meta.base_week }} 예측 ·
+              물량 {{ fmt(result.meta.volume_kg, 1) }}kg · {{ result.meta.base_week }} 주 예측 ·
               {{ rows.length }}개 (시장 × 시점)
             </p>
           </div>
@@ -298,9 +302,11 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                   <th scope="col" class="num">순위</th>
                   <th scope="col">시장</th>
                   <th scope="col">시점</th>
-                  <th scope="col" class="num">예측가 (원/kg)<span class="th-sub">80% 구간</span></th>
+                  <th scope="col" class="num">
+                    예측가 (원/kg)<span class="th-sub">예상 범위<InfoTip term="range80" /></span>
+                  </th>
                   <th scope="col" class="num">지난주 시세<span class="th-sub">예측 대비</span></th>
-                  <th scope="col" class="num">예상 수령액<span class="th-sub">80% 구간</span></th>
+                  <th scope="col" class="num">예상 수령액<span class="th-sub">예상 범위</span></th>
                   <th scope="col" class="num">운송비</th>
                   <th scope="col" class="num">보관비</th>
                 </tr>
@@ -363,7 +369,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
             <p class="meta">
               물량 {{ fmt(nowResult.meta.volume_kg, 1) }}kg ·
               <template v-if="nowResult.meta.base_date">
-                {{ nowResult.meta.base_date }}까지 최근 {{ nowResult.meta.price_window_days }}일 정산 가격 ·
+                {{ nowResult.meta.base_date }}까지 최근 {{ nowResult.meta.price_window_days }}일 확정 가격 ·
               </template>
               {{ nowRows.length }}개 시장
             </p>
@@ -372,7 +378,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
           <p v-for="w in nowResult.meta.warnings" :key="w" class="notice">{{ w }}</p>
           <EmptyState
             v-if="!nowRows.length"
-            title="최근 정산 가격이 없습니다"
+            title="최근 확정 가격이 없습니다"
             description="이 품목은 최근 7일 동안 수집 대상 시장에서 거래가 없었습니다."
           />
           <div v-else class="table-wrap">
@@ -383,7 +389,8 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                   <th scope="col">시장</th>
                   <th scope="col" class="num">최근 7일 가격 (원/kg)<span class="th-sub">14일 최저~최고</span></th>
                   <th scope="col" class="num">최근 14일 거래<span class="th-sub">거래일 · 물량</span></th>
-                  <th scope="col" class="num">실수령액<span class="th-sub">14일 최저~최고 가격 기준</span></th>
+                  <th scope="col" class="num">
+                    실수령액<InfoTip term="net" /><span class="th-sub">14일 최저~최고 가격 기준</span></th>
                   <th scope="col" class="num">운송비</th>
                 </tr>
               </thead>
@@ -432,12 +439,12 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
         </template>
       </template>
 
-        <!-- 추천 근거 중 표 밖의 것: 특수 상황 · 내 평균 수취율 · 수확 시기 -->
+        <!-- 추천 근거 중 표 밖의 것: 날씨·사건 알림 · 시장 평균 대비 받은 가격(수취율) · 수확 시기 -->
         <div v-if="evidence && hasResult" class="evidence">
           <section>
-            <h3>최근 특수 상황 <span class="sub">2주, 내 지역·관심 품목</span></h3>
+            <h3>최근 날씨·사건 알림<InfoTip term="event" /> <span class="sub">2주, 내 지역·관심 품목</span></h3>
             <p v-if="evidence.alerts === null" class="sub">알림을 불러오지 못했습니다.</p>
-            <p v-else-if="!evidence.alerts.length" class="sub">최근 2주 동안 받은 특수 상황 알림이 없습니다.</p>
+            <p v-else-if="!evidence.alerts.length" class="sub">최근 2주 동안 받은 날씨·사건 알림이 없습니다.</p>
             <ul v-else>
               <li v-for="a in evidence.alerts" :key="a.id">
                 <RouterLink :to="{ name: 'alert-detail', params: { id: a.id } }">{{ a.title }}</RouterLink>
@@ -446,11 +453,11 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
             </ul>
           </section>
           <section>
-            <h3>내 평균 수취율</h3>
+            <h3>시장 평균 대비 내가 받은 가격<InfoTip term="payRatio" /></h3>
             <p v-if="!evidence.salesOk" class="sub">판매 기록을 불러오지 못했습니다.</p>
             <p v-else-if="evidence.payRatio">
               <strong>{{ evidence.payRatio.pct }}%</strong>
-              <span class="sub">같은 날 시장 평균 대비, 기록 {{ evidence.payRatio.count }}건</span>
+              <span class="sub">판매 기록 {{ evidence.payRatio.count }}건 평균</span>
             </p>
             <p v-else class="sub">
               이 품목 판매 기록이 {{ PAY_RATIO_MIN_RECORDS }}건 이상 쌓이면 보여 줍니다.

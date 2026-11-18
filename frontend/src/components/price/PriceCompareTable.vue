@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import http from '@/api/http'
+import InfoTip from '@/components/common/InfoTip.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { addDays, todayKst } from '@/utils/dates'
 
@@ -54,7 +55,7 @@ const fmt = (v) => Math.round(v).toLocaleString('ko-KR')
 <template>
   <div class="compare">
     <div class="head">
-      <h2>시장 비교 <small>(원/kg, 정산 확정)</small></h2>
+      <h2>시장 비교 <small>(원/kg, 확정 가격)</small><InfoTip term="confirmed" /></h2>
       <label class="date">
         <span>날짜</span>
         <input v-model="date" type="date" :max="maxDate" />
@@ -63,7 +64,7 @@ const fmt = (v) => Math.round(v).toLocaleString('ko-KR')
     </div>
     <p class="sub">
       <template v-if="metaDate">{{ metaDate }} 기준</template>
-      <template v-else-if="!loading && !errorMessage">이 품목·등급의 정산 기록이 없습니다</template>
+      <template v-else-if="!loading && !errorMessage">이 품목·등급의 확정 가격 기록이 없습니다</template>
     </p>
 
     <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>

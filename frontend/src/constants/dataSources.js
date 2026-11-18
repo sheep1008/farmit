@@ -42,7 +42,7 @@ export const DATA_SOURCES = [
       {
         name: '기상특보',
         provider: '기상청 · 공공데이터포털',
-        use: '특수 상황 알림',
+        use: '날씨·사건 알림',
         terms: '이용 제한 없음',
         url: 'https://www.data.go.kr',
       },

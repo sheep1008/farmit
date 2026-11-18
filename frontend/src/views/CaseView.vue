@@ -5,10 +5,12 @@ import http from '@/api/http'
 import { fetchCases } from '@/api/alerts'
 import CaseChangeChart from '@/components/cases/CaseChangeChart.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
+import InfoTip from '@/components/common/InfoTip.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useAuthStore } from '@/stores/auth'
-import { CASE_TYPES, WEEKS, caseSeries, formatPct, nearHoliday } from '@/utils/alerts'
+import { useCurrentItemStore } from '@/stores/currentItem'
+import { CASE_TYPES, WEEKS, caseSeries, caseTypeLabel, formatPct, nearHoliday } from '@/utils/alerts'
 
 // SCR-010 과거 사례 리포트 (REQ-HIS-001·002, docs/api.md 2.4 GET /api/cases). 로그인 없이 볼 수 있다.
 // 품목 → 사건 종류(건수는 meta.summary) → 위: 차트(종류 평균 또는 고른 사례) · 아래: 사례 목록.
@@ -18,10 +20,14 @@ import { CASE_TYPES, WEEKS, caseSeries, formatPct, nearHoliday } from '@/utils/a
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const currentItem = useCurrentItemStore()
 
 const items = ref([])
 const itemsError = ref('')
-const itemId = ref(Number(route.query.item_id) || auth.user?.interest_items?.[0]?.item_id || null)
+// 주소 → 다른 화면에서 고른 품목 → 첫 관심 품목 (목록을 기다리지 않고 바로 정한다)
+const itemId = ref(
+  Number(route.query.item_id) || currentItem.itemId || auth.user?.interest_items?.[0]?.item_id || null,
+)
 const type = ref(CASE_TYPES.some((t) => t.value === route.query.event_type) ? route.query.event_type : '')
 
 const cases = ref([])
@@ -83,6 +89,7 @@ watch(
 // 주소와 맞춘다 (새로고침·공유해도 같은 화면). replace: 종류를 바꿀 때마다 뒤로 가기 기록이 쌓이지 않게
 watch([itemId, type], ([i, t]) => {
   router.replace({ query: { ...(i ? { item_id: i } : {}), ...(t ? { event_type: t } : {}) } })
+  currentItem.set(i) // 다른 화면에서도 이어 보이게
   selectedKey.value = null
 })
 
@@ -115,8 +122,8 @@ const won = (v) => (v == null ? '–' : `${Math.round(v).toLocaleString('ko-KR')
 
 <template>
   <section class="cases">
-    <h1>과거 사례</h1>
-    <p class="lead">비슷한 사건이 있었던 뒤 몇 주 동안 도매 가격이 어떻게 움직였는지 평년과 나란히 봅니다.</p>
+    <h1>날씨·사건 뒤 가격</h1>
+    <p class="lead">비슷한 사건이 있었던 뒤 몇 주 동안 도매 가격이 어떻게 움직였는지 평년과 나란히 봅니다.<InfoTip term="normal" /></p>
 
     <div class="field">
       <label for="case-item">품목</label>
@@ -141,7 +148,7 @@ const won = (v) => (v == null ? '–' : `${Math.round(v).toLocaleString('ko-KR')
     <EmptyState
       v-else-if="meta && !meta.summary.length"
       :title="`${itemName || '이 품목'}에는 아직 과거 사례가 없습니다`"
-      description="주산지·수입량·병해충 예찰 자료가 있는 품목만 사례를 계산합니다."
+      description="주산지·수입량·병해충 조사(예찰) 자료가 있는 품목만 사례를 계산합니다."
     />
 
     <template v-else-if="meta">
@@ -161,7 +168,7 @@ const won = (v) => (v == null ? '–' : `${Math.round(v).toLocaleString('ko-KR')
 
       <div ref="chartBox" class="card">
         <div class="chart-head">
-          <h2 v-if="selected">{{ period(selected) }} {{ selected.event_name }} <span class="muted">(시장 평균)</span></h2>
+          <h2 v-if="selected">{{ period(selected) }} {{ caseTypeLabel(selected.event_type, selected.event_name) }} <span class="muted">(시장 평균)</span></h2>
           <h2 v-else>{{ itemName }} {{ typeLabel }} {{ countOf(type) }}건 평균</h2>
           <button v-if="selected" type="button" class="link" @click="selectedKey = null">전체 평균 보기</button>
         </div>

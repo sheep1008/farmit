@@ -2,15 +2,19 @@
 import { RouterView } from 'vue-router'
 import AppHeader from './components/layout/AppHeader.vue'
 import AppFooter from './components/layout/AppFooter.vue'
+import AppTabBar from './components/layout/AppTabBar.vue'
+import SectionTabs from './components/layout/SectionTabs.vue'
 import ToastList from './components/ToastList.vue'
 </script>
 
 <template>
   <AppHeader />
   <main class="app-main">
+    <SectionTabs />
     <RouterView />
   </main>
   <AppFooter />
+  <AppTabBar />
   <ToastList />
 </template>
 

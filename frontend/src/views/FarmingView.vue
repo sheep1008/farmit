@@ -7,6 +7,7 @@ import BaseButton from '@/components/common/BaseButton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import FarmingGantt from '@/components/farming/FarmingGantt.vue'
+import { useCurrentItemStore } from '@/stores/currentItem'
 import { todayKst } from '@/utils/dates'
 
 // SCR-012 재배 정보 (REQ-RAG-002·003·004·006, docs/api.md 2.8). 로그인 없이 본다.
@@ -31,6 +32,7 @@ const thisMonth = Number(todayKst().slice(5, 7))
 
 const route = useRoute()
 const router = useRouter()
+const currentItem = useCurrentItemStore()
 const items = ref([])
 const itemId = ref(null)
 const tab = ref(TABS.some((t) => t.key === route.query.tab) ? route.query.tab : 'monthly')
@@ -56,8 +58,8 @@ const available = computed(() => data.value?.available ?? data.value?.schedule?.
 async function loadItems() {
   const r = await http.get('/items')
   items.value = r.data.data
-  const fromQuery = items.value.find((it) => it.item_id === Number(route.query.item_id))
-  itemId.value = (fromQuery ?? items.value.find((it) => it.is_forecast) ?? items.value[0])?.item_id ?? null
+  // 주소(?item_id=) → 다른 화면에서 고른 품목 → 관심 품목 → 예측 대상 (stores/currentItem)
+  itemId.value = currentItem.initial(items.value, route.query.item_id)
 }
 
 let loadSeq = 0 // 품목·탭을 빠르게 바꿔도 마지막 요청 결과만 보여 준다
@@ -85,6 +87,7 @@ async function load() {
 watch([itemId, tab, month], () => {
   // 주소를 바꿔도 화면을 다시 만들지 않도록 replace (뒤로 가기 기록도 쌓지 않는다)
   router.replace({ query: { ...route.query, item_id: itemId.value, tab: tab.value } })
+  currentItem.set(itemId.value) // 다른 화면에서도 이어 보이게
   load()
 })
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { alertDetailRows, caseSeries, caseTypeForAlert, formatPct, nearHoliday, regionText } from '@/utils/alerts'
+import { alertDetailRows, caseSeries, caseTypeForAlert, caseTypeLabel, formatPct, nearHoliday, regionText } from '@/utils/alerts'
 
 vi.mock('@/api/alerts', () => ({
   fetchAlerts: vi.fn(async () => ({ data: [], meta: { page: 1, size: 1, total: 3 } })),
@@ -19,6 +19,12 @@ describe('caseTypeForAlert', () => {
     expect(caseTypeForAlert({ event_type: 'IMPORT_SURGE', detail: {} })).toBe('IMPORT_SURGE')
     expect(caseTypeForAlert({ event_type: 'PEST_INCREASE', detail: {} })).toBe('PEST_INCREASE')
     expect(caseTypeForAlert({ event_type: 'GOV_NOTICE', detail: {} })).toBeNull()
+  })
+
+  it('사건 이름은 서버 이름 대신 화면 이름(예찰 증가 → 병해충 증가), 모르는 종류는 서버 이름', () => {
+    expect(caseTypeLabel('PEST_INCREASE', '예찰 증가')).toBe('병해충 증가')
+    expect(caseTypeLabel('COLD_WAVE', '한파')).toBe('한파')
+    expect(caseTypeLabel('TYPHOON', '태풍')).toBe('태풍')
   })
 })
 
