@@ -96,5 +96,8 @@ FROM (
   SELECT COALESCE(TRY_CAST(settle_ymd AS DATE), CAST(auction_at + INTERVAL '9' HOUR AS DATE)) AS trade_date,
          market_id, item_id, price_per_kg, volume_kg, auction_at
   FROM auction_dedup
+  -- 물량이 0이거나 음수인 건(취소·정정으로 보이는 건, 2026-11-18 서울강서·인천남촌 등에서 나옴)은 뺀다.
+  -- 그런 건이 먼저 오면 물량 합이 0이라 avg_price가 NULL이 되고, NOT NULL 컬럼이라 작업 전체가 멈춘다
+  WHERE volume_kg > 0
 )
 GROUP BY trade_date, market_id, item_id;
