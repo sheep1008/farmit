@@ -56,7 +56,8 @@ const fmt = (v) => (v == null ? '-' : Math.round(v).toLocaleString('ko-KR'))
     <LoadingSpinner v-if="loading && !rows.length" label="당일 경매가를 불러오는 중…" />
     <p v-else-if="notReady" class="notice">{{ notReady }} 경매는 보통 새벽부터 오전 11시쯤까지 열립니다.</p>
     <p v-else-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
-    <table v-else-if="rows.length">
+    <div v-else-if="rows.length" class="scroll">
+    <table>
       <thead>
         <tr>
           <th scope="col">시장</th>
@@ -76,6 +77,7 @@ const fmt = (v) => (v == null ? '-' : Math.round(v).toLocaleString('ko-KR'))
         </tr>
       </tbody>
     </table>
+    </div>
   </div>
 </template>
 
@@ -112,9 +114,20 @@ h2 small {
 .error {
   color: var(--color-danger);
 }
+/* 시장이 많아도 옆 시장 비교 칸과 높이가 비슷하게: 표만 스크롤, 머리줄은 고정 */
+.scroll {
+  max-height: 480px;
+  overflow-y: auto;
+}
 table {
   width: 100%;
   border-collapse: collapse;
+}
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-background);
 }
 th,
 td {
@@ -139,8 +152,15 @@ thead th {
   color: var(--color-primary);
   font-weight: 600;
 }
-/* 좁은 화면에서는 최저~최고 칸을 빼 표가 넘치지 않게 한다 */
-@media (max-width: 479px) {
+tbody th,
+.num {
+  white-space: nowrap;
+}
+/* 칸이 좁으면(2분할·휴대폰) 최저~최고 칸을 빼 표가 넘치지 않게 한다. 화면 폭이 아니라 이 카드 폭 기준 */
+.realtime {
+  container-type: inline-size;
+}
+@container (max-width: 559px) {
   .range {
     display: none;
   }

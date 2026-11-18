@@ -239,12 +239,14 @@ const lastUpdated = computed(() => formatKstDateTime(meta.value?.last_updated))
       <PriceTrendChart v-else :periods="periods" :rows="rows" :class="{ dim: loading }" />
     </div>
 
-    <div class="card">
-      <PriceCompareTable :item-id="filters.itemId" :grade="filters.grade" :selected-market-id="filters.marketId" />
-    </div>
-
-    <div class="card">
-      <PriceRealtimeCard :item-id="filters.itemId" />
+    <!-- 시장 비교(확정)와 당일 경매가(확정 전)를 나란히 놓아 같이 비교한다. 좁은 화면에서는 위아래로 -->
+    <div class="split">
+      <div class="card">
+        <PriceCompareTable :item-id="filters.itemId" :grade="filters.grade" :selected-market-id="filters.marketId" />
+      </div>
+      <div class="card">
+        <PriceRealtimeCard :item-id="filters.itemId" />
+      </div>
     </div>
   </section>
 </template>
@@ -327,6 +329,20 @@ select {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-background);
+}
+.split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.split .card {
+  margin-bottom: 0;
+}
+@media (max-width: 959px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
 }
 .card-head {
   margin-bottom: 12px;
