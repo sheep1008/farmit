@@ -85,6 +85,32 @@ export function caseSeries(row) {
   }
 }
 
+// "지금 시기" = 오늘과 달·일이 앞뒤 4주 안 (해는 보지 않는다). 날씨·출하는 해마다 비슷한 때에 오므로
+// 오늘과 가까운 계절에 난 사례가 지금 상황에 더 가깝다
+export const SEASON_DAYS = 28
+
+// 'YYYY-MM-DD' → 한 해의 몇째 날 (윤년을 무시하려고 2001년(평년)에 놓고 센다)
+function dayOfYear(date) {
+  const [, m, d] = date.split('-').map(Number)
+  return (Date.UTC(2001, m - 1, d) - Date.UTC(2001, 0, 1)) / 86400000
+}
+
+/** 두 날짜의 달·일이 앞뒤 days일 안인지. 연말·연초를 넘어가도 이어서 센다 (12/20과 1/5는 16일 차이) */
+export function isSameSeason(date, today, days = SEASON_DAYS) {
+  const diff = Math.abs(dayOfYear(date) - dayOfYear(today))
+  return Math.min(diff, 365 - diff) <= days
+}
+
+/** 사례 여러 건의 평균(avg)을 1~4주마다 다시 평균 낸다 (값이 있는 사례만). 화면에서 고른 사례만의 요약용 */
+export function averageCases(list) {
+  const row = {}
+  for (const key of WEEKS.flatMap((w) => [`change_w${w}`, `normal_w${w}`])) {
+    const vals = list.map((c) => c.avg?.[key]).filter((v) => v != null)
+    row[key] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+  }
+  return row
+}
+
 /**
  * 기준 주가 명절(설·추석) 전후인지. 평년 값은 "다른 해 같은 주차" 평균이라 음력 명절이 해마다 1~3주 어긋난다.
  * 그래서 명절 전후 사례는 평년과 나란히 볼 때 조심하라고 표시한다. 설은 1/10~2/25, 추석은 9/1~10/12 사이로 잡았다

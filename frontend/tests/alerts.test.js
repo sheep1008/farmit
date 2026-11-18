@@ -1,6 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { alertDetailRows, caseSeries, caseTypeForAlert, caseTypeLabel, formatPct, nearHoliday, regionText } from '@/utils/alerts'
+import {
+  alertDetailRows,
+  averageCases,
+  caseSeries,
+  caseTypeForAlert,
+  caseTypeLabel,
+  formatPct,
+  isSameSeason,
+  nearHoliday,
+  regionText,
+} from '@/utils/alerts'
 
 vi.mock('@/api/alerts', () => ({
   fetchAlerts: vi.fn(async () => ({ data: [], meta: { page: 1, size: 1, total: 3 } })),
@@ -95,6 +105,32 @@ describe('nearHoliday', () => {
     expect(nearHoliday('2025-09-29')).toBe(true)
     expect(nearHoliday('2025-07-21')).toBe(false)
     expect(nearHoliday('2026-03-02')).toBe(false)
+  })
+})
+
+describe('isSameSeason', () => {
+  it('해는 보지 않고 달·일이 앞뒤 28일 안인지 본다', () => {
+    expect(isSameSeason('2023-11-01', '2026-11-18')).toBe(true) // 17일 전
+    expect(isSameSeason('2024-12-16', '2026-11-18')).toBe(true) // 28일 뒤 (경계)
+    expect(isSameSeason('2024-12-17', '2026-11-18')).toBe(false) // 29일 뒤
+    expect(isSameSeason('2025-07-10', '2026-11-18')).toBe(false)
+  })
+  it('연말·연초를 넘어 이어서 센다', () => {
+    expect(isSameSeason('2025-01-05', '2026-12-20')).toBe(true) // 16일 차이
+    expect(isSameSeason('2025-12-28', '2026-01-10')).toBe(true)
+  })
+})
+
+describe('averageCases', () => {
+  it('주마다 값이 있는 사례만 평균 낸다', () => {
+    const row = averageCases([
+      { avg: { change_w1: 10, change_w2: null, normal_w1: 2 } },
+      { avg: { change_w1: 20, change_w2: 4, normal_w1: null } },
+    ])
+    expect(row.change_w1).toBe(15)
+    expect(row.change_w2).toBe(4)
+    expect(row.normal_w1).toBe(2)
+    expect(row.change_w4).toBeNull()
   })
 })
 

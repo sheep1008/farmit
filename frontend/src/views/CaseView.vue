@@ -10,13 +10,16 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useCurrentItemStore } from '@/stores/currentItem'
-import { CASE_TYPES, WEEKS, caseSeries, caseTypeLabel, formatPct, nearHoliday } from '@/utils/alerts'
+import { CASE_TYPES, SEASON_DAYS, WEEKS, averageCases, caseSeries, caseTypeLabel, formatPct, isSameSeason, nearHoliday } from '@/utils/alerts'
+import { addDays, todayKst } from '@/utils/dates'
 
 // SCR-010 과거 사례 리포트 (REQ-HIS-001·002, docs/api.md 2.4 GET /api/cases). 로그인 없이 볼 수 있다.
 // 품목 → 사건 종류(건수는 meta.summary) → 위: 차트(종류 평균 또는 고른 사례) · 아래: 사례 목록.
 // - 품목마다 한 번만 부른다(event_type 없이). 사례가 품목·종류당 수십 건이라 종류는 화면에서 거른다 → 종류를 바꿔도 요청이 없다.
 // - 주소의 ?item_id=&event_type= 와 맞춘다. 알림 상세의 "과거 사례 자세히 보기"가 이 주소로 온다.
 // - meta.notice("참고 정보이지 원인이 아님")는 차트 바로 위에 항상 보인다 (REQ-HIS-002).
+// - 시기: 처음엔 "지금 시기"(오늘과 달·일이 앞뒤 4주 안에 시작된 사례)만 보여 준다. 날씨·출하는 해마다 비슷한 때 오므로
+//   지금과 가까운 계절의 사례가 더 참고가 된다. 이때 평균은 서버 summary(전체 시기) 대신 화면에서 다시 낸다.
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -37,6 +40,15 @@ const errorMessage = ref('')
 const canRetry = ref(true)
 const selectedKey = ref(null) // 고른 사례 (null = 종류 평균)
 const chartBox = ref(null)
+
+const SCOPES = [
+  { value: 'season', label: '지금 시기' },
+  { value: 'all', label: '전체 시기' },
+]
+const scope = ref('season')
+const today = todayKst()
+const md = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
+const seasonText = `${md(addDays(today, -SEASON_DAYS))} ~ ${md(addDays(today, SEASON_DAYS))}` // 예: 10/21 ~ 12/16
 
 const interestIds = computed(() => new Set((auth.user?.interest_items ?? []).map((i) => i.item_id)))
 const interestOptions = computed(() => items.value.filter((i) => interestIds.value.has(i.item_id)))
@@ -63,6 +75,9 @@ async function load() {
     if (mySeq !== seq) return
     cases.value = res.data
     meta.value = res.meta
+    // 시기: 지금 시기 사례가 하나도 없거나, 고른 종류(알림에서 온 종류 등)가 지금 시기에만 없으면 전체 시기로
+    if (seasonEmpty.value || (countIn(type.value, 'all') && !countIn(type.value, 'season'))) scope.value = 'all'
+    else scope.value = 'season'
     // 고른 종류에 사례가 없으면 사례가 있는 첫 종류로 (알림에서 왔는데 그 종류가 없을 때도)
     if (!countOf(type.value)) type.value = CASE_TYPES.find((t) => countOf(t.value))?.value ?? ''
   } catch (e) {
@@ -94,15 +109,28 @@ watch([itemId, type], ([i, t]) => {
 })
 
 const summaryOf = (t) => meta.value?.summary?.find((s) => s.event_type === t) ?? null
-const countOf = (t) => summaryOf(t)?.events ?? 0
+// 시기 s에서 종류 t의 사례 수
+const inScope = (c, s) => s === 'all' || isSameSeason(c.event_start, today)
+const countIn = (t, s) => cases.value.filter((c) => c.event_type === t && inScope(c, s)).length
+const countOf = (t) => countIn(t, scope.value)
+const seasonEmpty = computed(() => !cases.value.some((c) => inScope(c, 'season')))
+
+// 시기를 바꿨는데 고른 종류에 사례가 없으면 사례가 있는 첫 종류로
+watch(scope, () => {
+  if (!countOf(type.value)) type.value = CASE_TYPES.find((t) => countOf(t.value))?.value ?? ''
+  selectedKey.value = null
+})
 
 const keyOf = (c) => `${c.event_type}:${c.event_start}`
-const list = computed(() => cases.value.filter((c) => c.event_type === type.value))
+const list = computed(() => cases.value.filter((c) => c.event_type === type.value && inScope(c, scope.value)))
 const selected = computed(() => list.value.find((c) => keyOf(c) === selectedKey.value) ?? null)
 const typeLabel = computed(() => CASE_TYPES.find((t) => t.value === type.value)?.label ?? '')
 
-// 차트: 사례를 고르면 그 사례의 시장 평균, 아니면 종류 전체 평균 (meta.summary)
-const chartRow = computed(() => selected.value?.avg ?? summaryOf(type.value))
+// 차트: 사례를 고르면 그 사례의 시장 평균, 아니면 종류 평균 (전체 시기는 서버 meta.summary, 지금 시기는 화면에서 다시 낸 평균)
+const chartRow = computed(
+  () => selected.value?.avg ?? (scope.value === 'all' ? summaryOf(type.value) : averageCases(list.value)),
+)
+const scopeLabel = computed(() => (scope.value === 'season' ? '지금 시기' : '전체 시기'))
 const series = computed(() => caseSeries(chartRow.value))
 
 async function select(c) {
@@ -152,6 +180,24 @@ const won = (v) => (v == null ? '–' : `${Math.round(v).toLocaleString('ko-KR')
     />
 
     <template v-else-if="meta">
+      <div class="scope">
+        <div class="segmented" role="radiogroup" aria-label="사례 시기">
+          <label
+            v-for="s in SCOPES"
+            :key="s.value"
+            :class="{ active: scope === s.value, disabled: s.value === 'season' && seasonEmpty }"
+          >
+            <input v-model="scope" type="radio" name="case-scope" :value="s.value" :disabled="s.value === 'season' && seasonEmpty" />
+            {{ s.label }}
+          </label>
+        </div>
+        <p class="muted small">
+          <template v-if="seasonEmpty">예년 이맘때({{ seasonText }})에 시작된 사례가 없어 전체 시기를 보여 드립니다.</template>
+          <template v-else-if="scope === 'season'">오늘({{ md(today) }})과 가까운 예년 {{ seasonText }}에 시작된 사례만 봅니다.</template>
+          <template v-else>계절과 관계없이 모든 사례를 봅니다.</template>
+        </p>
+      </div>
+
       <div class="chips" role="radiogroup" aria-label="사건 종류">
         <label
           v-for="t in CASE_TYPES"
@@ -169,7 +215,7 @@ const won = (v) => (v == null ? '–' : `${Math.round(v).toLocaleString('ko-KR')
       <div ref="chartBox" class="card">
         <div class="chart-head">
           <h2 v-if="selected">{{ period(selected) }} {{ caseTypeLabel(selected.event_type, selected.event_name) }} <span class="muted">(시장 평균)</span></h2>
-          <h2 v-else>{{ itemName }} {{ typeLabel }} {{ countOf(type) }}건 평균</h2>
+          <h2 v-else>{{ itemName }} {{ typeLabel }} · {{ scopeLabel }} {{ list.length }}건 평균</h2>
           <button v-if="selected" type="button" class="link" @click="selectedKey = null">전체 평균 보기</button>
         </div>
         <p class="muted small">사건이 시작된 주의 가격을 기준(0%)으로 1~4주 뒤 변화율입니다.</p>
@@ -202,7 +248,7 @@ const won = (v) => (v == null ? '–' : `${Math.round(v).toLocaleString('ko-KR')
         </div>
       </div>
 
-      <h2 class="list-title">{{ typeLabel }} 사례 {{ list.length }}건 <span class="muted small">최신순 · 눌러서 차트로 보기</span></h2>
+      <h2 class="list-title">{{ typeLabel }} 사례 · {{ scopeLabel }} {{ list.length }}건 <span class="muted small">최신순 · 눌러서 차트로 보기</span></h2>
       <ul class="list">
         <li v-for="c in list" :key="keyOf(c)">
           <button
@@ -271,6 +317,43 @@ select:focus-visible {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: var(--focus-ring);
+}
+.scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 12px;
+}
+.segmented {
+  display: flex;
+  border: 1px solid var(--color-border-hover);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.segmented label {
+  padding: 7px 12px;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.segmented label + label {
+  border-left: 1px solid var(--color-border);
+}
+.segmented label.active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.segmented label.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.segmented label:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 .chips {
   display: flex;
