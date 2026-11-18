@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyChatEvent, newReply, splitCitations, toViewMessages } from '@/utils/chat'
+import { applyChatEvent, newReply, splitAnswer, splitCitations, toViewMessages } from '@/utils/chat'
 
 describe('toViewMessages', () => {
   it('저장된 대화를 화면 모양으로 바꾼다 (답변은 끝난 상태, 진행 문구 없음)', () => {
@@ -54,5 +54,20 @@ describe('splitCitations', () => {
 
   it('표시가 없으면 글 하나', () => {
     expect(splitCitations('안내 문구')).toEqual([{ type: 'text', value: '안내 문구' }])
+  })
+})
+
+describe('splitAnswer', () => {
+  it('목록 바로 위의 짧은 줄만 소제목으로 나눈다', () => {
+    const text = '12월 12일(토)에 파세요.[근거 1]\n\n추천 날짜\n- 12월 12일(토): 378,090원[근거 1]\n\n알아 두세요\n- 예측값입니다.'
+    const headings = splitAnswer(text).filter((p) => p.type === 'heading').map((p) => p.value)
+    expect(headings).toEqual(['추천 날짜', '알아 두세요'])
+  })
+
+  it('문장·목록 줄은 소제목이 아니고 근거 배지와 줄바꿈은 그대로 둔다', () => {
+    const parts = splitAnswer('정읍이 좋습니다.\n- 첫째[근거 2]')
+    expect(parts.some((p) => p.type === 'heading')).toBe(false)
+    expect(parts).toContainEqual({ type: 'cite', n: 2 })
+    expect(parts.map((p) => (p.type === 'cite' ? `[근거 ${p.n}]` : p.value)).join('')).toBe('정읍이 좋습니다.\n- 첫째[근거 2]')
   })
 })

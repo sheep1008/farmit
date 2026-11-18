@@ -4,7 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { sendChatMessage } from '@/api/chat'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useAuthStore } from '@/stores/auth'
-import { CHAT_MAX_LENGTH, applyChatEvent, failReply, newReply, splitCitations } from '@/utils/chat'
+import { CHAT_MAX_LENGTH, applyChatEvent, failReply, newReply, splitAnswer } from '@/utils/chat'
 
 // 화면 옆 채팅 패널 (SCR-005 판매 상담, REQ-CHT-001~006, docs/api.md 2.7).
 // 채팅 화면(SCR-011)과 같은 POST /api/chat/messages SSE를 쓴다. 품목은 지금 보는 품목으로 고정하고,
@@ -140,8 +140,9 @@ function onKeydown(e) {
           <span v-if="m.intentLabel" class="intent">{{ m.intentLabel }}</span>
           <LoadingSpinner v-if="m.status" size="sm" :label="m.status" />
           <p v-if="m.content" class="answer">
-            <template v-for="(p, j) in splitCitations(m.content)" :key="j">
+            <template v-for="(p, j) in splitAnswer(m.content)" :key="j">
               <sup v-if="p.type === 'cite'" class="cite">{{ p.n }}</sup>
+              <strong v-else-if="p.type === 'heading'" class="answer-heading">{{ p.value }}</strong>
               <template v-else>{{ p.value }}</template>
             </template>
           </p>
@@ -262,6 +263,10 @@ h2 {
   border-radius: 999px;
   background: var(--color-background-mute);
   font-weight: 600;
+  color: var(--color-heading);
+}
+.answer-heading {
+  font-weight: 700;
   color: var(--color-heading);
 }
 .cite {
