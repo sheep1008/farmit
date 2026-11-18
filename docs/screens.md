@@ -86,7 +86,7 @@ flowchart LR
 
 | 화면 ID | 화면명 | 접근 | 보여 줄 정보 | 사용자 동작 | 필요한 API | 관련 REQ |
 |---|---|---|---|---|---|---|
-| SCR-004 | 가격 통계 | 전체 | 일·주·월 가격 추이 차트(평균·최저·최고, 물량), 전년 같은 시기 비교선, 4개 시장 비교 표, 당일 경매가(확정 전 표시), 도·소매 참고가(선택) | 품목·시장·기간·단위·등급 선택, "이 품목 판매 추천" 이동 | `GET /api/items`, `GET /api/markets`, `GET /api/prices/daily`, `GET /api/prices/compare`, `GET /api/prices/realtime`, `GET /api/prices/retail` | REQ-PRC-001~006 |
+| SCR-004 | 가격 통계 | 전체 | 일·주·월 가격 추이 차트(평균·최저·최고, 물량), 전년 같은 시기 비교선, 4개 시장 비교 표, 당일 경매가(확정 전 표시), 도·소매 참고가(선택) | 품목·시장(전국 시장, 시도별로 묶음. 처음엔 수집 대상 시장)·기간·단위·등급 선택, "이 품목 판매 추천" 이동 | `GET /api/items`, `GET /api/markets?collect=false`, `GET /api/prices/daily`, `GET /api/prices/compare`, `GET /api/prices/realtime`, `GET /api/prices/retail` | REQ-PRC-001~006 |
 | SCR-005 | 판매 추천 | 회원 | 입력 폼(품목·물량·희망 시기·운송비·보관비·감모율), 결과 표(시장 × 이번 주~3주 후, 예상 수령액 순위), 예측값과 80% 구간, 근거(최근 시세·관련 특수 상황), 휴장 표시, 명절 주의 문구, 내 평균 수취율, 수확 시기. "지금 팔면" 탭(전국 시장 최근 7일 가격 기준 실수령액 순위, 거래 적음·물량 과다·운송비 미반영 경고). 예측 대상이 아닌 품목(`is_forecast` false)은 이 탭만 + "이 품목은 아직 가격 예측을 제공하지 않습니다" 안내 | 계산하기, 비용 값 바꿔 다시 계산, "채팅으로 물어보기" | `POST /api/recommendations`, `POST /api/recommendations/now`, `GET /api/forecasts` | REQ-REC-001~007, REQ-PRD-002, 003, REQ-SAL-003 |
 | SCR-006 | 판매 기록 목록 | 회원 | 기록 목록(날짜·시장·품목·등급·물량·받은 금액·평균 대비 %), 기간 합계 | 기간 필터, 기록 추가·수정·삭제로 이동 | `GET /api/sales` | REQ-SAL-001, 002 |
 | SCR-007 | 판매 기록 입력·수정 | 회원 | 입력 폼(날짜·시장·품목·등급·물량·받은 금액), 저장 후 같은 날 평균 가격 비교 결과 | 저장, 삭제, 정산서 사진 올리기(선택) | `POST /api/sales`, `PATCH·DELETE /api/sales/{id}`, `POST /api/sales/ocr` | REQ-SAL-001, 002, 004 |
