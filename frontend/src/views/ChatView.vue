@@ -5,7 +5,7 @@ import { fetchChatSession, fetchChatSessions, sendChatMessage } from '@/api/chat
 import BaseButton from '@/components/common/BaseButton.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useAuthStore } from '@/stores/auth'
-import { CHAT_MAX_LENGTH, applyChatEvent, failReply, newReply, splitCitations, toViewMessages } from '@/utils/chat'
+import { CHAT_MAX_LENGTH, applyChatEvent, failReply, newReply, splitAnswer, toViewMessages } from '@/utils/chat'
 import { formatKstDateTime } from '@/utils/dates'
 
 // SCR-011 채팅 (REQ-CHT-001~006, 008, REQ-NFR-008, docs/api.md 2.7).
@@ -249,8 +249,9 @@ function onKeydown(e) {
             <LoadingSpinner v-if="m.status" size="sm" :label="m.status" class="status" />
 
             <p v-if="m.content" class="answer">
-              <template v-for="(p, j) in splitCitations(m.content)" :key="j">
+              <template v-for="(p, j) in splitAnswer(m.content)" :key="j">
                 <sup v-if="p.type === 'cite'" class="cite" :title="`근거 ${p.n}`">{{ p.n }}</sup>
+                <strong v-else-if="p.type === 'heading'" class="answer-heading">{{ p.value }}</strong>
                 <template v-else>{{ p.value }}</template>
               </template>
               <span v-if="m.state === 'streaming' && !m.status" class="caret" aria-hidden="true"></span>
@@ -513,6 +514,10 @@ h1 {
 }
 .answer {
   line-height: 1.6;
+}
+.answer-heading {
+  font-weight: 700;
+  color: var(--color-heading);
 }
 .cite {
   display: inline-block;

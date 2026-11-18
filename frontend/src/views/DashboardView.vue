@@ -12,7 +12,7 @@ import { useAuthStore } from '@/stores/auth'
 import { formatKstDateTime } from '@/utils/dates'
 import { CASE_TYPES, alertTypeLabel, caseTypeLabel, formatPct, regionText } from '@/utils/alerts'
 import { CHAT_MAX_LENGTH, chatPrefillRoute } from '@/utils/chat'
-import { formatWon, sortRealtimeRows, summarizeForecast, summarizeMonthly } from '@/utils/dashboard'
+import { formatWon, summarizeForecast, summarizeRealtime, summarizeMonthly } from '@/utils/dashboard'
 import { realtimeStatusText } from '@/utils/realtime'
 
 // SCR-003 대시보드 (docs/screens.md).
@@ -77,7 +77,7 @@ async function loadRealtime() {
   realtimeError.value = false
   try {
     const res = await fetchRealtimePrices(item.value.item_id)
-    realtimeRows.value = sortRealtimeRows(res.data)
+    realtimeRows.value = res.data
     collectedAt.value = res.meta.collected_at
   } catch (e) {
     realtimeRows.value = []
@@ -170,9 +170,10 @@ const todayLabel = new Intl.DateTimeFormat('ko-KR', {
   weekday: 'long',
 }).format(new Date())
 
-// 오늘 경매가 카드: 정렬된 첫 시장(경매 중 → 종료 순)을 크게, 나머지는 작은 칸으로
-const leadRow = computed(() => realtimeRows.value[0] ?? null)
-const otherRows = computed(() => realtimeRows.value.slice(1))
+// 오늘 경매가 카드: 거래량이 가장 많은 시장을 크게, 다음 3곳을 작은 칸으로. 나머지는 가격 화면에서 본다
+const realtime = computed(() => summarizeRealtime(realtimeRows.value))
+const leadRow = computed(() => realtime.value.rows[0] ?? null)
+const otherRows = computed(() => realtime.value.rows.slice(1))
 
 // 변화율 색. 오르면 빨강, 내리면 파랑 (국내 가격 표시 관례)
 const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? 'up' : 'down')
@@ -255,6 +256,7 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
           </ul>
           <p class="notice">
             원/kg 평균, 아직 확정 전 값입니다.<InfoTip term="confirmed" />
+            <template v-if="realtime.hidden">거래량 상위 {{ realtime.rows.length }}곳만 보여 드립니다(그 밖 {{ realtime.hidden }}곳은 가격 보기).</template>
             <template v-if="collectedAt">마지막 수집 {{ formatKstDateTime(collectedAt) }}</template>
           </p>
         </template>

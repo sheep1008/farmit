@@ -72,3 +72,25 @@ export function splitCitations(text) {
   if (last < text.length) parts.push({ type: 'text', value: text.slice(last) })
   return parts
 }
+
+// 소제목 줄: 짧고(20자 이하) 목록·근거 표시가 아니고 문장 부호로 끝나지 않으며, 다음 줄이 "- " 목록인 줄
+// (판매 상담의 "추천 날짜", "주별 순위", "알아 두세요" 같은 줄)
+function isHeading(line, next) {
+  const t = line.trim()
+  return (
+    t.length > 0 && t.length <= 20 && !t.startsWith('-') && !t.includes('[근거') &&
+    !/[.!?:,)]$/.test(t) && next !== undefined && next.trimStart().startsWith('- ')
+  )
+}
+
+/** splitCitations + 소제목 줄은 { type: 'heading' } 으로 → 화면이 굵게 그린다 (v-html 없이). */
+export function splitAnswer(text) {
+  const lines = text.split('\n')
+  const parts = []
+  lines.forEach((line, i) => {
+    if (isHeading(line, lines[i + 1])) parts.push({ type: 'heading', value: line })
+    else parts.push(...splitCitations(line))
+    if (i < lines.length - 1) parts.push({ type: 'text', value: '\n' })
+  })
+  return parts
+}

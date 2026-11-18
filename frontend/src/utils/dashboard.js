@@ -3,11 +3,14 @@
 const STATUS_ORDER = { live: 0, closed: 1, no_trade: 2 }
 
 /**
- * 당일 경매가 카드에 보일 시장 줄. 거래가 있는 시장(경매 중 → 종료)을 위로, 거래 없는 시장은 아래로.
- * 같은 상태끼리는 API 순서를 지킨다 (Array.prototype.sort는 안정 정렬).
+ * 당일 경매가 카드에 보일 시장 줄. 수집 시장이 전국 32곳이라 거래가 있는 시장만, 경매 중 → 종료 순,
+ * 같은 상태끼리는 거래량이 많은 순으로 limit곳까지. hidden은 거래가 있지만 카드에 못 넣은 시장 수.
  */
-export function sortRealtimeRows(rows) {
-  return [...(rows ?? [])].sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9))
+export function summarizeRealtime(rows, limit = 4) {
+  const traded = (rows ?? [])
+    .filter((r) => r.status !== 'no_trade')
+    .sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || (b.volume_kg ?? 0) - (a.volume_kg ?? 0))
+  return { rows: traded.slice(0, limit), hidden: Math.max(0, traded.length - limit) }
 }
 
 /**

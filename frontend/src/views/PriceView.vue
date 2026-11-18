@@ -54,6 +54,15 @@ const itemGroups = computed(() => {
   }
   return [...groups.entries()]
 })
+// 시장 선택: 전국 시장을 시도별로 묶는다 (정산 가격은 전국 시장을 모두 수집한다)
+const marketGroups = computed(() => {
+  const groups = new Map()
+  for (const m of markets.value) {
+    if (!groups.has(m.sido)) groups.set(m.sido, [])
+    groups.get(m.sido).push(m)
+  }
+  return [...groups.entries()]
+})
 
 // 정산은 다음 날 반영되므로 기간 끝은 어제 (api.md 기본값과 같다)
 const range = computed(() => {
@@ -72,15 +81,21 @@ watch(
 )
 
 async function loadCodes() {
-  const [itemRes, marketRes] = await Promise.all([http.get('/items'), http.get('/markets')])
+  // 목록은 전국 시장(collect=false), 처음 고를 시장은 수집 대상 시장(기본 응답)에서 고른다
+  const [itemRes, marketRes, collectRes] = await Promise.all([
+    http.get('/items'),
+    http.get('/markets', { params: { collect: false } }),
+    http.get('/markets'),
+  ])
   items.value = itemRes.data.data
   markets.value = marketRes.data.data
+  const collectMarkets = collectRes.data.data
   // 처음 고른 값: 품목은 지금 보는 품목 규칙(주소 → 다른 화면에서 고른 품목 → 관심 품목 → 예측 대상),
-  // 시장은 ?market_id=(검색에서 올 때) → 참고 시장(가락)이 아닌 첫 수집 시장
+  // 시장은 ?market_id=(검색에서 올 때) → 가락(market.is_reference로 고른다, 코드에 적지 않음) → 첫 수집 시장
   filters.value.itemId = currentItem.initial(items.value, route.query.item_id)
   const marketFromQuery = markets.value.find((m) => m.market_id === route.query.market_id)
   filters.value.marketId =
-    (marketFromQuery ?? markets.value.find((m) => !m.is_reference) ?? markets.value[0])?.market_id ?? ''
+    (marketFromQuery ?? collectMarkets.find((m) => m.is_reference) ?? collectMarkets[0] ?? markets.value[0])?.market_id ?? ''
 }
 
 let loadSeq = 0 // 선택을 빠르게 바꿔도 마지막 요청 결과만 보여 준다
@@ -161,9 +176,11 @@ const lastUpdated = computed(() => formatKstDateTime(meta.value?.last_updated))
       <label>
         <span>시장</span>
         <select v-model="filters.marketId">
-          <option v-for="m in markets" :key="m.market_id" :value="m.market_id">
-            {{ m.name }}{{ m.is_reference ? ' (참고)' : '' }}
-          </option>
+          <optgroup v-for="[sido, list] in marketGroups" :key="sido" :label="sido">
+            <option v-for="m in list" :key="m.market_id" :value="m.market_id">
+              {{ m.name }}
+            </option>
+          </optgroup>
         </select>
       </label>
       <label>

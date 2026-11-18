@@ -24,7 +24,7 @@ const today = todayKst()
 const r = props.record
 const form = ref({
   sale_date: r?.sale_date ?? today,
-  market_id: r?.market_id ?? props.markets.find((m) => !m.is_reference)?.market_id ?? '',
+  market_id: r?.market_id ?? (props.markets.find((m) => m.is_reference) ?? props.markets[0])?.market_id ?? '',
   item_id: r?.item_id ?? props.defaultItemId ?? props.items[0]?.item_id ?? null,
   grade: r?.grade ?? 'ALL',
   volume_kg: r?.volume_kg ?? '',
@@ -113,7 +113,7 @@ async function remove() {
         <label for="sale-market">시장</label>
         <select id="sale-market" v-model="form.market_id" :class="{ invalid: first('market_id') }">
           <option v-for="m in markets" :key="m.market_id" :value="m.market_id">
-            {{ m.name }}{{ m.is_reference ? ' (참고)' : '' }}
+            {{ m.name }}
           </option>
         </select>
         <p v-if="first('market_id')" class="msg error">{{ first('market_id') }}</p>

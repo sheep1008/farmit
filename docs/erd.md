@@ -206,7 +206,7 @@ erDiagram
 | name | varchar(50) | | 시장명 |
 | sido | varchar(20) | | 시도 |
 | lat, lng | decimal(9,6) | | 위치 (직접 입력, 거리 계산용) |
-| is_collect | boolean | | 수집 대상 여부. 4개 시장 + 가락만 true. 전국 32곳 모두 등록 (aT 정산에 나오는 공영도매시장, 2026-11 기준. 부산국제수산은 최근 거래가 없어 뺐다) |
+| is_collect | boolean | | 수집 대상 여부. 2026-11-18부터 전국 32곳 모두 true (실시간 경매·시장 비교·지금 팔면이 이 값으로 시장을 고른다). 전국 32곳 모두 등록 (aT 정산에 나오는 공영도매시장, 2026-11 기준. 부산국제수산은 최근 거래가 없어 뺐다) |
 | is_reference | boolean | | 참고용 시장 여부 (가락) |
 
 **item** — 품목. 출처마다 코드가 달라 한 행에 모아 둔다
@@ -310,7 +310,7 @@ erDiagram
 | 컬럼 | 타입 | 키 | 설명 |
 |---|---|---|---|
 | id | bigint | PK | 자동 증가 |
-| source_key | varchar(64) | UK | 원본 행을 구분하는 값. 주기(2분)마다 겹쳐 받아도 중복 방지. `whsl_mrkt_cd|corp_cd|trd_clcln_ymd|auctn_seq|spm_no|scsbd_dt`의 SHA-1(40자) |
+| source_key | varchar(64) | UK | 원본 행을 구분하는 값. 주기(3분)마다 겹쳐 받아도 중복 방지. `whsl_mrkt_cd|corp_cd|trd_clcln_ymd|auctn_seq|spm_no|scsbd_dt`의 SHA-1(40자) |
 | auction_at | datetime | | 낙찰 시각 |
 | market_id | varchar(6) | FK | 시장 |
 | item_id | int | FK | 품목 |
@@ -417,7 +417,7 @@ erDiagram
 | `pest_survey` | ncpms_crop_code, insect_key(NCPMS 회차 키), survey_type(기본조사·노지고추 등), survey_year, survey_round, survey_date(조사 기준일), sido, sigungu, sigungu_code, pest_code(inqireCnClCode), pest_name, value(decimal 12,3) | 시군·항목 하나 = 1행. UK(insect_key, sigungu_code, pest_code) `uk_pest_survey`, 인덱스(ncpms_crop_code, survey_date). 회차 번호의 날짜가 해마다 달라 같은 시기 비교는 survey_date로 한다. 품목과는 `item.ncpms_crop_code`로 잇는다. `collectors/pests/ncpms.py`가 UPSERT. **구현됨** (`alerts` 앱) | REQ-ALT-005, REQ-HIS-001 |
 | `past_case` | item_id, market_id, event_type(HEAT_WAVE·HEAVY_RAIN·COLD_WAVE·IMPORT_SURGE·PEST_INCREASE), sido, event_start, event_end(한국 날짜), base_week(사건 시작 주 월요일), base_price(그 주 kg당 가격, 등외·하·5등 이하 제외 물량가중, 원/kg), change_w1~w4(기준 주 대비 1~4주 뒤 변화율 %, 거래 없으면 NULL), normal_w1~w4(평년 같은 주 변화율 %: 사건이 난 해를 뺀 다른 해의 같은 주차 평균, 3년 미만이면 NULL. 계절 움직임과 나란히 보려고 둔다), detail(JSON: share 걸린 주산지 물량 비중 %, places 걸린 주산지 '시도 시군', normal_years 평년에 쓴 해 수), computed_at(UTC) | 사건 1건 × 시장 1곳 = 1행. UK(item_id, market_id, event_type, event_start) `uk_past_case`, 인덱스 `ix_past_case_item_type`(item_id, event_type, event_start). `batch/spark/past_case.py`가 매번 전부 다시 계산해 한 트랜잭션으로 통째로 바꾼다. 시장은 수집·참고 시장. **구현됨** (`alerts` 앱) | REQ-HIS-001 |
 | `chat_session` | user_id, title(첫 질문 앞 40자), created_at | 인덱스 `idx_chat_session_user`(user_id, created_at). user CASCADE. **구현됨** (`chat` 앱) | REQ-CHT-008 |
-| `chat_message` | session_id, role(user·assistant), content, intent(판매·병해충·날씨재해·재배·범위밖, 사용자 메시지는 NULL), sources(JSON, 인용된 근거만), input_tokens, output_tokens(그 답변의 LLM 호출 합계), latency_ms(NULL 허용), created_at | 하루 질문 수(role=user, 한국 시간 오늘) 제한과 비용·응답 시간 측정에 사용. 인덱스 `idx_chat_message_session`(session_id, created_at). session CASCADE. **구현됨** (`chat` 앱) | REQ-CHT-001~008, REQ-NFR-002, 008 |
+| `chat_message` | session_id, role(user·assistant), content, intent(판매·시세·병해충·날씨재해·재배·범위밖, 사용자 메시지는 NULL), sources(JSON, 인용된 근거만), input_tokens, output_tokens(그 답변의 LLM 호출 합계), latency_ms(NULL 허용), created_at | 하루 질문 수(role=user, 한국 시간 오늘) 제한과 비용·응답 시간 측정에 사용. 인덱스 `idx_chat_message_session`(session_id, created_at). session CASCADE. **구현됨** (`chat` 앱) | REQ-CHT-001~008, REQ-NFR-002, 008 |
 | `farm_schedule` | item_id, task_name, stage(농사로 시기정보 구분, 예: 생육과정(주요농작업)), start_month, start_period(상·중·하), end_month, end_period | 농사로 농작업일정(farmWorkingPlanNew). 품목마다 **대표 일정 하나**(이름이 같음 > 보통 > 노지 > 촉성 > 반촉성)의 시기정보. 끝 월이 시작 월보다 작으면 해를 넘는다. 인덱스 `ix_farm_schedule_item`(item_id, start_month). item CASCADE. 품목 이름은 `rag/crop_names.json`으로 농사로 작물 이름에 맞춘다(item의 `nongsaro_code`는 쓰지 않음). `manage.py collect_farm_schedule`가 품목별로 행을 통째로 바꾼다. **구현됨** (`farming` 앱, 개발 DB 77개 품목·1,985행) | REQ-RAG-002, 003, 005, REQ-COL-006 |
 | `price_alert` (선택) | user_id, item_id, market_id, target_price, is_active, notified_at | | REQ-ALT-007 |
 

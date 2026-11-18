@@ -20,9 +20,9 @@ from rest_framework.permissions import IsAuthenticated
 from api.responses import error, ok
 from chat import prompts as P
 from chat import service
-from chat.limits import seconds_to_midnight, used_today
+from chat.limits import over_limit, remaining_today, seconds_to_midnight
 from chat.models import ChatMessage, ChatSession
-from codes.models import Item
+from codes.models import Item, Market
 from prices.forecast_views import compute_recommendation
 from prices.views import _kst_iso, _today_kst
 from rag.llm import LlmError
@@ -36,6 +36,8 @@ class MessageSerializer(serializers.Serializer):
     message = serializers.CharField(max_length=MAX_QUESTION, trim_whitespace=True)
     session_id = serializers.IntegerField(required=False, min_value=1, max_value=2 ** 63 - 1)
     item_id = serializers.IntegerField(required=False, min_value=1, max_value=2 ** 31 - 1)
+    # 화면에서 보던 시장 (시세 상담 근거에 쓴다, 선택)
+    market_id = serializers.CharField(required=False, max_length=6)
 
 
 def _sse(event, data):
@@ -70,12 +72,16 @@ def messages(request):
         item = Item.objects.filter(pk=v['item_id']).first()
         if item is None:
             return error(404, 'NOT_FOUND', '없는 품목입니다.')
+    market = None
+    if 'market_id' in v:
+        market = Market.objects.filter(pk=v['market_id']).first()
+        if market is None:
+            return error(404, 'NOT_FOUND', '없는 시장입니다.')
 
     with transaction.atomic():
         # 같은 회원의 동시 요청이 한도를 함께 넘지 않게 회원 행을 잠근다
         get_user_model().objects.select_for_update().filter(pk=user.pk).first()
-        used = used_today(user)
-        if used >= settings.LLM_DAILY_LIMIT:
+        if over_limit(user):
             wait = seconds_to_midnight()
             res = error(429, 'CHAT_DAILY_LIMIT',
                         f'오늘 질문 {settings.LLM_DAILY_LIMIT}회를 모두 썼습니다. 내일 다시 이용해 주세요.',
@@ -89,13 +95,13 @@ def messages(request):
             history = [{'role': m.role, 'content': m.content}
                        for m in session.messages.order_by('-created_at', '-id')[:service.HISTORY_TURNS]][::-1]
         ChatMessage.objects.create(session=session, role='user', content=v['message'])
-    remaining = settings.LLM_DAILY_LIMIT - used - 1
+    remaining = remaining_today(user)  # 이번 질문을 뺀 값. 관리자는 None
 
     def events():
         started = time.monotonic()
         yield _sse('session', {'session_id': session.id, 'remaining_today': remaining})
         try:
-            for name, data in service.run(user, v['message'], item, history, _today_kst(), _recommend):
+            for name, data in service.run(user, v['message'], item, history, _today_kst(), _recommend, market):
                 if name != 'final':
                     if name == 'intent':
                         data = {**data, 'intent_label': P.INTENT_LABELS[data['intent']]}

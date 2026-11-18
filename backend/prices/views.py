@@ -255,8 +255,8 @@ def market_prices(item, grade, day=None):
 
     day가 없으면 그 품목·등급의 가장 최근 정산일. 돌려주는 값: (시장별 행 목록, 쓴 날짜 또는 None).
     """
-    # 참고 시장(가락)은 비교에 넣지 않는다 (api.md 2.3). is_collect 값에만 기대지 않고 명시한다
-    markets = list(Market.objects.filter(is_collect=True, is_reference=False).order_by('market_id'))
+    # 수집 대상 시장 전체 (전국 32곳, 가락 포함. api.md 2.3)
+    markets = list(Market.objects.filter(is_collect=True).order_by('market_id'))
     if day is None:
         # 가장 최근 정산일 = 이 품목·등급의 가장 늦은 거래정산일자
         day = (SettlePrice.objects.filter(item=item, grade=grade, market__in=markets)

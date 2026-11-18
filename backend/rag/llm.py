@@ -1,9 +1,12 @@
 """LLM 호출을 모은 모듈 (REQ-NFR-011). 모든 Claude 호출은 여기를 거친다.
 
 - 모델은 settings.LLM_MODEL (기본 claude-haiku-5-5). 설정값만 바꾸면 다른 모델로 답한다
+- 모델 이름 앞부분으로 제공사를 고른다: claude-* → Anthropic(SDK), gpt-*·o1·o3·o4 → OpenAI 형식, gemini-* → Gemini 형식.
+  OpenAI·Gemini는 SSAFY GMS 프록시로만 부른다 (GMS_KEY 필요). 부르는 쪽(채팅·증상 진단)은 제공사를 몰라도 된다
 - 시스템 프롬프트에 cache_control을 붙여 매번 같은 프롬프트를 캐싱한다 (REQ-NFR-008)
 - 결과마다 입력·출력 토큰, 캐시 읽기 토큰, 응답 시간(ms)을 돌려준다. 저장은 부르는 쪽(chat_message)이 한다
-- 키는 ANTHROPIC_API_KEY 환경 변수에서 SDK가 읽는다. 키·프롬프트 본문은 로그에 남기지 않는다
+- 키·주소는 settings.LLM_API_KEY·LLM_BASE_URL: GMS_KEY가 있으면 SSAFY GMS 프록시, 없으면 ANTHROPIC_API_KEY로 직접.
+  키·프롬프트 본문은 로그에 남기지 않는다
 """
 import json
 import logging
@@ -12,6 +15,7 @@ import time
 from dataclasses import dataclass
 
 import anthropic
+import httpx
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -42,7 +46,10 @@ class LlmResult:
 def get_client():
     global _client
     if _client is None:
-        _client = anthropic.Anthropic(timeout=settings.LLM_TIMEOUT_SECONDS, max_retries=1)
+        # GMS 프록시는 x-api-key 헤더에서만 키를 찾는다. 이 SDK는 키를 authorization 헤더로 보내므로 따로 붙인다
+        headers = {'x-api-key': settings.LLM_API_KEY} if settings.LLM_BASE_URL and settings.LLM_API_KEY else None
+        _client = anthropic.Anthropic(api_key=settings.LLM_API_KEY, base_url=settings.LLM_BASE_URL,
+                                      default_headers=headers, timeout=settings.LLM_TIMEOUT_SECONDS, max_retries=1)
     return _client
 
 
@@ -109,9 +116,20 @@ def _wrap(exc):
     return LlmError('unavailable', f'LLM 호출 실패 {type(exc).__name__}')
 
 
+def provider(model):
+    """모델 이름 → 'anthropic' | 'openai' | 'gemini'"""
+    if model.startswith('gemini'):
+        return 'gemini'
+    if model.startswith(('gpt', 'o1', 'o3', 'o4')):
+        return 'openai'
+    return 'anthropic'
+
+
 def complete(system, messages, max_tokens=1024, model=None):
     """한 번에 답을 받는다. 반환: LlmResult"""
     model = _model(model)
+    if provider(model) != 'anthropic':
+        return _http_complete(system, messages, max_tokens, model)
     started = time.monotonic()
     try:
         message = get_client().messages.create(**_request(system, messages, max_tokens, model))
@@ -123,6 +141,9 @@ def complete(system, messages, max_tokens=1024, model=None):
 def stream(system, messages, max_tokens=2048, model=None):
     """답을 조각으로 받는다. ('delta', 글자 조각)을 차례로 내고, 마지막에 ('done', LlmResult)를 낸다."""
     model = _model(model)
+    if provider(model) != 'anthropic':
+        yield from _http_stream(system, messages, max_tokens, model)
+        return
     started = time.monotonic()
     try:
         with get_client().messages.stream(**_request(system, messages, max_tokens, model)) as s:
@@ -157,3 +178,130 @@ def complete_json(system, user_text, max_tokens=512, model=None):
             {'role': 'user', 'content': '설명 없이 JSON 객체 하나만 다시 출력하세요.'},
         ]
     return None, results
+
+
+# ── OpenAI·Gemini (GMS 프록시, httpx로 직접 부른다) ─────────────────
+# 키는 헤더로만 보낸다 (주소 쿼리에 넣으면 httpx 요청 로그에 키가 남는다)
+
+
+def _http_target(model, stream):
+    """(주소, 헤더)"""
+    if not settings.GMS_KEY:
+        raise LlmError('unavailable', f'{provider(model)} 모델은 GMS_KEY가 있어야 쓸 수 있습니다')
+    if provider(model) == 'openai':
+        return settings.GMS_OPENAI_URL, {'Authorization': f'Bearer {settings.GMS_KEY}'}
+    action = 'streamGenerateContent?alt=sse' if stream else 'generateContent'
+    return f'{settings.GMS_GEMINI_URL}/{model}:{action}', {'x-goog-api-key': settings.GMS_KEY}
+
+
+def _openai_body(system, messages, max_tokens, model, stream):
+    body = {'model': model, 'max_completion_tokens': max_tokens,
+            'messages': [{'role': 'system', 'content': system}] + list(messages)}
+    if stream:
+        body.update(stream=True, stream_options={'include_usage': True})
+    return body
+
+
+def _gemini_body(system, messages, max_tokens, model):
+    config = {'maxOutputTokens': max_tokens}
+    # 2.5 Flash 계열은 생각을 끌 수 있다 (켜 두면 생각이 maxOutputTokens를 먼저 써서 답이 잘린다). Pro는 끌 수 없어 그대로
+    if model.startswith('gemini-2.5-flash'):
+        config['thinkingConfig'] = {'thinkingBudget': 0}
+    return {'systemInstruction': {'parts': [{'text': system}]},
+            'contents': [{'role': 'model' if m['role'] == 'assistant' else 'user', 'parts': [{'text': m['content']}]}
+                         for m in messages],
+            'generationConfig': config}
+
+
+def _body(system, messages, max_tokens, model, stream):
+    if provider(model) == 'openai':
+        return _openai_body(system, messages, max_tokens, model, stream)
+    return _gemini_body(system, messages, max_tokens, model)
+
+
+def _usage(model, data):
+    """응답(또는 스트림 조각)의 사용량 → (입력, 출력, 캐시 읽기)"""
+    if provider(model) == 'openai':
+        u = data.get('usage') or {}
+        return (u.get('prompt_tokens') or 0, u.get('completion_tokens') or 0,
+                (u.get('prompt_tokens_details') or {}).get('cached_tokens') or 0)
+    u = data.get('usageMetadata') or {}
+    return u.get('promptTokenCount') or 0, u.get('candidatesTokenCount') or 0, u.get('cachedContentTokenCount') or 0
+
+
+def _text_and_stop(model, data):
+    """응답(또는 스트림 조각) → (글자, 끝난 이유)"""
+    if provider(model) == 'openai':
+        choice = (data.get('choices') or [{}])[0]
+        part = choice.get('delta') or choice.get('message') or {}
+        return part.get('content') or '', choice.get('finish_reason') or ''
+    cand = (data.get('candidates') or [{}])[0]
+    parts = (cand.get('content') or {}).get('parts') or []
+    # thought=true 조각(생각 요약)은 답이 아니다
+    return ''.join(p.get('text', '') for p in parts if not p.get('thought')), cand.get('finishReason') or ''
+
+
+def _http_result(model, text, usage, stop, started):
+    result = LlmResult(text=text.strip(), model=model, input_tokens=usage[0], output_tokens=usage[1],
+                       cache_read_tokens=usage[2], latency_ms=int((time.monotonic() - started) * 1000),
+                       stop_reason=stop)
+    logger.info('llm model=%s in=%s out=%s cache_read=%s ms=%s stop=%s', model, result.input_tokens,
+                result.output_tokens, result.cache_read_tokens, result.latency_ms, result.stop_reason)
+    return result
+
+
+def _http_error(exc):
+    """httpx 예외·상태 코드 → LlmError. 응답 본문은 남기지 않는다 (요청 내용이 들어 있을 수 있다)"""
+    if isinstance(exc, httpx.TimeoutException):
+        return LlmError('timeout', 'LLM 응답 시간 초과')
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        if code == 429:
+            return LlmError('rate_limit', 'LLM 호출 한도 초과')
+        if code == 400:
+            return LlmError('bad_request', 'LLM 요청 형식 오류')
+        return LlmError('unavailable', f'LLM 서버 오류 {code}')
+    return LlmError('unavailable', f'LLM 서버 접속 실패 {type(exc).__name__}')
+
+
+def _http_complete(system, messages, max_tokens, model):
+    url, headers = _http_target(model, stream=False)
+    started = time.monotonic()
+    try:
+        res = httpx.post(url, headers=headers, json=_body(system, messages, max_tokens, model, False),
+                         timeout=settings.LLM_TIMEOUT_SECONDS)
+        res.raise_for_status()
+        data = res.json()
+    except httpx.HTTPError as exc:
+        raise _http_error(exc) from None
+    text, stop = _text_and_stop(model, data)
+    return _http_result(model, text, _usage(model, data), stop, started)
+
+
+def _http_stream(system, messages, max_tokens, model):
+    url, headers = _http_target(model, stream=True)
+    started = time.monotonic()
+    parts, usage, stop = [], (0, 0, 0), ''
+    try:
+        with httpx.stream('POST', url, headers=headers, json=_body(system, messages, max_tokens, model, True),
+                          timeout=settings.LLM_TIMEOUT_SECONDS) as res:
+            if res.status_code >= 400:
+                res.read()
+                res.raise_for_status()
+            for line in res.iter_lines():
+                if not line.startswith('data:'):
+                    continue
+                payload = line[5:].strip()
+                if not payload or payload == '[DONE]':
+                    continue
+                data = json.loads(payload)
+                text, finish = _text_and_stop(model, data)
+                stop = finish or stop
+                if any(_usage(model, data)):   # 사용량은 마지막 조각에 온다 (Gemini는 조각마다 누적값)
+                    usage = _usage(model, data)
+                if text:
+                    parts.append(text)
+                    yield 'delta', text
+    except httpx.HTTPError as exc:
+        raise _http_error(exc) from None
+    yield 'done', _http_result(model, ''.join(parts), usage, stop, started)
