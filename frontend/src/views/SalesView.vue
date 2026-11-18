@@ -168,7 +168,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
         <BaseButton v-if="!editing" variant="primary" @click="openForm()">기록 추가</BaseButton>
       </EmptyState>
       <div v-else class="table-wrap" :class="{ dim: loading }">
-        <table>
+        <table class="stack-on-mobile">
           <thead>
             <tr>
               <th scope="col">날짜</th>
@@ -184,14 +184,14 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
           </thead>
           <tbody>
             <tr v-for="r in rows" :key="r.id">
-              <td class="nowrap">{{ r.sale_date }}</td>
-              <td>{{ r.market_name }}</td>
-              <td>{{ r.item_name }}</td>
-              <td>{{ gradeLabel(r.grade) }}</td>
-              <td class="num">{{ fmt(r.volume_kg, 1) }}kg</td>
-              <td class="num">{{ fmt(r.amount_won) }}원</td>
-              <td class="num">{{ fmt(r.unit_price) }}원</td>
-              <td class="num" :class="`vs ${formatVsAvg(r.vs_avg_pct).tone}`">
+              <td class="nowrap" data-label="날짜">{{ r.sale_date }}</td>
+              <td data-label="시장">{{ r.market_name }}</td>
+              <td data-label="품목">{{ r.item_name }}</td>
+              <td data-label="등급">{{ gradeLabel(r.grade) }}</td>
+              <td class="num" data-label="물량">{{ fmt(r.volume_kg, 1) }}kg</td>
+              <td class="num" data-label="받은 금액">{{ fmt(r.amount_won) }}원</td>
+              <td class="num" data-label="kg당">{{ fmt(r.unit_price) }}원</td>
+              <td class="num" :class="`vs ${formatVsAvg(r.vs_avg_pct).tone}`" data-label="평균 대비">
                 {{ formatVsAvg(r.vs_avg_pct).text }}
               </td>
               <td>
@@ -298,6 +298,7 @@ h1 {
   background: var(--color-background);
 }
 .table-wrap {
+  position: relative; /* 안쪽 .sr-only(절대 위치)가 스크롤 상자 밖으로 빠져 페이지가 가로로 넓어지지 않게 (K24) */
   overflow-x: auto; /* 좁은 화면에서는 표만 가로로 밀어 본다 */
 }
 table {
