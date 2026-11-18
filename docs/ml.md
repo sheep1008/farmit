@@ -78,7 +78,8 @@ ml/
 │   ├── tracking.py          MLflow 기록
 │   ├── selection.py         [실행] 학습·노출 시장 선별, OOF·테스트 평가 → markets.json (7.10)
 │   ├── intervals.py         [실행] OOF 잔차로 시장 × h별 80% 구간, 테스트 커버리지 → intervals.json (7.10)
-│   ├── forecast.py          [실행] 주간 예측 → serve 시장 × h1~h4 forecast 행 (--to-db면 바로 적재)
+│   ├── forecast.py          [실행] 주간 예측 → serve 시장 × h1~h4 forecast 행 (--to-db면 바로 적재). --item이면 레지스트리 champion 설정
+│   ├── registry.py          [실행] 설정 묶음을 MLflow 등록 모델 버전으로 등록, 백테스트 승격 (5장 "모델 레지스트리", K40)
 │   ├── store.py             [실행] forecast CSV → forecast 테이블 UPSERT (4장)
 │   └── evaluate.py          [실행] 테스트 평가 (재현·비교)
 ├── experiments/             전국·저장성 품목 확장 실험 (7장, 사용법은 experiments/README.md)
@@ -220,6 +221,8 @@ pip install -r requirements.txt
 
 ### 주간 예측
 품목은 코드에 고정하지 않는다. `--item <품목코드>`(→ `config/<품목코드>/`, `data/weekly_<품목코드>.csv`) 또는 `--config <설정 폴더>`를 꼭 준다.
+`forecast --item`은 MLflow 레지스트리에 그 품목의 champion이 있으면 **champion 설정**을 쓰고, 없으면 `config/<품목코드>/`를 쓴다 (아래 "모델 레지스트리").
+`--config`·`FARMIT_ML_CONFIG`·`--no-mlflow`를 주면 레지스트리를 보지 않는다.
 ```bash
 python -m farmit_ml.selection --item 0601                         # 학습·노출 시장 선별 → config/0601/markets.json (설정을 바꿨을 때·분기마다)
 python -m farmit_ml.intervals --item 0601                         # 위 OOF로 시장별 80% 구간 → config/0601/intervals.json
@@ -238,9 +241,38 @@ python -m farmit_ml.evaluate --config config/0601_v3
 ```
 - Windows와 Linux의 차이는 XGBoost·LSTM 부동소수점 연산 차이다. 같은 OS·같은 스레드 수에서는 매번 같다.
 
+### 모델 레지스트리 (설정 버전·승격, K40)
+`forecast`는 저장된 모델을 쓰지 않고 매주 다시 학습한다(8.1). 그래서 레지스트리에는 학습된 모델 파일이 아니라 **설정 묶음**(설정 폴더의 json 전부)을
+MLflow 등록 모델 `farmit-<품목코드>`의 버전으로 올린다. 별칭은 두 개다.
+
+| 별칭 | 뜻 |
+|---|---|
+| `champion` | 운영 설정. 주간 예측(`forecast --item`)이 쓴다 |
+| `challenger` | 승격을 기다리는 새 설정. `promote`가 판정하면(승격이든 탈락이든) 지운다 |
+
+```bash
+# ml/ 에서. Airflow에서는 /home/airflow/ml-venv/bin/python (아래 "자동 실행")
+python -m farmit_ml.registry register --config config/0601 --champion   # 처음 한 번 (되돌릴 때도 같은 명령으로 그 버전 폴더를 champion으로)
+python -m farmit_ml.registry register --config config/0601_v5           # 새 설정을 challenger로
+python -m farmit_ml.registry promote --item 0601                        # challenger가 있으면 백테스트 후 판정 (없으면 바로 끝)
+python -m farmit_ml.registry promote --item 0601 --until 2026-11-16 --weeks 8   # 백테스트 구간을 정해서
+python -m farmit_ml.registry show --item 0601                           # 버전·별칭·모델 버전·설정 경로·판정 결과
+```
+- **백테스트:** `until`(기본: 한국 날짜로 이번 주 월요일) 앞 8개 기준 주를 기준 주마다 그 시점까지의 데이터로만 다시 학습해 예측한다(`as_of`, 백필과 같다).
+  실제는 `monitor`와 같은 정의(피처 CSV의 `price_kg`, 진행 중인 주 제외)로 붙인다.
+- **승격 조건 (8.1 "설정 교체 조건"):** challenger NMAE < champion NMAE **이고** < 기준선(지난주 가격 그대로) NMAE. 같으면 바꾸지 않는다.
+  두 설정이 모두 예측하는 (시장, 기준 주, h) 행끼리만 비교한다. challenger에만 있는 노출 시장은 판정에 들어가지 않는다.
+- **기록:** 판정마다 MLflow 실행 `promote <품목> v<버전>`(stage=promote, 지표 `champion_nmae`·`challenger_nmae`·`base_nmae`·`n_rows`)과
+  challenger 버전 태그 `promote_result`. 등록은 실행 `register <품목> <버전>`(stage=register)에 설정 json이 산출물로 남는다.
+- **예측 행의 버전:** champion으로 예측하면 `forecast.model_version`이 `<설정 버전>-r<레지스트리 버전>-<MLflow 실행 id 8자>`가 된다 (예: `v4-r1-1a2b3c4d`).
+- **비용:** 다시 학습을 기준 주 8개 × 설정 2개 = 16번 한다. challenger가 있을 때만 돈다.
+- 레지스트리는 MLflow 추적 저장소와 같은 SQLite 파일에 있다 (내 PC `mlruns/mlflow.db`, Airflow `mlruns/airflow.db`). 둘은 따로라서 Airflow 쪽은 컨테이너 안에서 등록한다.
+
 ### 자동 실행 (Airflow `forecast_weekly`, K19)
 매주 일 23:00 UTC(한국 월 08:00) `batch/dags/forecast.py`가 돈다: 점검(`weather.check`) → 피처(`batch/spark/features.py`) → 예측 품목(`item.is_forecast`)마다
-`farmit_ml.forecast --item <품목> --base-week <이번 주 월요일> --to-db`. 점검이 실패하면 예측하지 않는다(태스크 로그에 빠진 것이 남는다).
+승격 판정(`farmit_ml.registry promote --item <품목>`, K40) → `farmit_ml.forecast --item <품목> --base-week <이번 주 월요일> --to-db`. 점검이 실패하면 예측하지 않는다(태스크 로그에 빠진 것이 남는다).
+- 승격 판정이 실패하면 `promote` 태스크는 실패가 아니라 skipped로 끝나고(`skip_on_exit_code=99`), `forecast`(`trigger_rule=none_failed`)는 지금 champion으로 돈다.
+  challenger 별칭이 남아 다음 주에 다시 판정한다. 백테스트가 길어 `promote`는 제한 3시간·재시도 없음.
 - 점검은 예측 피처가 실제로 쓰는 원천만 본다: 지난주 예측 품목 정산(`settle_price`)과 공휴일(`--only price holiday`). v4는 날씨·생산량을 쓰지 않는다(3.1절).
   날씨 점검(`--only weather`)은 과거 사례(`past_case`) 앞에만 둔다. 피처에 날씨·생산량을 다시 넣으면 DAG의 `--only`에도 더한다.
 - 예측은 Airflow 이미지 안의 **별도 가상환경**(`/home/airflow/ml-venv`, `batch/airflow/Dockerfile`)에서 돈다. pandas 3·MLflow가 Airflow 고정 버전과 부딪치지 않게 나눴다.
@@ -622,6 +654,7 @@ v3 구간은 4개 시장 **테스트** 잔차로 만들어 전국 시장에 쓸 
 
 - **데이터가 들어올 때마다 학습(온라인 학습)하지 않는 이유:** 1주에 늘어나는 데이터가 시장당 1행뿐이다. RF·LightGBM·XGBoost는 이어서 학습하는 구조가 아니다. 매주 처음부터 다시 학습해도 품목당 몇 분이면 끝난다.
 - **설정 교체 조건:** 새 설정을 최근 기간으로 검증해 지금 설정과 기준선(지난주 가격)보다 나을 때만 바꾼다. 바꾼 이력은 MLflow와 `model_version`에 남는다 (REQ-PRD-004).
+  **K40에서 만듦:** 새 설정을 레지스트리에 challenger로 올리면 주간 DAG가 최근 8주 백테스트로 판정해 champion을 바꾼다 (5장 "모델 레지스트리").
 - **운영 감시:** 지난 예측과 실제 가격을 비교한다 (REQ-PRD-005). 최근 8주 동안 기준선보다 나쁜 시장 × 상품은 다음 재검증까지 노출을 멈추고, 시도 단위 예측이나 "예측 없음"으로 바꾼다.
 
 ### 8.2 팀에서 정할 것
@@ -642,4 +675,4 @@ v3 구간은 4개 시장 **테스트** 잔차로 만들어 전국 시장에 쓸 
 | 상품·시장별 80% 구간 | OOF 잔차로 상품 × 시장(또는 거래량 구간)별 분위수 | REQ-PRD-002 |
 | DB 적재·자동 실행 | 예측 CSV → `forecast` 테이블(**K13에서 만듦**: `farmit_ml.store`, `forecast --to-db`), Airflow 월요일 DAG `forecast_weekly` (**K19에서 만듦**, Airflow 이미지 안 가상환경) | REQ-PRD-001, 005 |
 | 성능 감시 | 지난 예측 vs 실제 가격 NMAE를 시장 × 상품별로 매주 계산하고, 기준선보다 나쁜 곳은 노출을 멈춘다 (8.1). **K19에서 매주 채점·MLflow 기록까지 만듦** (`farmit_ml.monitor`, 5장). 노출 멈춤은 아직 없음 | REQ-PRD-005 |
-| 분기 재검증 | `experiments/run_oof.py`의 OOF·시장 선별을 운영 작업으로 옮겨 분기마다 설정을 다시 정한다. 첫 재검증은 2026-11 이후 실제 가격으로 | REQ-PRD-004, 005 |
+| 분기 재검증 | `experiments/run_oof.py`의 OOF·시장 선별을 운영 작업으로 옮겨 분기마다 설정을 다시 정한다. 첫 재검증은 2026-11 이후 실제 가격으로. 다시 정한 설정은 레지스트리에 challenger로 올려 승격 판정을 받는다 (**K40에서 레지스트리·승격 판정까지 만듦**, challenger 자동 등록은 아직 없음) | REQ-PRD-004, 005 |
