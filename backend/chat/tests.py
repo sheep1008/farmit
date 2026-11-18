@@ -176,7 +176,7 @@ class SalesFlowTests(ChatBase):
         self.stream.assert_not_called()
 
         fake = (200, {'forecast_available': True, 'results': [{
-            'rank': 1, 'market_name': '천안', 'target_week': '2026-11-16', 'pred_price': 3000.0, 'lower80': 2800.0,
+            'rank': 1, 'market_id': '340101', 'market_name': '천안', 'target_week': '2026-11-16', 'pred_price': 3000.0, 'lower80': 2800.0,
             'upper80': 3200.0, 'net_won': 1500000, 'net_low_won': 1400000, 'net_high_won': 1600000,
             'transport_won': 0, 'storage_won': 0, 'is_closed': False, 'closed_dates': [], 'holiday_notice': None}]},
             {'volume_kg': 500.0, 'base_week': '2026-11-16', 'costs': {'transport_applied': False}})
@@ -380,6 +380,69 @@ class TesterFollowupTests(ChatBase):
         prompt = self.stream.call_args.args[1][0]['content']
         self.assertIn('1순위: 천안', prompt)
         self.assertIn('300,000원', prompt)
+
+
+class SaleDaysTests(ChatBase):
+    """REQ-CHT-002: 질문한 시장 결과만, 추천 주 안의 날짜는 그 시장의 최근 요일별 가격으로"""
+
+    def setUp(self):
+        super().setUp()
+        from codes.models import Market, MarketClosure
+        from prices.models import Forecast, SettlePrice
+        from prices.views import _today_kst
+        self.today = _today_kst()
+        this_week = self.today - timedelta(days=self.today.weekday())
+        self.week = this_week + timedelta(weeks=1)
+        self.jeongeup = Market.objects.create(market_id='350402', name='정읍', sido='전북', lat=0, lng=0)
+        cheonan = Market.objects.create(market_id='340101', name='천안', sido='충남', lat=0, lng=0)
+        for m, price in ((self.jeongeup, 3000), (cheonan, 5000)):  # 천안이 전체 1순위
+            Forecast.objects.create(item=self.apple, market=m, base_week=this_week, horizon=1, target_week=self.week,
+                                    pred_price=price, lower80=price - 200, upper80=price + 200, model_version='t',
+                                    created_at=timezone.now())
+        # 정읍 최근 8주: 화요일 +10%, 목요일 +5%, 나머지(월·수·금·토) 기준가. 일요일은 거래 없음
+        for w in range(1, 9):
+            mon = this_week - timedelta(weeks=w)
+            for wd, p in ((0, 1000), (1, 1100), (2, 1000), (3, 1050), (4, 1000), (5, 1000)):
+                SettlePrice.objects.create(trade_date=mon + timedelta(days=wd), market=self.jeongeup, item=self.apple,
+                                           grade='ALL', avg_price=p, min_price=p, max_price=p, volume_kg=100)
+        # 다음 주 목요일은 휴장
+        MarketClosure.objects.create(market=self.jeongeup, closure_date=self.week + timedelta(days=3))
+
+    def test_market_in_question_keeps_only_that_market_and_picks_days(self):
+        self.complete.return_value = classify_json(intent='판매', queries=[], volume_kg=100)
+        self.stream.side_effect = stream_of('정읍에서 파세요.[근거 1]\n')
+        ev = sse(self.ask('정읍 시장에서만 팔 건데 며칠에 파는 게 좋을지 날짜 3개 알려줘 100kg',
+                          item_id=self.apple.item_id))
+        done = dict(ev)['done']
+        self.assertEqual([r['market_name'] for r in done['recommendation']['top']], ['정읍'])
+        prompt = self.stream.call_args.args[1][0]['content']
+        self.assertIn('정읍 시장 결과만', prompt)
+        self.assertIn('농가가 날짜를 물었음: 예', prompt)
+        self.assertNotIn('천안', prompt)
+        tue, mon = self.week + timedelta(days=1), self.week
+        self.assertIn(f'- 1. {tue.isoformat()}(화)', prompt)  # 화요일이 가장 높다
+        self.assertNotIn(f'{(self.week + timedelta(days=3)).isoformat()}(목)', prompt)  # 휴장일 제외
+        self.assertIn(f'{mon.isoformat()}(월)', prompt)  # 남은 날 중 가장 이른 날
+        self.assertNotIn('(일)', prompt)  # 거래 없는 요일 제외
+
+    def test_market_and_date_ask_from_earlier_question_are_used(self):
+        """"정읍에서만, 며칠에 팔까?" 다음 "100kg"만 답해도 정읍으로 거르고 날짜를 물은 것으로 본다"""
+        self.complete.return_value = classify_json(intent='판매', queries=[])
+        first = dict(sse(self.ask('사과 정읍에서만 팔 건데 며칠에 팔까', item_id=self.apple.item_id)))['done']
+        self.complete.return_value = classify_json(intent='판매', queries=[], volume_kg=100)
+        self.stream.side_effect = stream_of('정읍.[근거 1]\n')
+        done = dict(sse(self.ask('100kg', session_id=first['session_id'], item_id=self.apple.item_id)))['done']
+        self.assertEqual([r['market_name'] for r in done['recommendation']['top']], ['정읍'])
+        self.assertIn('농가가 날짜를 물었음: 예', self.stream.call_args.args[1][0]['content'])
+
+    def test_without_market_uses_top_market_and_says_when_no_history(self):
+        self.complete.return_value = classify_json(intent='판매', queries=[], volume_kg=100)
+        self.stream.side_effect = stream_of('천안.[근거 1]\n')
+        sse(self.ask('사과 100kg 어디서 팔까', item_id=self.apple.item_id))
+        prompt = self.stream.call_args.args[1][0]['content']
+        self.assertIn('1순위: 천안', prompt)
+        self.assertIn('[추천 날짜] 천안 시장. 농가가 날짜를 물었음: 아니오', prompt)
+        self.assertIn('날짜를 고르지 못했습니다', prompt)  # 천안 정산 기록 없음
 
 
 class ReviewerFollowupTests(ChatBase):

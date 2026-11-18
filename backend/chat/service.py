@@ -19,6 +19,7 @@ from django.core.cache import cache
 
 from chat import price_context
 from chat import prompts as P
+from chat import sale_days
 from codes.models import Item
 from rag import crops as crop_util
 from rag import guide_links as guide
@@ -201,17 +202,49 @@ def _final(text, evidence, disclaimer=True):
     return body, cited(text, evidence)
 
 
-def _sales_result_text(data, meta):
-    """추천 계산 응답 → LLM에 줄 짧은 표 (상위 5개). 숫자는 계산 결과 그대로."""
+def _market_results(results, market):
+    """질문에 시장이 있으면 그 시장 행만 남기고 순위를 다시 매긴다. 그 시장 예측이 없으면 (전체, 안내 문장)."""
+    if market is None:
+        return results, None
+    rows = [r for r in results if r['market_id'] == market.market_id]
+    if not rows:
+        return results, f'{market.name} 시장은 가격 예측 대상 시장이 아니라 전체 시장 순위를 보여 드립니다.'
+    return [{**r, 'rank': i} for i, r in enumerate(rows, 1)], f'{market.name} 시장 결과만 보여 드립니다.'
+
+
+def _user_texts(question, history):
+    """이번 질문 → 이전 사용자 질문(최근 것부터). "정읍에서 며칠에 팔까?" 다음 "100kg"처럼 앞 질문의 조건을 이어 쓴다."""
+    return [question] + [m['content'] for m in reversed(history[-HISTORY_TURNS:]) if m['role'] == 'user']
+
+
+def _question_market(question, history):
+    for text in _user_texts(question, history):
+        m = price_context.find_market(text)
+        if m:
+            return m
+    return None
+
+
+DATE_ASK_RE = re.compile(r'며칠|몇\s*일|날짜|무슨\s*요일|어느\s*요일')
+
+
+def _asks_date(question, history):
+    return any(DATE_ASK_RE.search(t) for t in _user_texts(question, history))
+
+
+def _sales_result_text(data, meta, results=None, notes=()):
+    """추천 계산 응답 → LLM에 줄 짧은 표 (상위 5개). 숫자는 계산 결과 그대로.
+    results: 시장으로 거른 행 (없으면 전체), notes: 표 앞에 붙일 안내 줄."""
     if not data['forecast_available']:
         rows = data.get('market_comparison') or []
         lines = [f"예측 대상이 아닌 품목이라 최근 정산일({meta.get('date')}) 시장별 평균 가격만 있습니다."]
         lines += [f"- {r.get('market_name')}: {r.get('avg_price')}원/kg" for r in rows[:5]]
         return '\n'.join(lines)
-    lines = [f"물량 {meta['volume_kg']}kg, 예측 기준 주 {meta['base_week']}, "
-             f"운송비 반영 {'예' if meta['costs']['transport_applied'] else '아니오(내 위치 미입력)'}"]
-    rows = data['results'][:5]
-    wanted = next((r for r in data['results'] if r.get('is_desired')), None)
+    results = data['results'] if results is None else results
+    lines = list(notes) + [f"물량 {meta['volume_kg']}kg, 예측 기준 주 {meta['base_week']}, "
+                           f"운송비 반영 {'예' if meta['costs']['transport_applied'] else '아니오(내 위치 미입력)'}"]
+    rows = results[:5]
+    wanted = next((r for r in results if r.get('is_desired')), None)
     if wanted and wanted not in rows:
         rows = rows + [wanted]  # 원하는 주의 가장 좋은 행은 순위가 낮아도 넣는다
     for r in rows:
@@ -344,17 +377,30 @@ def run(user, question, item, history, today, recommend, market=None):
             yield done(intent, msg, [], disclaimer=False)
             return
         yield 'status', {'step': 'answer', 'message': '추천 결과를 설명하는 중'}
+        results, notes, day_lines = data.get('results') or [], [], []
+        if data['forecast_available']:
+            results, note = _market_results(results, _question_market(question, history))
+            notes = [note] if note else []
+            # 날짜 추천: 예측은 주 단위라 1순위 시장의 요일 패턴으로 그 주 안의 날짜를 고른다
+            if results:
+                top = results[0]
+                same = [r for r in results if r['market_id'] == top['market_id']]
+                pattern = sale_days.weekday_pattern(sale_item, top['market_id'], today)
+                day_lines = sale_days.days_text(sale_item, top['market_name'], pattern,
+                                                sale_days.pick_days(same, pattern, today),
+                                                _asks_date(question, history))
+        result_text = '\n'.join([_sales_result_text(data, meta, results, notes)] + ([''] + day_lines if day_lines else []))
         evidence = [SALES_SOURCE]
         text = ''
         for kind, value in _stream_answer(P.SALES_SYSTEM, P.SALES_USER.format(
-                crop=sale_crop, question=question, result=_sales_result_text(data, meta)), evidence, usage, 1000):
+                crop=sale_crop, question=question, result=result_text), evidence, usage, 1000):
             if kind == 'answer':
                 text = value['text']
             else:
                 yield kind, value
         result = done(intent, text, None, evidence=evidence)
         result[1]['recommendation'] = {'item_id': sale_item.item_id, 'volume_kg': c['volume_kg'],
-                                       'top': (data.get('results') or [])[:3]}
+                                       'top': results[:3]}
         yield result
         return
 
