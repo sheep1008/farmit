@@ -8,6 +8,7 @@ import BaseButton from '@/components/common/BaseButton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useCurrentItemStore } from '@/stores/currentItem'
 import { CASE_TYPES, WEEKS, caseSeries, formatPct, nearHoliday } from '@/utils/alerts'
 
 // SCR-010 과거 사례 리포트 (REQ-HIS-001·002, docs/api.md 2.4 GET /api/cases). 로그인 없이 볼 수 있다.
@@ -18,10 +19,14 @@ import { CASE_TYPES, WEEKS, caseSeries, formatPct, nearHoliday } from '@/utils/a
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const currentItem = useCurrentItemStore()
 
 const items = ref([])
 const itemsError = ref('')
-const itemId = ref(Number(route.query.item_id) || auth.user?.interest_items?.[0]?.item_id || null)
+// 주소 → 다른 화면에서 고른 품목 → 첫 관심 품목 (목록을 기다리지 않고 바로 정한다)
+const itemId = ref(
+  Number(route.query.item_id) || currentItem.itemId || auth.user?.interest_items?.[0]?.item_id || null,
+)
 const type = ref(CASE_TYPES.some((t) => t.value === route.query.event_type) ? route.query.event_type : '')
 
 const cases = ref([])
@@ -83,6 +88,7 @@ watch(
 // 주소와 맞춘다 (새로고침·공유해도 같은 화면). replace: 종류를 바꿀 때마다 뒤로 가기 기록이 쌓이지 않게
 watch([itemId, type], ([i, t]) => {
   router.replace({ query: { ...(i ? { item_id: i } : {}), ...(t ? { event_type: t } : {}) } })
+  currentItem.set(i) // 다른 화면에서도 이어 보이게
   selectedKey.value = null
 })
 

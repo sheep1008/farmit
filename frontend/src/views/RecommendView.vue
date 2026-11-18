@@ -8,6 +8,7 @@ import BaseInput from '@/components/common/BaseInput.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useCurrentItemStore } from '@/stores/currentItem'
 import { chatPrefillRoute } from '@/utils/chat'
 import { todayKst } from '@/utils/dates'
 import {
@@ -36,6 +37,7 @@ import {
 const TOP = 10 // 처음에는 상위 10개만, "전체 보기"로 나머지 (사과는 32개 시장 × 4주 = 128행)
 const route = useRoute()
 const auth = useAuthStore()
+const currentItem = useCurrentItemStore()
 
 const items = ref([])
 const form = ref(null)
@@ -66,12 +68,8 @@ onMounted(async () => {
     formError.value = '품목 목록을 불러오지 못했습니다.'
     return
   }
-  // 처음 품목: ?item_id=(가격·대시보드에서 올 때) → 가격 예측 대상(사과) → 첫 품목
-  const pick =
-    items.value.find((it) => it.item_id === Number(route.query.item_id)) ??
-    items.value.find((it) => it.is_forecast) ??
-    items.value[0]
-  form.value = recommendForm(auth.user, pick?.item_id ?? null)
+  // 처음 품목: 주소(?item_id=) → 다른 화면에서 고른 품목 → 관심 품목 → 예측 대상 (stores/currentItem)
+  form.value = recommendForm(auth.user, currentItem.initial(items.value, route.query.item_id))
 })
 
 const selectedItem = computed(() => items.value.find((it) => it.item_id === form.value?.item_id) ?? null)
@@ -140,6 +138,11 @@ watch(
 )
 // 예측 대상이 아닌 품목을 고르면 "지금 팔면" 탭으로, 예측 대상을 고르면 주간 추천 탭으로
 watch(isForecast, (forecast) => (tab.value = forecast ? 'weekly' : 'now'))
+// 품목을 바꾸면 다른 화면에서도 이어 보이게 기억한다
+watch(
+  () => form.value?.item_id,
+  (id) => currentItem.set(id),
+)
 
 // ── 추천 근거 (REQ-REC-004·006, REQ-SAL-003) ───────────────
 // 추천 API에는 특수 상황·수확 시기가 아직 없어서(api.md 2.5, 결정 0009) 화면이 따로 불러온다.

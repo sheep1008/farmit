@@ -15,7 +15,8 @@ const router = createRouter({
       path: '/',
       name: 'dashboard', // SCR-003 (K20: 알림·특수 상황 카드, 예측 카드 자리)
       component: DashboardView,
-      meta: { title: '대시보드', requiresAuth: true },
+      // guestRedirect: 비회원이 첫 주소로 오면 안내 화면 대신 공개 화면(가격 통계)으로 (docs/screens.md 1절)
+      meta: { title: '대시보드', requiresAuth: true, guestRedirect: 'prices' },
     },
     { path: '/prices', name: 'prices', component: () => import('../views/PriceView.vue'), meta: { title: '가격' } }, // SCR-004
     {

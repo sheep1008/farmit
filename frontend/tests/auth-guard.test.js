@@ -19,6 +19,7 @@ function makeRouter() {
       { path: '/', name: 'home', component: Empty },
       { path: '/login', name: 'login', component: Empty },
       { path: '/mypage', name: 'mypage', component: Empty, meta: { requiresAuth: true } },
+      { path: '/dash', name: 'dash', component: Empty, meta: { requiresAuth: true, guestRedirect: 'login' } },
       { path: '/error/:kind', name: 'error', component: Empty },
     ],
   })
@@ -41,6 +42,22 @@ describe('로그인 상태 스토어 + 라우터 가드', () => {
     expect(router.currentRoute.value.name).toBe('error')
     expect(router.currentRoute.value.params.kind).toBe('login-required')
     expect(router.currentRoute.value.query.next).toBe('/mypage?tab=1') // 로그인 뒤 돌아올 주소(쿼리 포함)
+  })
+
+  it('비로그인이 guestRedirect가 있는 화면(첫 화면)에 오면 안내 대신 그 공개 화면으로 보낸다', async () => {
+    http.get.mockImplementation(async (url) => {
+      if (url === '/users/me') throw unauthorized()
+    })
+    const router = makeRouter()
+    await router.push('/dash')
+    expect(router.currentRoute.value.name).toBe('login')
+  })
+
+  it('로그인 상태면 guestRedirect가 있어도 그 화면에 들어간다', async () => {
+    http.get.mockImplementation(async (url) => (url === '/users/me' ? { data: { data: { username: 'farmer01' } } } : {}))
+    const router = makeRouter()
+    await router.push('/dash')
+    expect(router.currentRoute.value.name).toBe('dash')
   })
 
   it('로그인 상태면 회원 전용 화면에 들어간다', async () => {

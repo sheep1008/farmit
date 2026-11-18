@@ -27,6 +27,12 @@ const toast = useToastStore()
   gap: 8px;
   z-index: 1000;
 }
+/* 모바일에서는 하단 탭 바(60px) 위로 올린다 */
+@media (max-width: 767px) {
+  .toast-list {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}
 .toast {
   padding: 10px 16px;
   border-radius: var(--radius);

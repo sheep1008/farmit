@@ -9,6 +9,7 @@ import PriceCompareTable from '@/components/price/PriceCompareTable.vue'
 import PriceRealtimeCard from '@/components/price/PriceRealtimeCard.vue'
 import PriceTrendChart from '@/components/price/PriceTrendChart.vue'
 import { GRADES } from '@/constants/grades'
+import { useCurrentItemStore } from '@/stores/currentItem'
 import { addDays, addMonths, formatKstDateTime, periodsBetween, todayKst } from '@/utils/dates'
 
 // SCR-004 가격 통계 (REQ-PRC-001·002·005, docs/api.md 2.2·2.3).
@@ -35,6 +36,7 @@ const DAY_MAX_MONTHS = 12
 const items = ref([])
 const markets = ref([])
 const route = useRoute()
+const currentItem = useCurrentItemStore()
 const filters = ref({ itemId: null, marketId: '', unit: 'day', months: 3, grade: 'ALL' })
 
 const rows = ref([])
@@ -72,10 +74,9 @@ async function loadCodes() {
   const [itemRes, marketRes] = await Promise.all([http.get('/items'), http.get('/markets')])
   items.value = itemRes.data.data
   markets.value = marketRes.data.data
-  // 처음 고른 값: 품목은 ?item_id=(대시보드에서 올 때) → 가격 예측 대상(사과),
+  // 처음 고른 값: 품목은 지금 보는 품목 규칙(주소 → 다른 화면에서 고른 품목 → 관심 품목 → 예측 대상),
   // 시장은 ?market_id=(검색에서 올 때) → 참고 시장(가락)이 아닌 첫 수집 시장
-  const fromQuery = items.value.find((it) => it.item_id === Number(route.query.item_id))
-  filters.value.itemId = (fromQuery ?? items.value.find((it) => it.is_forecast) ?? items.value[0])?.item_id ?? null
+  filters.value.itemId = currentItem.initial(items.value, route.query.item_id)
   const marketFromQuery = markets.value.find((m) => m.market_id === route.query.market_id)
   filters.value.marketId =
     (marketFromQuery ?? markets.value.find((m) => !m.is_reference) ?? markets.value[0])?.market_id ?? ''
@@ -116,6 +117,11 @@ async function loadDaily() {
 
 // 선택이 바뀔 때마다 다시 조회 → 단위를 바꾸면 차트가 그 단위로 다시 그려진다 (REQ-PRC-002)
 watch(filters, loadDaily, { deep: true })
+// 품목을 바꾸면 다른 화면에서도 이어 보이게 기억한다
+watch(
+  () => filters.value.itemId,
+  (id) => currentItem.set(id),
+)
 
 onMounted(async () => {
   try {

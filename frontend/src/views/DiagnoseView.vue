@@ -1,10 +1,11 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import http from '@/api/http'
 import { diagnose } from '@/api/farming'
 import BaseButton from '@/components/common/BaseButton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import { useCurrentItemStore } from '@/stores/currentItem'
 import { chatPrefillRoute } from '@/utils/chat'
 import { SYMPTOM_MAX_LENGTH, candidateSources, diagnoseFollowUp } from '@/utils/farming'
 
@@ -14,6 +15,7 @@ import { SYMPTOM_MAX_LENGTH, candidateSources, diagnoseFollowUp } from '@/utils/
 
 const route = useRoute()
 const router = useRouter()
+const currentItem = useCurrentItemStore()
 const items = ref([])
 const itemId = ref(null)
 const symptom = ref('')
@@ -31,14 +33,14 @@ const itemGroups = computed(() => {
   return [...groups.entries()]
 })
 const canSubmit = computed(() => itemId.value && symptom.value.trim() && !sending.value)
+watch(itemId, (id) => currentItem.set(id)) // 다른 화면에서도 이어 보이게
 
 onMounted(async () => {
   try {
     const r = await http.get('/items')
     items.value = r.data.data
-    // 재배 정보 화면에서 오면 ?item_id=로 품목을 넘겨받는다
-    const fromQuery = items.value.find((it) => it.item_id === Number(route.query.item_id))
-    itemId.value = (fromQuery ?? items.value.find((it) => it.is_forecast) ?? items.value[0])?.item_id ?? null
+    // 주소(?item_id=, 재배 정보에서 올 때) → 다른 화면에서 고른 품목 → 관심 품목 → 예측 대상 (stores/currentItem)
+    itemId.value = currentItem.initial(items.value, route.query.item_id)
   } catch {
     formError.value = '품목 목록을 불러오지 못했습니다.'
   }
