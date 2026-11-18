@@ -96,3 +96,58 @@ export function recommendChatQuestion(itemName, volumeKg, top) {
   const won = Math.round(top.net_won).toLocaleString('ko-KR')
   return `${ask} 판매 추천 1위는${when} ${top.market_name}(예상 ${won}원)인데, 그 이유와 주의할 점이 궁금해요.`
 }
+
+// ── 4단계: 판매 판단 배치 (요약 카드·예측 차트·추천 한 줄) ─────────────────
+
+export const DEFAULT_VOLUME_KG = 10 // 처음 들어오면 이 물량으로 바로 계산해 보여 준다 (조건 바꾸기에서 바꾼다)
+
+const pctChange = (now, before) => (now != null && before ? (now / before - 1) * 100 : null)
+
+/**
+ * 한 시장의 주간 실제 가격(GET /api/prices/daily unit=week)과 예측(GET /api/forecasts) → 차트 계열.
+ * baseWeek(예측 기준 주 = horizon 1 대상 주)는 아직 끝나지 않은 주라 실제 값에서 뺀다.
+ * 예측·범위 선은 마지막 실제 주에서 이어 그린다. 반환 배열은 모두 periods와 길이가 같다 (없으면 null).
+ */
+export function forecastSeries(weekly, forecasts, marketId, baseWeek) {
+  const actualRows = weekly.filter((r) => r.period < baseWeek && r.avg_price != null)
+  const preds = forecasts.filter((r) => r.market_id === marketId).sort((a, b) => a.horizon - b.horizon)
+  const blanks = (n) => Array(n).fill(null)
+  const last = actualRows.at(-1)
+  // 마지막 실제 주를 예측 선의 시작점으로 (범위도 그 점에서 벌어진다)
+  const head = () => [...blanks(Math.max(actualRows.length - 1, 0)), ...(last ? [last.avg_price] : [])]
+  return {
+    periods: [...actualRows.map((r) => r.period), ...preds.map((r) => r.target_week)],
+    actual: [...actualRows.map((r) => r.avg_price), ...blanks(preds.length)],
+    pred: [...head(), ...preds.map((r) => r.pred_price)],
+    lower: [...head(), ...preds.map((r) => r.lower80)],
+    upper: [...head(), ...preds.map((r) => r.upper80)],
+    splitIndex: actualRows.length - 1, // 마지막 실제 주 (차트의 "지금" 선)
+  }
+}
+
+/**
+ * 요약 카드 세 개: 지난주 평균가(전주 대비) · 2주 후 예측가(범위) · 지난주 거래 물량(전주 대비).
+ * 실제 값은 끝난 주(baseWeek 전)만 쓴다. 값이 없으면 그 칸은 null.
+ */
+export function summaryCards(weekly, forecasts, marketId, baseWeek) {
+  const done = weekly.filter((r) => r.period < baseWeek && r.avg_price != null)
+  const [prev, last] = done.slice(-2).length === 2 ? done.slice(-2) : [null, done.at(-1) ?? null]
+  const h3 = forecasts.find((r) => r.market_id === marketId && r.horizon === 3) // horizon 3 = 2주 후
+  return {
+    lastWeek: last && { period: last.period, price: last.avg_price, changePct: pctChange(last.avg_price, prev?.avg_price) },
+    twoWeeks: h3 && { targetWeek: h3.target_week, price: h3.pred_price, lower: h3.lower80, upper: h3.upper80 },
+    volume: last && { period: last.period, kg: last.volume_kg, changePct: pctChange(last.volume_kg, prev?.volume_kg) },
+  }
+}
+
+/**
+ * 추천 한 줄: 예상 수령액 1위와, 그것이 이번 주 판매가 아니면 이번 주 최고안보다 얼마 더 남는지.
+ * rows는 POST /api/recommendations 의 results (rank 순). 없으면 null
+ */
+export function bestPick(rows) {
+  const top = rows[0]
+  if (!top) return null
+  const thisWeek = rows.filter((r) => r.horizon === 1).sort((a, b) => b.net_won - a.net_won)[0]
+  const gain = thisWeek && top.horizon !== 1 ? top.net_won - thisWeek.net_won : null
+  return { top, gain }
+}

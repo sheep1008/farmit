@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bestPick,
   closedText,
   desiredWeekOptions,
+  forecastSeries,
   harvestPeriods,
   holidayNotices,
   horizonLabel,
@@ -11,6 +13,7 @@ import {
   recommendChatQuestion,
   recommendForm,
   sellNowBody,
+  summaryCards,
   vsLastWeek,
   weekRange,
 } from '@/utils/recommend'
@@ -107,5 +110,58 @@ describe('"지금 팔면"·채팅', () => {
       '1위는 3주 후 청주(예상 316,988원)',
     )
     expect(recommendChatQuestion('배추', 30, { market_name: '천안', net_won: 1000 })).toContain('1위는 지금 천안(예상 1,000원)')
+  })
+})
+
+describe('판매 판단 배치 (요약 카드·예측 차트·추천 한 줄)', () => {
+  const weekly = [
+    { period: '2026-10-26', avg_price: 3000, volume_kg: 100 },
+    { period: '2026-11-02', avg_price: 3100, volume_kg: 120 },
+    { period: '2026-11-09', avg_price: 3300, volume_kg: 90 },
+    { period: '2026-11-16', avg_price: 3600, volume_kg: 10 }, // 아직 끝나지 않은 이번 주 → 빼야 한다
+  ]
+  const fc = (horizon, target_week, pred_price, market_id = '250001') => ({
+    market_id,
+    horizon,
+    target_week,
+    pred_price,
+    lower80: pred_price - 100,
+    upper80: pred_price + 100,
+  })
+  const forecasts = [
+    fc(2, '2026-11-23', 3400),
+    fc(1, '2026-11-16', 3350),
+    fc(3, '2026-11-30', 3450),
+    fc(4, '2026-12-07', 3500),
+    fc(1, '2026-11-16', 9999, '110001'), // 다른 시장
+  ]
+
+  it('차트: 이번 주 실제 값은 빼고, 예측 선은 마지막 실제 주에서 이어진다', () => {
+    const s = forecastSeries(weekly, forecasts, '250001', '2026-11-16')
+    expect(s.periods).toEqual(['2026-10-26', '2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23', '2026-11-30', '2026-12-07'])
+    expect(s.actual).toEqual([3000, 3100, 3300, null, null, null, null])
+    expect(s.pred).toEqual([null, null, 3300, 3350, 3400, 3450, 3500])
+    expect(s.lower[3]).toBe(3250)
+    expect(s.splitIndex).toBe(2)
+  })
+
+  it('요약 카드: 끝난 주 기준 전주 대비 변화와 2주 후(horizon 3) 예측', () => {
+    const c = summaryCards(weekly, forecasts, '250001', '2026-11-16')
+    expect(c.lastWeek.price).toBe(3300)
+    expect(c.lastWeek.changePct).toBeCloseTo(6.45, 1)
+    expect(c.volume.changePct).toBeCloseTo(-25, 5)
+    expect(c.twoWeeks).toMatchObject({ targetWeek: '2026-11-30', price: 3450, lower: 3350, upper: 3550 })
+    expect(summaryCards([], [], '250001', '2026-11-16')).toEqual({ lastWeek: null, twoWeeks: undefined, volume: null })
+  })
+
+  it('추천 한 줄: 1위가 이번 주가 아니면 이번 주 최고안보다 더 남는 돈', () => {
+    const rows = [
+      { horizon: 3, net_won: 28400 },
+      { horizon: 1, net_won: 27200 },
+      { horizon: 1, net_won: 26500 },
+    ]
+    expect(bestPick(rows).gain).toBe(1200)
+    expect(bestPick([{ horizon: 1, net_won: 100 }]).gain).toBeNull()
+    expect(bestPick([])).toBeNull()
   })
 })
