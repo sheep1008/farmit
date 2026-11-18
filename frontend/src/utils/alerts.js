@@ -4,7 +4,7 @@
 export const ALERT_TYPES = [
   { value: 'WARNING', label: '기상특보' },
   { value: 'IMPORT_SURGE', label: '수입량 급증' },
-  { value: 'PEST_INCREASE', label: '예찰 증가' },
+  { value: 'PEST_INCREASE', label: '병해충 증가' }, // 원래 용어는 '예찰 증가' (병해충 발생 조사)
   { value: 'GOV_NOTICE', label: '정부 발표' },
 ]
 
@@ -16,8 +16,11 @@ export const CASE_TYPES = [
   { value: 'HEAT_WAVE', label: '폭염' },
   { value: 'HEAVY_RAIN', label: '호우' },
   { value: 'IMPORT_SURGE', label: '수입량 급증' },
-  { value: 'PEST_INCREASE', label: '예찰 증가' },
+  { value: 'PEST_INCREASE', label: '병해충 증가' },
 ]
+
+// 사건 종류 이름. 서버 event_name('예찰 증가' 등) 대신 화면 이름으로 통일한다. 모르는 종류면 서버 이름 그대로
+export const caseTypeLabel = (type, fallback) => CASE_TYPES.find((t) => t.value === type)?.label ?? fallback ?? type
 
 // 기상특보 종류 → 과거 사례 종류. 과거 사례는 한파·폭염·호우만 계산하므로 나머지(태풍·대설 등)는 연결하지 않는다
 const WARNING_TO_CASE = { 한파: 'COLD_WAVE', 폭염: 'HEAT_WAVE', 호우: 'HEAVY_RAIN' }

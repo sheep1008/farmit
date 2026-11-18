@@ -3,12 +3,21 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { fetchAlert, fetchCases } from '@/api/alerts'
 import BaseButton from '@/components/common/BaseButton.vue'
+import InfoTip from '@/components/common/InfoTip.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useAlertStore } from '@/stores/alerts'
 import { useAuthStore } from '@/stores/auth'
 import { formatKstDateTime } from '@/utils/dates'
-import { WEEKS, alertDetailRows, alertTypeLabel, caseTypeForAlert, formatPct, regionText } from '@/utils/alerts'
+import {
+  WEEKS,
+  alertDetailRows,
+  alertTypeLabel,
+  caseTypeForAlert,
+  caseTypeLabel,
+  formatPct,
+  regionText,
+} from '@/utils/alerts'
 
 // SCR-009 알림 상세 (REQ-ALT-002·003, docs/api.md 2.4).
 // 내용 · 대응 체크리스트(사전 대비·사후 조치) · 출처 링크 · 관련 과거 사례 요약.
@@ -142,7 +151,7 @@ const chatQuestion = computed(() => (alert.value ? `"${alert.value.title}" 알�
         <h2>비슷했던 과거 사례 ({{ caseItem.name || '이 품목' }})</h2>
         <template v-if="caseSummary.events">
           <p>
-            과거 {{ caseSummary.event_name }} {{ caseSummary.events }}건 뒤 가격은 이렇게 움직였습니다 (시장 평균).
+            과거 {{ caseTypeLabel(caseSummary.event_type, caseSummary.event_name) }} {{ caseSummary.events }}건 뒤 가격은 이렇게 움직였습니다 (시장 평균).
           </p>
           <div class="table-wrap">
             <table>
@@ -158,7 +167,7 @@ const chatQuestion = computed(() => (alert.value ? `"${alert.value.title}" 알�
                   <td v-for="w in WEEKS" :key="w" class="num">{{ formatPct(caseSummary[`change_w${w}`]) }}</td>
                 </tr>
                 <tr class="muted">
-                  <th scope="row">평년 같은 주</th>
+                  <th scope="row">평년 같은 주<InfoTip term="normal" /></th>
                   <td v-for="w in WEEKS" :key="w" class="num">{{ formatPct(caseSummary[`normal_w${w}`]) }}</td>
                 </tr>
               </tbody>

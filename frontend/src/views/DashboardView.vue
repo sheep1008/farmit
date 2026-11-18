@@ -5,11 +5,12 @@ import { fetchAlerts, fetchCases } from '@/api/alerts'
 import { fetchMonthlyTasks } from '@/api/farming'
 import { fetchForecasts, fetchRealtimePrices } from '@/api/prices'
 import BaseButton from '@/components/common/BaseButton.vue'
+import InfoTip from '@/components/common/InfoTip.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useAlertStore } from '@/stores/alerts'
 import { useAuthStore } from '@/stores/auth'
 import { formatKstDateTime } from '@/utils/dates'
-import { CASE_TYPES, alertTypeLabel, formatPct, regionText } from '@/utils/alerts'
+import { CASE_TYPES, alertTypeLabel, caseTypeLabel, formatPct, regionText } from '@/utils/alerts'
 import { CHAT_MAX_LENGTH, chatPrefillRoute } from '@/utils/chat'
 import { formatWon, sortRealtimeRows, summarizeForecast, summarizeMonthly } from '@/utils/dashboard'
 import { realtimeStatusText } from '@/utils/realtime'
@@ -253,7 +254,7 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
             </li>
           </ul>
           <p class="notice">
-            원/kg 평균, 정산 전 값입니다.
+            원/kg 평균, 아직 확정 전 값입니다.<InfoTip term="confirmed" />
             <template v-if="collectedAt">마지막 수집 {{ formatKstDateTime(collectedAt) }}</template>
           </p>
         </template>
@@ -279,20 +280,22 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
         </p>
         <p v-else-if="forecast && !forecastSummary.top.length" class="state muted">이번 주 예측이 없습니다.</p>
         <template v-else-if="forecast">
-          <p class="sub muted">예측가가 높은 시장 (전체 {{ forecastSummary.marketCount }}곳)</p>
+          <p class="sub muted">
+            예측가가 높은 시장 (전체 {{ forecastSummary.marketCount }}곳)<InfoTip term="range80" />
+          </p>
           <ol class="rank">
             <li v-for="(r, i) in forecastSummary.top" :key="r.market_id">
               <span class="rank-no">{{ i + 1 }}</span>
               <span class="market">{{ r.market_name }}</span>
               <span class="num price">{{ formatWon(r.pred_price) }}</span>
-              <span class="range">80% 구간 {{ formatWon(r.lower80) }}~{{ formatWon(r.upper80) }}</span>
+              <span class="range">예상 범위 {{ formatWon(r.lower80) }}~{{ formatWon(r.upper80) }}</span>
               <span class="num change" :class="trendClass(r.change_pct)">{{ formatPct(r.change_pct) }}</span>
             </li>
           </ol>
           <p v-if="forecastSummary.holidayNotice" class="caution">{{ forecastSummary.holidayNotice }}</p>
           <p v-if="forecast.meta.is_stale" class="caution">이번 주 예측이 아직 갱신되지 않아 지난 예측을 보여 드립니다.</p>
           <p class="notice">
-            원/kg, 기준 주 {{ forecast.meta.base_week }}, 변화율은 지난주 대비. 예측은 참고용이며 실제 가격과 다를 수
+            원/kg, {{ forecast.meta.base_week }} 주 예측, 변화율은 지난주 대비. 예측은 참고용이며 실제 가격과 다를 수
             있습니다.
           </p>
         </template>
@@ -363,9 +366,9 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
       <!-- ⑤ 특수 상황 과거 사례 요약 -->
       <article class="card">
         <header class="card-head">
-          <h2>특수 상황 뒤 가격</h2>
+          <h2>날씨·사건 뒤 가격<InfoTip term="event" /></h2>
           <RouterLink v-if="item" :to="{ name: 'cases', query: { item_id: item.item_id } }" class="more">
-            과거 사례 ›
+            자세히 ›
           </RouterLink>
         </header>
         <p v-if="!item" class="state muted">관심 품목을 등록하면 보여 드립니다.</p>
@@ -381,14 +384,14 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
               <tr>
                 <th scope="col">사건</th>
                 <th scope="col" class="num">4주 뒤</th>
-                <th scope="col" class="num">평년</th>
+                <th scope="col" class="num">평년<InfoTip term="normal" /></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="s in caseRows" :key="s.event_type">
                 <th scope="row">
                   <RouterLink :to="{ name: 'cases', query: { item_id: item.item_id, event_type: s.event_type } }">
-                    {{ s.event_name }} <span class="muted">{{ s.events }}건</span>
+                    {{ caseTypeLabel(s.event_type, s.event_name) }} <span class="muted">{{ s.events }}건</span>
                   </RouterLink>
                 </th>
                 <td class="num change" :class="trendClass(s.change_w4)">{{ formatPct(s.change_w4) }}</td>

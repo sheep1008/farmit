@@ -5,6 +5,7 @@ import http from '@/api/http'
 import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
+import InfoTip from '@/components/common/InfoTip.vue'
 import PriceCompareTable from '@/components/price/PriceCompareTable.vue'
 import PriceRealtimeCard from '@/components/price/PriceRealtimeCard.vue'
 import PriceTrendChart from '@/components/price/PriceTrendChart.vue'
@@ -204,7 +205,7 @@ const lastUpdated = computed(() => formatKstDateTime(meta.value?.last_updated))
 
     <div class="card">
       <div class="card-head">
-        <h2>가격 추이 <small>(원/kg, 정산 확정)</small></h2>
+        <h2>가격 추이 <small>(원/kg, 확정 가격)</small><InfoTip term="confirmed" /></h2>
         <p class="sub">
           {{ range.from }} ~ {{ range.to }}
           <template v-if="lastUpdated"> · 마지막 수집 {{ lastUpdated }}</template>
