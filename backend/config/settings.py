@@ -150,7 +150,16 @@ REST_FRAMEWORK = {
 
 # ── RAG·LLM (Y12) ──────────────────────────────────────────────
 # LLM 호출은 rag/llm.py 한 곳에서 한다. 모델은 설정값으로만 바꾼다 (REQ-NFR-011)
-LLM_MODEL = os.environ.get('LLM_MODEL', 'claude-haiku-5-5')
+LLM_MODEL = os.environ.get('LLM_MODEL') or 'claude-haiku-5-5'  # .env에 빈 값으로 있어도 기본값
+# 호출 경로: GMS_KEY(SSAFY GMS 프록시 키)가 있으면 GMS로, 없으면 ANTHROPIC_API_KEY로 Anthropic을 직접 부른다.
+# 모델 이름이 gpt-·o1·o3·o4·gemini-로 시작하면 GMS의 OpenAI·Gemini 주소로 부른다 (GMS_KEY 필요, rag/llm.py)
+GMS_KEY = os.environ.get('GMS_KEY') or None
+GMS_ROOT = 'https://gms.ssafy.io/gmsapi'
+GMS_BASE_URL = f'{GMS_ROOT}/api.anthropic.com'   # SDK가 뒤에 /v1/messages를 붙인다
+GMS_OPENAI_URL = f'{GMS_ROOT}/api.openai.com/v1/chat/completions'
+GMS_GEMINI_URL = f'{GMS_ROOT}/generativelanguage.googleapis.com/v1beta/models'
+LLM_API_KEY = GMS_KEY or os.environ.get('ANTHROPIC_API_KEY') or None
+LLM_BASE_URL = GMS_BASE_URL if GMS_KEY else None   # None = Anthropic 기본 주소
 LLM_DAILY_LIMIT = int(os.environ.get('LLM_DAILY_LIMIT', '20'))  # 회원별 하루 질문 수 (REQ-NFR-008)
 # 채팅은 사람이 기다리므로 짧게. 재시도 1번까지 최악 약 60초 (rag/llm.py)
 LLM_TIMEOUT_SECONDS = float(os.environ.get('LLM_TIMEOUT_SECONDS', '30'))
