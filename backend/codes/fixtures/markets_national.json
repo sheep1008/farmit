@@ -161,8 +161,8 @@
     "fields": {
       "name": "원주",
       "sido": "강원특별자치도",
-      "lat": "37.352760",
-      "lng": "127.922770",
+      "lat": "37.354938",
+      "lng": "127.923311",
       "is_collect": false,
       "is_reference": false
     }
@@ -173,8 +173,8 @@
     "fields": {
       "name": "강릉",
       "sido": "강원특별자치도",
-      "lat": "37.737580",
-      "lng": "128.916780",
+      "lat": "37.737938",
+      "lng": "128.917986",
       "is_collect": false,
       "is_reference": false
     }
@@ -197,8 +197,8 @@
     "fields": {
       "name": "전주",
       "sido": "전북특별자치도",
-      "lat": "35.869850",
-      "lng": "127.115870",
+      "lat": "35.868149",
+      "lng": "127.117422",
       "is_collect": false,
       "is_reference": false
     }
@@ -209,8 +209,8 @@
     "fields": {
       "name": "익산",
       "sido": "전북특별자치도",
-      "lat": "35.919470",
-      "lng": "126.920830",
+      "lat": "35.919190",
+      "lng": "126.918867",
       "is_collect": false,
       "is_reference": false
     }
@@ -221,8 +221,8 @@
     "fields": {
       "name": "정읍",
       "sido": "전북특별자치도",
-      "lat": "35.586560",
-      "lng": "126.844540",
+      "lat": "35.587621",
+      "lng": "126.845781",
       "is_collect": false,
       "is_reference": false
     }
@@ -233,8 +233,8 @@
     "fields": {
       "name": "순천",
       "sido": "전라남도",
-      "lat": "34.916150",
-      "lng": "127.538980",
+      "lat": "34.916794",
+      "lng": "127.537562",
       "is_collect": false,
       "is_reference": false
     }
@@ -257,8 +257,8 @@
     "fields": {
       "name": "안동",
       "sido": "경상북도",
-      "lat": "36.592730",
-      "lng": "128.621940",
+      "lat": "36.589769",
+      "lng": "128.608599",
       "is_collect": false,
       "is_reference": false
     }
