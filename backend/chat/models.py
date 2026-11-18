@@ -15,7 +15,7 @@ class ChatSession(models.Model):
 
 class ChatMessage(models.Model):
     ROLE_CHOICES = [('user', '사용자'), ('assistant', '상담')]
-    INTENT_CHOICES = [('판매', '판매'), ('병해충', '병해충'), ('날씨재해', '날씨재해'), ('재배', '재배'),
+    INTENT_CHOICES = [('판매', '판매'), ('시세', '시세'), ('병해충', '병해충'), ('날씨재해', '날씨재해'), ('재배', '재배'),
                       ('범위밖', '범위밖')]
 
     session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='messages')

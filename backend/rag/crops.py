@@ -10,6 +10,8 @@ from pathlib import Path
 _PATH = Path(__file__).with_name('crop_names.json')
 # 한 글자 작물 이름(배·무·파·감·밤·콩·팥·갓…) 뒤에 와도 되는 조사
 _PARTICLES = '은는이가을를의에도와과로만나랑'
+# '팔다'의 활용: 파는 게·파는 것·파는 곳·파는 데·파는 시기·파면·파려면·파려고. "파는 언제 심어?"(작물 파 + 조사)는 남긴다
+_SELL_VERB_RE = re.compile(r'파는\s*(게|것|거|곳|데|시장|시기|때|날|편|지)|파(면|려면|려고|니까)(?=[\s?.!,]|$)')
 
 
 @lru_cache(maxsize=1)
@@ -47,7 +49,8 @@ def find_crops(text, known_names):
     found = []
     varieties = _table()['varieties']
     candidates = sorted(set(known_names) | set(varieties), key=len, reverse=True)
-    rest = text
+    # "어디서 파는 게", "언제 파면" 같은 '팔다'의 활용을 작물 '파'로 잡지 않게 먼저 지운다
+    rest = _SELL_VERB_RE.sub(' ', text)
     for name in candidates:
         if _mentions(rest, name):
             crop = varieties.get(name, name)

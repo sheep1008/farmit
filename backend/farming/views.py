@@ -14,7 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import SimpleRateThrottle
 
 from api.responses import error, ok
-from chat.limits import seconds_to_midnight, used_today
+from chat.limits import over_limit, remaining_today, seconds_to_midnight
 from chat.models import ChatMessage, ChatSession
 from codes.models import Item
 from farming import diagnose as diag
@@ -185,7 +185,7 @@ def diagnose_view(request):
     user = request.user
     with transaction.atomic():
         get_user_model().objects.select_for_update().filter(pk=user.pk).first()   # 동시 요청이 한도를 함께 넘지 않게
-        if used_today(user) >= settings.LLM_DAILY_LIMIT:
+        if over_limit(user):
             wait = seconds_to_midnight()
             res = error(429, 'CHAT_DAILY_LIMIT', f'오늘 질문 {settings.LLM_DAILY_LIMIT}회를 모두 썼습니다. 내일 다시 이용해 주세요.',
                         {'retry_after_seconds': wait})
@@ -211,11 +211,11 @@ def diagnose_view(request):
     if not usage:           # 근거가 없어 LLM을 부르지 않았다: 한도를 쓰지 않는다
         session.delete()
         return ok({'item': _item_data(item), 'symptom': symptom, **result},
-                  {'remaining_today': max(0, settings.LLM_DAILY_LIMIT - used_today(user))})
+                  {'remaining_today': remaining_today(user)})
     names = ', '.join(c['name'] for c in result['candidates']) or '후보 없음'
     ChatMessage.objects.create(
         session=session, role='assistant', content=f'[증상 진단 후보] {names}', intent='병해충',
         sources=result['sources'], input_tokens=sum(r.input_tokens + r.cache_read_tokens + r.cache_write_tokens for r in usage),
         output_tokens=sum(r.output_tokens for r in usage), latency_ms=sum(r.latency_ms for r in usage))
-    remaining = max(0, settings.LLM_DAILY_LIMIT - used_today(user))
+    remaining = remaining_today(user)
     return ok({'item': _item_data(item), 'symptom': symptom, **result}, {'remaining_today': remaining})

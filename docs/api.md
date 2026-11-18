@@ -287,7 +287,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 }
 ```
 - 앱 시작 시 호출해서 `200`이면 로그인 상태, `401`이면 비로그인으로 판단한다.
-- `chat_remaining_today`: 오늘(한국 시간) 남은 채팅 질문 수 = 하루 한도(20) − 오늘 보낸 질문 수 (REQ-NFR-008).
+- `chat_remaining_today`: 오늘(한국 시간) 남은 채팅 질문 수 = 하루 한도(20) − 오늘 보낸 질문 수 (REQ-NFR-008). 관리자(Django `is_staff`, 테스트·시연용)는 한도가 없어 `null`이고, 채팅 SSE의 `remaining_today`·증상 진단의 `meta.remaining_today`도 `null`이다.
 
 ---
 
@@ -753,12 +753,12 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 ### 2.7 채팅 (회원 전용)
 
-세 API 모두 로그인 필요(`401 NOT_AUTHENTICATED`). 남의 대화는 `404 NOT_FOUND`. 역할(`intent`)은 `판매`·`병해충`·`날씨재해`·`재배`·`범위밖` 중 하나이고, 화면에는 `intent_label`(예: "병해충 상담")을 보여 준다.
+세 API 모두 로그인 필요(`401 NOT_AUTHENTICATED`). 남의 대화는 `404 NOT_FOUND`. 역할(`intent`)은 `판매`·`시세`·`병해충`·`날씨재해`·`재배`·`범위밖` 중 하나이고, 화면에는 `intent_label`(예: "병해충 상담")을 보여 준다.
 
 #### `POST /api/chat/messages` — 질문 보내기 (SSE 스트리밍)
 | 인증 | 화면 | REQ |
 |---|---|---|
-| 회원 (CSRF 필요) | SCR-011 | REQ-CHT-001~005, REQ-NFR-002, 008 |
+| 회원 (CSRF 필요) | SCR-011, SCR-005(판매 상담 패널) | REQ-CHT-001~005, 009, REQ-NFR-002, 008 |
 
 **요청**
 ```json
@@ -769,18 +769,19 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | `message` | O | 질문 1~1000자 |
 | `item_id` | X | 선택 품목. 있으면 그 작물 자료만 근거로 쓰고, 다른 작물을 물으면 품목 변경을 안내한다 |
 | `session_id` | X | 이어서 묻는 대화. 없으면 새 대화를 만든다 (제목 = 질문 앞 40자) |
+| `market_id` | X | 화면에서 보던 시장 (판매 추천 화면의 차트 시장). 시세 상담에서 질문에 시장 이름이 없으면 이 시장 기준으로 설명하고, 둘 다 없으면 전국 합계로 본다 |
 
-**요청 단계 오류 (스트림을 열기 전, 일반 JSON 오류)**: `400 VALIDATION_ERROR`, `401`, `403 CSRF_FAILED`, `404 NOT_FOUND`(없는·남의 대화, 없는 품목), `429 CHAT_DAILY_LIMIT`(오늘 질문 20회 사용, `details.retry_after_seconds` = 한국 시간 자정까지 초, `Retry-After` 헤더)
+**요청 단계 오류 (스트림을 열기 전, 일반 JSON 오류)**: `400 VALIDATION_ERROR`, `401`, `403 CSRF_FAILED`, `404 NOT_FOUND`(없는·남의 대화, 없는 품목, 없는 시장), `429 CHAT_DAILY_LIMIT`(오늘 질문 20회 사용, `details.retry_after_seconds` = 한국 시간 자정까지 초, `Retry-After` 헤더)
 
 **200** `Content-Type: text/event-stream`. 이벤트는 `event: 이름` + `data: JSON` 한 쌍씩 온다. 순서:
-- 보통: `session` → `status`(classify) → `intent` → `status`(search·recommend·answer, 0개 이상) → `delta`(1개 이상) → `sources` → `done`
+- 보통: `session` → `status`(classify) → `intent` → `status`(search·recommend·price·answer, 0개 이상) → `delta`(1개 이상) → `sources` → `done`
 - 규칙 안내(범위 밖·다른 품목)와 캐시 답: `session` → `intent` → `delta` → `sources` → `done` (`status` 없음)
 - 실패: 어느 시점에서든 `error`로 끝난다 (`done` 없음)
 
 | 이벤트 | data | 설명 |
 |---|---|---|
 | `session` | `{"session_id": 3, "remaining_today": 17}` | 질문을 저장한 직후 바로 온다. 남은 질문 수는 이번 질문을 뺀 값 |
-| `status` (0번 이상) | `{"step": "classify"\|"search"\|"recommend"\|"answer", "message": "농촌진흥청 자료를 찾는 중"}` | 진행 상태 (REQ-CHT-006) |
+| `status` (0번 이상) | `{"step": "classify"\|"search"\|"recommend"\|"price"\|"answer", "message": "농촌진흥청 자료를 찾는 중"}` | 진행 상태 (REQ-CHT-006) |
 | `intent` | `{"intent": "병해충", "intent_label": "병해충 상담"}` | 판단된 역할 (REQ-CHT-001) |
 | `delta` (1번 이상) | `{"text": "..."}` | 답변 조각. 줄 단위로 약제 사용량 치환·없는 근거 번호 제거를 마친 뒤 보낸다 |
 | `sources` | `{"sources": [{"n": 1, "title": "사과 탄저병 (병)", "source_label": "농촌진흥청 ...", "url": "", "source_type": "ncpms_pest"}]}` | 답변에 **인용된** 근거만 (REQ-CHT-003). 안내 문구는 `[]` |
@@ -798,6 +799,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 }
 ```
 - `recommendation`은 판매 상담에서 추천을 계산했을 때만 있다 (`top` = `/api/recommendations` 결과 상위 3행).
+- **시세 상담** (REQ-CHT-009): "9월 14일 주에 왜 비쌌어?"처럼 지난 가격 변동을 물으면, 물은 주(질문에 연도가 없으면 올해·오늘 이전) 앞 4주~뒤 3주 주간 가격·물량, 1년 전 같은 주, 앞뒤 21일 안의 명절, 6주 전부터의 주산지 사건(`past_case`), 그해·전년 생산량을 DB에서 모아 근거로 주고 LLM이 설명만 한다. 출처의 `source_type`은 `price_fact`, `source_label`은 "팜잇 (aT 정산가격)". 그 주 거래가 없으면 LLM 없이 안내한다. 같은 질문 캐시는 쓰지 않는다 (데이터가 매일 바뀐다).
 - `guide_links`는 병해충·날씨재해·재배 답변(자료로 답한 경우)에만 있다 (REQ-CHT-007). 농업기술길잡이의 관련 장·쪽 링크 최대 2개이고, 길잡이가 없는 작물이면 `[]`. 화면은 답변 아래에 `title`(`p.page`)을 `url`로 연결하고 `license`를 출처로 보여 준다. 판매·범위 밖 답변과 대화 기록(`GET /api/chat/sessions/{id}`)에는 없다.
 - `cached: true`면 같은 품목·같은 질문(새 대화의 첫 질문)의 저장된 답이다 (하루 보관, REQ-NFR-002).
 

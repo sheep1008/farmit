@@ -8,11 +8,13 @@ import { CHAT_MAX_LENGTH, applyChatEvent, failReply, newReply, splitCitations } 
 
 // 화면 옆 채팅 패널 (SCR-005 판매 상담, REQ-CHT-001~006, docs/api.md 2.7).
 // 채팅 화면(SCR-011)과 같은 POST /api/chat/messages SSE를 쓴다. 품목은 지금 보는 품목으로 고정하고,
-// 이전 대화 목록은 없다(전체 대화는 채팅 화면에서). 질문 1번 = 하루 한도 1회.
+// 이전 대화 목록은 없다(전체 대화는 채팅 화면에서). 지금 차트에서 보는 시장도 같이 보낸다(시세 상담 기준 시장). 질문 1번 = 하루 한도 1회.
 // 추천 질문 버튼은 질문 칸만 채운다. 보내기는 사용자가 누른다 (다른 화면의 "채팅으로 물어보기"와 같은 규칙).
 const props = defineProps({
   itemId: { type: Number, default: null },
   itemName: { type: String, default: '' },
+  // 화면에서 보던 시장 (시세 질문 "이 주에 왜 비쌌어?"의 기준 시장). 없으면 서버가 전국 합계로 본다
+  marketId: { type: String, default: '' },
   // 추천 질문 [{ label, question }]
   suggestions: { type: Array, default: () => [] },
 })
@@ -58,6 +60,7 @@ async function send() {
   const body = { message: text }
   if (sessionId.value) body.session_id = sessionId.value
   if (props.itemId) body.item_id = props.itemId
+  if (props.marketId) body.market_id = props.marketId
 
   messages.value.push({ role: 'user', content: text })
   messages.value.push(newReply())
@@ -129,7 +132,7 @@ function onKeydown(e) {
 
     <div ref="log" class="log" aria-live="polite">
       <p v-if="!messages.length" class="intro">
-        {{ itemName ? `${itemName}을(를)` : '작물을' }} 언제, 어디에 팔지 물어보세요. 아래 버튼을 누르면 질문 칸이 채워집니다.
+        {{ itemName || '작물' }} 판매 시기·시장이나 지난 가격이 왜 움직였는지 물어보세요. 아래 버튼을 누르면 질문 칸이 채워집니다.
       </p>
       <template v-for="(m, i) in messages" :key="i">
         <div v-if="m.role === 'user'" class="bubble user">{{ m.content }}</div>

@@ -115,7 +115,9 @@ async function withdraw() {
           </div>
           <div>
             <dt>오늘 남은 채팅</dt>
-            <dd>{{ auth.user.chat_remaining_today }} / {{ CHAT_DAILY_LIMIT }}회</dd>
+            <!-- 관리자는 한도가 없어 null (api.md 2.1) -->
+            <dd v-if="auth.user.chat_remaining_today == null">한도 없음 (관리자)</dd>
+            <dd v-else>{{ auth.user.chat_remaining_today }} / {{ CHAT_DAILY_LIMIT }}회</dd>
           </div>
         </dl>
         <BaseButton @click="logout">로그아웃</BaseButton>

@@ -1,7 +1,9 @@
 """채팅 답변 흐름 (Y13, REQ-CHT-001~005).
 
 질문 1건: 다른 품목·범위 밖 규칙 검사(LLM 없음) → 역할 판단(LLM 1번) → 범위 밖이면 안내(답변 LLM 없음)
-→ 판매: 품목·물량을 되묻거나 판매 추천 계산 결과를 설명 / 그 밖: RAG 검색 → 답변 스트리밍
+→ 판매: 품목·물량을 되묻거나 판매 추천 계산 결과를 설명
+→ 시세: 물은 주 앞뒤 가격·물량, 1년 전, 명절, 주산지 사건, 생산량을 DB에서 모아 설명 (chat/price_context.py)
+→ 그 밖: RAG 검색 → 답변 스트리밍
 → 줄마다 약제 사용량 치환·근거 목록에 없는 번호 제거 → 인용된 근거만 출처로 → 면책 문구.
 
 run()은 (이벤트 이름, dict)를 차례로 내는 제너레이터다. 뷰가 SSE로 바꿔 보낸다. DB 저장은 뷰가 한다.
@@ -15,6 +17,7 @@ from datetime import date, timedelta
 
 from django.core.cache import cache
 
+from chat import price_context
 from chat import prompts as P
 from codes.models import Item
 from rag import crops as crop_util
@@ -99,7 +102,8 @@ def classify(question, crop, history, today, usage):
     except ValueError:
         pass
     return {'intent': intent, 'crop': data.get('crop') if isinstance(data.get('crop'), str) else None,
-            'queries': queries, 'volume_kg': volume, 'desired_date': desired}
+            'queries': queries, 'volume_kg': volume, 'desired_date': desired,
+            'target_date': price_context.parse_target(data.get('target_date'), today, question) if data.get('target_date') else None}
 
 
 class LineFilter:
@@ -239,8 +243,8 @@ def find_item(crop):
     return None
 
 
-def run(user, question, item, history, today, recommend):
-    """질문 1건 처리. 이벤트: status, intent, delta, sources, final(본문·출처·역할·사용량·캐시 여부)
+def run(user, question, item, history, today, recommend, market=None):
+    """질문 1건 처리. market: 화면에서 보던 시장(시세 상담에서 질문에 시장이 없을 때 쓴다). 이벤트: status, intent, delta, sources, final(본문·출처·역할·사용량·캐시 여부)
 
     recommend(user, item, volume_kg, desired_date) → (status, data, meta): prices의 판매 추천 계산.
     """
@@ -290,7 +294,35 @@ def run(user, question, item, history, today, recommend):
         yield done(intent, msg, [], disclaimer=False)
         return
 
-    # 4) 판매 상담 (REQ-CHT-002)
+    # 4) 시세 상담: 지난 가격 변동 원인 (REQ-CHT-009). 숫자는 DB에서 계산하고 LLM은 설명만 한다
+    if intent == '시세':
+        price_item = item or find_item(q_crop or c['crop'])
+        if price_item is None:
+            msg = P.UNKNOWN_CROP.format(crop_eun=P.josa(c['crop'], '은', '는')) if c['crop'] else P.ASK_PRICE_CROP
+            yield 'delta', {'text': msg}
+            yield done(intent, msg, [], disclaimer=False)
+            return
+        target = c['target_date'] or price_context.default_target(today)
+        yield 'status', {'step': 'price', 'message': '그 무렵 가격·물량·날씨 기록을 살펴보는 중'}
+        evidence = price_context.build(price_item, target, question, today, market)
+        if not evidence:
+            msg = P.NO_PRICE_DATA.format(crop=price_item.name, week=price_context.monday(target).isoformat())
+            yield 'delta', {'text': msg}
+            yield done(intent, msg, [], disclaimer=False)
+            return
+        yield 'status', {'step': 'answer', 'message': f'근거 {len(evidence)}건으로 설명을 쓰는 중'}
+        text = ''
+        for kind, value in _stream_answer(P.PRICE_SYSTEM, P.PRICE_USER.format(
+                crop=price_item.name, question=question, evidence=retrieve.format_evidence(evidence)),
+                evidence, usage, 1000):
+            if kind == 'answer':
+                text = value['text']
+            else:
+                yield kind, value
+        yield done(intent, text, None, evidence=evidence)
+        return
+
+    # 5) 판매 상담 (REQ-CHT-002)
     if intent == '판매':
         sale_item = item or find_item(q_crop or c['crop'])
         if sale_item is None:
@@ -326,7 +358,7 @@ def run(user, question, item, history, today, recommend):
         yield result
         return
 
-    # 5) RAG 답변 (병해충·날씨재해·재배)
+    # 6) RAG 답변 (병해충·날씨재해·재배)
     yield 'status', {'step': 'search', 'message': '농촌진흥청 자료를 찾는 중'}
     evidence = retrieve.search(question, crop=q_crop, queries=c['queries'], size=EVIDENCE_SIZE)
     if not evidence:

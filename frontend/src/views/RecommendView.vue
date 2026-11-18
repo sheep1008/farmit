@@ -297,6 +297,7 @@ const chatSuggestions = computed(() => {
   const top = tab.value === 'weekly' ? rows.value[0] : nowRows.value[0]
   const list = [{ label: '추천 이유', question: recommendChatQuestion(name, form.value.volume_kg || DEFAULT_VOLUME_KG, top) }]
   if (isForecast.value) list.push({ label: '예측 근거', question: `${name} 가격 예측은 무엇을 근거로 했나요? 앞으로 오를까요?` })
+  list.push({ label: '가격 변동 이유', question: `지난주 ${name} 가격은 왜 이렇게 움직였나요?` })
   list.push({ label: '보관 요령', question: `${name}을(를) 2~3주 보관했다가 팔 때 주의할 점을 알려 주세요.` })
   return list
 })
@@ -711,7 +712,13 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
         </div>
       </div>
 
-      <ChatPanel class="side" :item-id="form.item_id" :item-name="selectedItem?.name ?? ''" :suggestions="chatSuggestions" />
+      <ChatPanel
+        class="side"
+        :item-id="form.item_id"
+        :item-name="selectedItem?.name ?? ''"
+        :market-id="chartMarketId"
+        :suggestions="chatSuggestions"
+      />
     </div>
   </section>
 </template>

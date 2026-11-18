@@ -211,6 +211,19 @@ class LimitAndAuthTests(ChatBase):
         self.assertIn('Retry-After', res)
         self.complete.assert_not_called()
 
+    def test_staff_has_no_daily_limit(self):
+        """관리자(is_staff)는 20번을 넘겨도 묻을 수 있고, 남은 횟수는 null"""
+        self.user.is_staff = True
+        self.user.save()
+        s = ChatSession.objects.create(user=self.user, title='t')
+        ChatMessage.objects.bulk_create([ChatMessage(session=s, role='user', content='q') for _ in range(20)])
+        self.complete.return_value = classify_json()
+        self.stream.side_effect = stream_of('탄저병일 수 있습니다.[근거 1]\n')
+        ev = sse(self.ask('사과 반점'))
+        self.assertIsNone(dict(ev)['session']['remaining_today'])
+        self.assertIsNone(dict(ev)['done']['remaining_today'])
+        self.assertIsNone(self.client.get('/api/users/me').json()['data']['chat_remaining_today'])
+
     def test_yesterday_questions_do_not_count(self):
         s = ChatSession.objects.create(user=self.user, title='t')
         ChatMessage.objects.bulk_create([ChatMessage(session=s, role='user', content='q') for _ in range(20)])
@@ -469,3 +482,133 @@ class GuideLinkFlowTests(ChatBase):
             done = dict(sse(self.ask('사과 늦서리가 걱정돼요', item_id=self.apple.item_id)))['done']
         self.assertEqual([l['title'] for l in done['guide_links']], ['늦서리'])
         self.assertLessEqual(len(done['guide_links']), 2)
+
+
+class PriceFlowTests(ChatBase):
+    """REQ-CHT-009: "9월 14일 주에 왜 가격이 높았어?" → 그 무렵 가격·물량·명절·사건을 근거로 설명"""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from datetime import date
+        from decimal import Decimal
+
+        from alerts.models import PastCase
+        from codes.models import Holiday, Market
+        from prices.models import SettlePrice
+        cls.m1 = Market.objects.create(market_id='250001', name='대전오정', sido='대전', lat=36, lng=127, is_collect=True)
+        cls.m2 = Market.objects.create(market_id='350201', name='정읍', sido='전북', lat=35, lng=126)
+        # 8/17 주 ~ 9/28 주 월요일 거래. 9/14 주가 가격·물량 최고
+        weeks = {'2026-08-17': (4200, 5000), '2026-08-24': (4100, 6000), '2026-08-31': (4250, 7000),
+                 '2026-09-07': (4300, 9000), '2026-09-14': (4600, 12000), '2026-09-21': (3800, 3000),
+                 '2025-09-15': (4000, 10000)}
+        for d, (p, v) in weeks.items():
+            for m in (cls.m1, cls.m2):
+                SettlePrice.objects.create(trade_date=date.fromisoformat(d), market=m, item=cls.apple, grade='ALL',
+                                           avg_price=Decimal(p), min_price=Decimal(p), max_price=Decimal(p),
+                                           volume_kg=Decimal(v))
+        for d in ('2026-09-24', '2026-09-25', '2026-09-26'):
+            Holiday.objects.create(holiday_date=date.fromisoformat(d), name='추석')
+        for m in (cls.m1, cls.m2):  # 같은 사건이 시장마다 들어 있다 → 근거에는 한 번만
+            PastCase.objects.create(item=cls.apple, market=m, event_type='HEAT_WAVE', sido='경상북도',
+                                    event_start=date(2026, 8, 22), event_end=date(2026, 8, 27),
+                                    base_week=date(2026, 8, 17), base_price=Decimal(4200),
+                                    detail={'share': 38.3, 'places': ['경상북도 안동시']}, computed_at=timezone.now())
+
+    def test_build_collects_prices_holiday_and_events(self):
+        from datetime import date
+
+        from chat import price_context
+        ev = price_context.build(self.apple, date(2026, 9, 16), '9월 14일 주에 왜 비쌌어?', date(2026, 11, 18))
+        titles = [e['title'] for e in ev]
+        self.assertIn('전국 공영도매시장 합계', titles[0])
+        text = ev[0]['text']
+        self.assertIn('2026-09-14 주: 4,600원/kg, 거래 물량 24.0톤 ← 물은 주', text)
+        self.assertIn('가장 높았습니다', text)
+        self.assertIn('거래 물량도 앞뒤', text)
+        self.assertTrue(any('1년 전' in t for t in titles))
+        hol = next(e for e in ev if e['title'] == '가까운 명절')
+        self.assertIn('추석 연휴: 2026-09-24 ~ 2026-09-26 (물은 주 월요일로부터 10일 뒤)', hol['text'])
+        events = next(e for e in ev if '사건' in e['title'])
+        self.assertEqual(events['text'].count('폭염'), 1)
+        self.assertEqual([e['n'] for e in ev], list(range(1, len(ev) + 1)))
+
+    def test_market_name_in_question_uses_that_market(self):
+        from datetime import date
+
+        from chat import price_context
+        ev = price_context.build(self.apple, date(2026, 9, 14), '정읍 9월 14일 주 가격', date(2026, 11, 18))
+        self.assertIn('정읍 시장', ev[0]['title'])
+        self.assertIn('4,600원/kg, 거래 물량 12.0톤', ev[0]['text'])
+
+    def test_screen_market_is_used_when_question_has_no_market(self):
+        self.complete.return_value = classify_json(intent='시세', queries=[], target_date='2026-09-14')
+        self.stream.side_effect = stream_of('정읍 시장 기준입니다.[근거 1]\n')
+        sse(self.ask('9월 14일 주에 왜 비쌌어?', item_id=self.apple.item_id, market_id='350201'))
+        self.assertIn('정읍 시장', self.stream.call_args.args[1][0]['content'])
+        res = self.ask('9월 14일 주에 왜 비쌌어?', item_id=self.apple.item_id, market_id='999999')
+        self.assertEqual(res.status_code, 404)
+
+    def test_no_trade_gives_empty_evidence_and_notice(self):
+        self.complete.return_value = classify_json(intent='시세', queries=[], target_date='2024-01-08')
+        ev = sse(self.ask('2024년 1월 8일 주에 왜 쌌어?', item_id=self.apple.item_id))
+        done = dict(ev)['done']
+        self.assertEqual(done['intent'], '시세')
+        self.assertIn('거래 기록이 없어', done['answer'])
+        self.stream.assert_not_called()
+
+    def test_price_question_is_explained_with_price_sources(self):
+        self.complete.return_value = classify_json(intent='시세', queries=[], target_date='2026-09-14')
+        self.stream.side_effect = stream_of('추석 전 주라 가격과 물량이 모두 가장 높았습니다.[근거 1][근거 3]\n')
+        ev = sse(self.ask('9월 14일 주에는 왜 이렇게 높은 가격이 형성되었어?', item_id=self.apple.item_id))
+        done = dict(ev)['done']
+        self.assertEqual(done['intent'], '시세')
+        self.assertEqual(done['intent_label'], '시세 상담')
+        self.assertEqual([s['n'] for s in done['sources']], [1, 3])
+        self.assertEqual(done['sources'][0]['source_type'], 'price_fact')
+        prompt = self.stream.call_args.args[1][0]['content']
+        self.assertIn('2026-09-14 주', prompt)
+        self.assertIn('추석', prompt)
+        self.search.assert_not_called()  # RAG 문서 검색은 하지 않는다
+        self.assertEqual(ChatMessage.objects.filter(intent='시세').count(), 1)
+
+    def test_parse_target_moves_future_date_back_a_year(self):
+        from datetime import date
+
+        from chat import price_context
+        today = date(2026, 3, 2)
+        self.assertEqual(price_context.parse_target('2026-09-14', today), date(2025, 9, 14))
+        self.assertEqual(price_context.parse_target('2026-02-02', today), date(2026, 2, 2))
+        self.assertIsNone(price_context.parse_target('9월', today))
+        # 질문에 연도가 없으면 분류기가 준 연도 대신 올해(오늘 이전) 날짜로
+        nov = date(2026, 11, 18)
+        self.assertEqual(price_context.parse_target('2025-09-14', nov, '9월 14일 주에 왜 비쌌어?'), date(2026, 9, 14))
+        self.assertEqual(price_context.parse_target('2025-09-14', nov, '작년 9월 14일 주'), date(2025, 9, 14))
+        self.assertEqual(price_context.default_target(date(2026, 11, 18)), date(2026, 11, 9))
+
+
+class SellVerbIsNotCropTests(TestCase):
+    """'팔다'의 활용(파는 게·파면)을 작물 '파'로 잡지 않는다 (2026-11-18 "어디서 파는게 좋을까?" → 다른 품목 안내 버그)"""
+
+    def test_sell_verb(self):
+        from rag import crops
+        known = ['사과', '파', '배']
+        self.assertEqual(crops.find_crops('2주 후에 어디서 파는게 좋을까?', known), [])
+        self.assertEqual(crops.find_crops('언제 파면 좋아?', known), [])
+        self.assertEqual(crops.find_crops('파는 언제 심어?', known), ['파'])
+        self.assertEqual(crops.find_crops('사과 파는 곳', known), ['사과'])
+
+
+class LlmCompareSummaryTests(TestCase):
+    """llm_compare 요약: 역할 정확도·평균 시간·토큰·근거 인용(LLM이 답을 쓴 질문만)·오류"""
+
+    def test_summarize(self):
+        from chat.management.commands.llm_compare import summarize
+        rows = [
+            {'intent': '판매', 'ms': 1000, 'in': 10, 'out': 5, 'sources': 1, 'error': ''},
+            {'intent': '재배', 'ms': 3000, 'in': 20, 'out': 0, 'sources': 0, 'error': ''},   # 되묻기: LLM 답변 없음
+            {'intent': None, 'ms': 2000, 'in': 0, 'out': 0, 'sources': 0, 'error': 'timeout'},
+        ]
+        s = summarize(rows, ['판매', '병해충', '시세'])
+        self.assertEqual(s, {'intent_ok': 1, 'n': 3, 'errors': 1, 'avg_ms': 2000, 'in': 30, 'out': 5,
+                             'cited': 1, 'answered': 1})
