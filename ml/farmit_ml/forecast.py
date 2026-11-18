@@ -5,6 +5,7 @@
     python -m farmit_ml.forecast --config config/0601_v3 --data data/apple_weekly.csv   # 이전 버전 설정
 
 참고 저장소 08 노트북 G절과 같은 방식이다: 그 시점까지 정답이 있는 모든 행으로 다시 학습하고 예측한다.
+--item만 주면 MLflow 레지스트리의 champion 설정을 쓰고(K40, farmit_ml.registry), champion이 없으면 config/<품목>을 쓴다.
 학습은 markets.json의 train 시장 전부로 하고, 결과는 serve 시장만 forecast 테이블과 같은 모양(시장 × h 한 행)으로
 outputs/forecast_<품목>_<base_week>.csv에 저장한다.
 """
@@ -12,6 +13,8 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
+import tempfile
 from datetime import datetime, timezone
 
 import numpy as np
@@ -73,12 +76,25 @@ def main(argv=None):
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    b, data_path = bundle_from_args(a)
+    reg_version = None
+    with tempfile.TemporaryDirectory() as tmp:
+        # --item만 주면 레지스트리 champion 설정으로 예측한다 (K40). --config·FARMIT_ML_CONFIG·--no-mlflow면 레지스트리를 보지 않는다
+        if a.item and not a.config and not os.environ.get("FARMIT_ML_CONFIG") and not a.no_mlflow:
+            from . import registry
+            champ = registry.champion_config(a.item, tmp)
+            if champ:
+                a.config, reg_version = str(champ[0]), champ[1]
+                log.info("레지스트리 %s champion v%s 설정으로 예측한다", registry.model_name(a.item), reg_version)
+            else:
+                log.info("레지스트리에 champion이 없어 config/%s 설정으로 예측한다", a.item)
+        b, data_path = bundle_from_args(a)   # 설정은 여기서 메모리로 다 읽는다 (임시 폴더는 지워져도 된다)
     df = load_data(data_path, b.markets)
     check_columns(df, b)
     dh = data_hash(data_path)
 
     version = b.version + "".join(f"-no{k}" for k in a.skip)   # 구성 모델을 뺀 예측은 버전 이름에 남긴다
+    if reg_version:
+        version += f"-r{reg_version}"   # 레지스트리 버전 (예: v4-r3). MLflow 실행 id가 뒤에 붙는다
     fc = run(df, b, a.base_week, model_version=version)
     if fc.empty:
         raise SystemExit("serve 시장 중 이번 주 데이터가 있는 시장이 없어 예측을 만들지 못했다")
@@ -89,7 +105,7 @@ def main(argv=None):
     if not a.no_mlflow:
         from .tracking import log_run
         fc.to_csv(out, index=False, encoding="utf-8-sig")
-        run_id = log_run(f"forecast {b.item_code} {base}", "forecast", b, dh, params={"base_week": str(base), "skip": a.skip},
+        run_id = log_run(f"forecast {b.item_code} {base}", "forecast", b, dh, params={"base_week": str(base), "skip": a.skip, "registry_version": reg_version},
                          artifacts=[out])
         fc["model_version"] = f"{version}-{run_id[:8]}"
     fc.to_csv(out, index=False, encoding="utf-8-sig")

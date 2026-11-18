@@ -69,7 +69,8 @@ const fmt = (v) => Math.round(v).toLocaleString('ko-KR')
 
     <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
     <LoadingSpinner v-else-if="loading && !rows.length" label="시장별 가격을 불러오는 중…" />
-    <table v-else :class="{ dim: loading }">
+    <div v-else class="scroll">
+    <table :class="{ dim: loading }">
       <thead>
         <tr>
           <th scope="col">시장</th>
@@ -92,6 +93,7 @@ const fmt = (v) => Math.round(v).toLocaleString('ko-KR')
         </tr>
       </tbody>
     </table>
+    </div>
   </div>
 </template>
 
@@ -140,9 +142,20 @@ h2 small {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
+/* 시장이 많아도 옆 당일 경매가 칸과 높이가 비슷하게: 표만 스크롤, 머리줄은 고정 */
+.scroll {
+  max-height: 480px;
+  overflow-y: auto;
+}
 table {
   width: 100%;
   border-collapse: collapse;
+}
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-background);
 }
 th,
 td {
@@ -157,6 +170,9 @@ thead th {
 }
 tbody th {
   font-weight: 600;
+}
+.num {
+  white-space: nowrap;
 }
 .num {
   text-align: right;

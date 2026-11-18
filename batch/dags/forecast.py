@@ -1,6 +1,6 @@
 """주간 예측 DAG (K19, REQ-PRD-001·004·005). 매주 일 23:00 UTC(한국 월 08:00).
 
-    check ─ features ─┬─ forecast_items ─ forecast ─ monitor (품목마다 한 태스크)
+    check ─ features ─┬─ forecast_items ─ promote ─ forecast ─ monitor (품목마다 한 태스크)
     check_weather ────┴─ past_case
 
 1. check      예측 피처가 쓰는 원천만 본다 (collectors/weather/check.py --only price holiday, K09):
@@ -10,7 +10,10 @@
               재시도(10분 간격 2번)는 collect_daily(일 22:00 UTC)가 늦게 끝난 경우를 위한 것이다.
    check_weather  주산지 날씨가 빠짐없는가 (--only weather). 과거 사례의 날씨 사건에만 쓰므로 past_case 앞에만 둔다.
 2. features   Spark 주간 집계 + 피처 → ml/data/weekly_<품목코드>.csv (batch/spark/features.py, K12·K30)
-3. forecast   예측 품목(item.is_forecast)마다 farmit_ml.forecast --to-db (K13). 기준 주까지의 전체 데이터로 다시 학습하고
+   promote    품목마다 farmit_ml.registry promote (K40): MLflow 레지스트리에 challenger 설정이 있으면 champion과 최근 8주
+              백테스트로 비교해 승격한다. 없으면 바로 끝난다. 실패하면 skipped로 두고 지금 champion으로 예측한다.
+3. forecast   예측 품목(item.is_forecast)마다 farmit_ml.forecast --to-db (K13). 레지스트리 champion 설정(없으면 config/<품목>)으로
+              기준 주까지의 전체 데이터로 다시 학습하고
               serve 시장 × h1~h4를 forecast 테이블에 UPSERT한다. 같은 기준 주를 다시 돌려도 행이 늘지 않고 지난 기준 주는 남는다.
               기준 주(--base-week)를 이번 주 월요일로 꼭 넘긴다: 지난주 정산이 통째로 없으면 데이터의 마지막 주가 한 주 앞이 되는데,
               그대로 두면 지난 기준 주를 조용히 다시 예측한다. 넘기면 "예측에 쓸 행이 없다"로 실패한다.
@@ -101,11 +104,20 @@ with DAG(
     items = forecast_items()
     # 품목마다 태스크 하나 (동적 매핑). 한 품목이 실패해도 다른 품목은 저장되고, 실패한 품목만 다시 돌릴 수 있다
     # 기준 주는 템플릿이라 환경 변수(BASE_WEEK)로 넘긴다. append_env: DB 접속 환경 변수를 지우지 않게
-    forecast = BashOperator.partial(task_id="forecast", env={"BASE_WEEK": base_week}, append_env=True).expand(
+    # 승격 판정 (K40): challenger가 있으면 champion과 최근 8주 백테스트 후 승격. 없으면 바로 끝난다.
+    # 판정이 실패해도 이번 주 예측은 지금 champion으로 돌아야 한다 → 실패를 종료 코드 99로 바꿔 태스크를 skipped로 두고
+    # (BashOperator skip_on_exit_code), forecast는 none_failed라 skipped 뒤에도 돈다. challenger 별칭이 남아 다음 주에 다시 판정한다.
+    # 백테스트는 다시 학습을 16번(8주 × 설정 2개) 하므로 시간을 넉넉히 준다. 재시도는 하지 않는다
+    promote = BashOperator.partial(task_id="promote", skip_on_exit_code=99, retries=0,
+                                   execution_timeout=timedelta(hours=3)).expand(
+        bash_command=items.map(lambda c: ml(f"registry promote --item {c}")
+                               + " || { echo '승격 판정 실패: 지금 champion으로 예측한다'; exit 99; }"))
+    forecast = BashOperator.partial(task_id="forecast", env={"BASE_WEEK": base_week}, append_env=True,
+                                    trigger_rule="none_failed").expand(
         bash_command=items.map(lambda c: ml(f"forecast --item {c} --base-week $BASE_WEEK --to-db")))
     monitor = BashOperator.partial(task_id="monitor", trigger_rule="all_done").expand(
         bash_command=items.map(lambda c: ml(f"monitor --item {c}")))
 
-    check >> features >> items >> forecast >> monitor
+    check >> features >> items >> promote >> forecast >> monitor
     # past_case도 Spark라 features 뒤에 차례로 돈다 (Spark JVM 둘을 한 컨테이너에 같이 띄우지 않게, docs/infra-memory.md)
     [features, check_weather] >> past_case
