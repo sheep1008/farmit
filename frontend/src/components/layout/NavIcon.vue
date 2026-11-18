@@ -1,5 +1,5 @@
 <script setup>
-// 메뉴 아이콘 (선 아이콘, 24×24). name: home · chart · tag · sprout · chat
+// 메뉴 아이콘 (선 아이콘, 24×24). name: home · chart · tag · sprout · bell · chat
 defineProps({ name: { type: String, required: true } })
 </script>
 
@@ -21,6 +21,10 @@ defineProps({ name: { type: String, required: true } })
       <path d="M12 21v-9" />
       <path d="M12 12c0-4 3-7 8-7 0 5-3 7-8 7z" />
       <path d="M12 14c0-3-2-6-7-6 0 4 2 6 7 6z" />
+    </template>
+    <template v-else-if="name === 'bell'">
+      <path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z" />
+      <path d="M10 20a2 2 0 0 0 4 0" />
     </template>
     <template v-else-if="name === 'chat'">
       <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
