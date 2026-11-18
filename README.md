@@ -74,7 +74,7 @@ docker compose -f infra/docker-compose.yml exec flink-jobmanager ./bin/sql-clien
 docker compose -f infra/docker-compose.yml exec backend python manage.py loaddata markets_collect markets_national items
 ```
 
-- `markets_collect.json`은 수집 대상(4곳 + 가락), `markets_national.json`은 나머지 전국 시장이다. 나머지 시장은 예측 품목 정산을 전국으로 받을 때만 쓴다 (K31).
+- `markets_collect.json`은 처음 정한 5곳(4곳 + 가락), `markets_national.json`은 나머지 전국 시장이다. 2026-11-18부터 32곳 모두 수집 대상(`is_collect`)이다.
 - 시장 위도·경도는 도매시장 위치(OpenStreetMap 기준, 2026-11-17)다. 강릉·전주·정읍·안동 4곳은 주소가 있는 도로나 마을 위치라서 수백 m~1km쯤 어긋날 수 있다. 좌표가 `0`인 시장이 생기면 `/api/recommendations/now`는 거리를 비우고 운송비를 반영하지 않는다.
 - `.env`의 `MYSQL_*` 값과 `infra/mysql/init/` 스크립트는 **DB 볼륨이 비어 있을 때(첫 실행)만** 적용된다. 바꾼 뒤에는 `down -v`로 볼륨을 지우고 다시 띄운다.
 - backend는 시작할 때 `migrate`를 먼저 실행한다.
@@ -178,14 +178,14 @@ collectors/weather_warning/.venv/Scripts/python collectors/weather_warning/produ
 
 #### 실시간 경매 (수집기 → Kafka `auction.trade.raw` → Flink → MySQL `auction_trade`, `realtime_price`)
 
-경매 수집기는 각자 인증키로 2분마다 API를 부르므로 **기본으로는 뜨지 않는다** (`--profile auction`). 위 `loaddata markets_collect items`를 먼저 해 둔다.
+경매 수집기는 각자 인증키로 3분마다 API를 부르므로 **기본으로는 뜨지 않는다** (`--profile auction`). 위 `loaddata markets_collect items`를 먼저 해 둔다.
 
 ```bash
 # Flink 작업 제출 (compose up 뒤 한 번)
 bash streaming/flink/submit.sh auction_trade    # 낙찰 1건 = 1행
 bash streaming/flink/submit.sh realtime_price   # (정산일자, 시장, 품목)별 당일 집계
 
-# 프로듀서: 한국 시간 00~12시 2분마다 / 한 날짜 한 번 / 테스트
+# 프로듀서: 한국 시간 00~12시 3분마다 / 한 날짜 한 번 / 테스트
 docker compose -f infra/docker-compose.yml --profile auction up -d auction-producer
 docker compose -f infra/docker-compose.yml --profile auction run --rm auction-producer python producer.py --once --date 2026-11-06
 docker compose -f infra/docker-compose.yml --profile auction run --rm auction-producer python -m unittest

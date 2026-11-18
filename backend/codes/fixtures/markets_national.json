@@ -7,7 +7,7 @@
       "sido": "서울특별시",
       "lat": "37.553280",
       "lng": "126.820700",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -19,7 +19,7 @@
       "sido": "부산광역시",
       "lat": "35.130850",
       "lng": "128.966390",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -31,7 +31,7 @@
       "sido": "부산광역시",
       "lat": "35.215070",
       "lng": "129.122520",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -43,7 +43,7 @@
       "sido": "대구광역시",
       "lat": "35.902060",
       "lng": "128.543280",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -55,7 +55,7 @@
       "sido": "인천광역시",
       "lat": "37.424340",
       "lng": "126.719890",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -67,7 +67,7 @@
       "sido": "인천광역시",
       "lat": "37.522010",
       "lng": "126.748990",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -79,7 +79,7 @@
       "sido": "광주광역시",
       "lat": "35.184320",
       "lng": "126.934280",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -91,7 +91,7 @@
       "sido": "광주광역시",
       "lat": "35.115720",
       "lng": "126.857040",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -103,7 +103,7 @@
       "sido": "경기도",
       "lat": "37.255360",
       "lng": "127.030900",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -115,7 +115,7 @@
       "sido": "경기도",
       "lat": "37.382260",
       "lng": "126.969700",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -127,7 +127,7 @@
       "sido": "경기도",
       "lat": "37.309000",
       "lng": "126.856810",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -139,7 +139,7 @@
       "sido": "경기도",
       "lat": "37.608560",
       "lng": "127.146450",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -151,7 +151,7 @@
       "sido": "강원특별자치도",
       "lat": "37.909900",
       "lng": "127.727390",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -163,7 +163,7 @@
       "sido": "강원특별자치도",
       "lat": "37.352760",
       "lng": "127.922770",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -175,7 +175,7 @@
       "sido": "강원특별자치도",
       "lat": "37.737580",
       "lng": "128.916780",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -187,7 +187,7 @@
       "sido": "충청북도",
       "lat": "37.005090",
       "lng": "127.923650",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -199,7 +199,7 @@
       "sido": "전북특별자치도",
       "lat": "35.869850",
       "lng": "127.115870",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -211,7 +211,7 @@
       "sido": "전북특별자치도",
       "lat": "35.919470",
       "lng": "126.920830",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -223,7 +223,7 @@
       "sido": "전북특별자치도",
       "lat": "35.586560",
       "lng": "126.844540",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -235,7 +235,7 @@
       "sido": "전라남도",
       "lat": "34.916150",
       "lng": "127.538980",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -247,7 +247,7 @@
       "sido": "경상북도",
       "lat": "36.081850",
       "lng": "129.336870",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -259,7 +259,7 @@
       "sido": "경상북도",
       "lat": "36.592730",
       "lng": "128.621940",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -271,7 +271,7 @@
       "sido": "경상북도",
       "lat": "36.156740",
       "lng": "128.350030",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -283,7 +283,7 @@
       "sido": "경상남도",
       "lat": "35.230790",
       "lng": "128.638370",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -295,7 +295,7 @@
       "sido": "울산광역시",
       "lat": "35.538690",
       "lng": "129.342750",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -307,7 +307,7 @@
       "sido": "경상남도",
       "lat": "35.255420",
       "lng": "128.511320",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   },
@@ -319,7 +319,7 @@
       "sido": "경상남도",
       "lat": "35.211390",
       "lng": "128.123050",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": false
     }
   }

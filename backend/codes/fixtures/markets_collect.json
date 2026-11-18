@@ -55,7 +55,7 @@
       "sido": "서울특별시",
       "lat": "37.493270",
       "lng": "127.111200",
-      "is_collect": false,
+      "is_collect": true,
       "is_reference": true
     }
   }

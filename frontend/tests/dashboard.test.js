@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CHAT_MAX_LENGTH, chatPrefillRoute } from '@/utils/chat'
-import { formatWon, sortRealtimeRows, summarizeForecast, summarizeMonthly } from '@/utils/dashboard'
+import { formatWon, summarizeForecast, summarizeMonthly, summarizeRealtime } from '@/utils/dashboard'
 
 describe('이번 주 예측 카드', () => {
   const row = (market_id, horizon, pred_price, last_week_price, holiday_notice = null) => ({
@@ -69,19 +69,23 @@ describe('이번 달 할 일 카드', () => {
 })
 
 describe('오늘 경매가 카드', () => {
-  it('거래가 있는 시장을 위로 올리고, 같은 상태끼리는 API 순서를 지킨다', () => {
+  it('거래 있는 시장만 경매 중 → 종료, 같은 상태는 거래량 순으로 4곳, 나머지는 hidden', () => {
     const rows = [
-      { market_id: 'a', status: 'no_trade' },
-      { market_id: 'b', status: 'closed' },
-      { market_id: 'c', status: 'live' },
-      { market_id: 'd', status: 'closed' },
+      { market_id: 'a', status: 'no_trade', volume_kg: 0 },
+      { market_id: 'b', status: 'closed', volume_kg: 100 },
+      { market_id: 'c', status: 'live', volume_kg: 10 },
+      { market_id: 'd', status: 'closed', volume_kg: 500 },
+      { market_id: 'e', status: 'closed', volume_kg: 50 },
+      { market_id: 'f', status: 'closed', volume_kg: 1 },
     ]
-    expect(sortRealtimeRows(rows).map((r) => r.market_id)).toEqual(['c', 'b', 'd', 'a'])
+    const s = summarizeRealtime(rows)
+    expect(s.rows.map((r) => r.market_id)).toEqual(['c', 'd', 'b', 'e'])
+    expect(s.hidden).toBe(1)
     expect(rows[0].market_id).toBe('a') // 원본 배열은 건드리지 않는다
   })
 
-  it('목록이 없으면 빈 배열', () => {
-    expect(sortRealtimeRows(undefined)).toEqual([])
+  it('목록이 없으면 빈 요약', () => {
+    expect(summarizeRealtime(undefined)).toEqual({ rows: [], hidden: 0 })
   })
 
   it('가격은 반올림해 천 단위 쉼표, 없으면 -', () => {

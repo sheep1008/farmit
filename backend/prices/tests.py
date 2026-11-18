@@ -387,9 +387,9 @@ class ComparePriceApiTest(PriceApiBase):
     def test_lists_every_collect_market_with_null_for_no_trade(self):
         self.put(self.m1, self.apple, date(2026, 10, 30), 3507, vol=2310)
         self.put(self.m2, self.apple, date(2026, 10, 30), 3763, vol=1820)
-        self.put(self.ref, self.apple, date(2026, 10, 30), 4000)          # 참고 시장은 제외
+        self.put(self.ref, self.apple, date(2026, 10, 30), 4000)          # 수집 대상이 아닌 시장은 제외
         both = Market.objects.create(market_id='999001', name='수집겸참고', sido='서울', lat=0, lng=0,
-                                     is_collect=True, is_reference=True)     # 두 표시가 다 있어도 참고 시장이면 제외
+                                     is_collect=True, is_reference=True)     # 가락처럼 참고 시장이어도 수집 대상이면 넣는다
         self.put(both, self.apple, date(2026, 10, 30), 4100)
         res = self.get(date='2026-10-30')
         self.assertEqual(res.status_code, 200)
@@ -397,6 +397,7 @@ class ComparePriceApiTest(PriceApiBase):
             {'market_id': '250001', 'market_name': '대전오정', 'avg_price': 3507.0, 'volume_kg': 2310.0},
             {'market_id': '250003', 'market_name': '대전노은', 'avg_price': 3763.0, 'volume_kg': 1820.0},
             {'market_id': '340101', 'market_name': '천안', 'avg_price': None, 'volume_kg': 0},
+            {'market_id': '999001', 'market_name': '수집겸참고', 'avg_price': 4100.0, 'volume_kg': 100.0},
         ])
         self.assertEqual(res.json()['meta'], {'item_id': self.apple.item_id, 'date': '2026-10-30',
                                               'grade': 'ALL', 'price_unit': '원/kg'})
@@ -768,18 +769,18 @@ class SellNowApiTest(TestCase):
         body.setdefault('volume_kg', 100)
         return self.client.post(SELL_NOW_URL, body, content_type='application/json')
 
-    def test_수집_대상_시장_전체가_수령액_순이고_참고_시장은_없다(self):
+    def test_수집_대상_시장_전체가_수령액_순이고_참고_시장도_들어간다(self):
         res = self.post()
         self.assertEqual(res.status_code, 200)
         results = res.json()['data']['results']
-        self.assertEqual([r['market_id'] for r in results], ['110001', '340101', '250001'])
-        self.assertEqual([r['rank'] for r in results], [1, 2, 3])
-        self.assertEqual(results[0]['net_won'], 400000)
+        self.assertEqual([r['market_id'] for r in results], ['110002', '110001', '340101', '250001'])
+        self.assertEqual([r['rank'] for r in results], [1, 2, 3, 4])
+        self.assertEqual(results[1]['net_won'], 400000)
 
     def test_예측_대상이_아닌_품목도_계산된다(self):
         res = self.post(item_id=self.cabbage.pk)
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(len(res.json()['data']['results']), 3)
+        self.assertEqual(len(res.json()['data']['results']), 4)
 
     def test_7일_밖_거래는_가격에_섞이지_않는다(self):
         SettlePrice.objects.filter(item=self.apple, market=self.near, trade_date=NOW - timedelta(days=9)).update(

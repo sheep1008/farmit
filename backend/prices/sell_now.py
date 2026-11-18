@@ -62,7 +62,7 @@ def compute_sell_now(user, item, v):
     has_location = profile is not None and profile.lat is not None and profile.lng is not None
     transport_applied = has_location and per_km > 0
 
-    markets = list(Market.objects.filter(is_collect=True, is_reference=False).order_by('market_id'))
+    markets = list(Market.objects.filter(is_collect=True).order_by('market_id'))
     base = SettlePrice.objects.filter(item=item, grade=grade, market__in=markets)
     base_date = base.aggregate(latest=Max('trade_date'))['latest']
 

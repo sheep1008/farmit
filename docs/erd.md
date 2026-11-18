@@ -206,7 +206,7 @@ erDiagram
 | name | varchar(50) | | 시장명 |
 | sido | varchar(20) | | 시도 |
 | lat, lng | decimal(9,6) | | 위치 (직접 입력, 거리 계산용) |
-| is_collect | boolean | | 수집 대상 여부. 4개 시장 + 가락만 true. 전국 32곳 모두 등록 (aT 정산에 나오는 공영도매시장, 2026-11 기준. 부산국제수산은 최근 거래가 없어 뺐다) |
+| is_collect | boolean | | 수집 대상 여부. 2026-11-18부터 전국 32곳 모두 true (실시간 경매·시장 비교·지금 팔면이 이 값으로 시장을 고른다). 전국 32곳 모두 등록 (aT 정산에 나오는 공영도매시장, 2026-11 기준. 부산국제수산은 최근 거래가 없어 뺐다) |
 | is_reference | boolean | | 참고용 시장 여부 (가락) |
 
 **item** — 품목. 출처마다 코드가 달라 한 행에 모아 둔다
@@ -310,7 +310,7 @@ erDiagram
 | 컬럼 | 타입 | 키 | 설명 |
 |---|---|---|---|
 | id | bigint | PK | 자동 증가 |
-| source_key | varchar(64) | UK | 원본 행을 구분하는 값. 주기(2분)마다 겹쳐 받아도 중복 방지. `whsl_mrkt_cd|corp_cd|trd_clcln_ymd|auctn_seq|spm_no|scsbd_dt`의 SHA-1(40자) |
+| source_key | varchar(64) | UK | 원본 행을 구분하는 값. 주기(3분)마다 겹쳐 받아도 중복 방지. `whsl_mrkt_cd|corp_cd|trd_clcln_ymd|auctn_seq|spm_no|scsbd_dt`의 SHA-1(40자) |
 | auction_at | datetime | | 낙찰 시각 |
 | market_id | varchar(6) | FK | 시장 |
 | item_id | int | FK | 품목 |

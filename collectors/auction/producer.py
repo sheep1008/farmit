@@ -1,9 +1,9 @@
 """실시간 경매 프로듀서 (REQ-COL-002).
 
-한국 시간 00~12시에 2분마다 수집 대상 시장(market.is_collect 또는 is_reference)의 새 낙찰 건을 받아
+한국 시간 00~12시에 3분마다 수집 대상 시장(market.is_collect 또는 is_reference)의 새 낙찰 건을 받아
 Kafka 토픽에 보낸다. 실행 결과는 collect_log에 남긴다.
 
-    python producer.py                      # 계속 실행 (2분 주기, POLL_SECONDS로 바꾼다)
+    python producer.py                      # 계속 실행 (3분 주기, POLL_SECONDS로 바꾼다)
     python producer.py --once --date 2026-11-06   # 그 날짜를 한 번만 수집 (시간 제한 없음, 테스트·누락 보충용)
 """
 import argparse
@@ -138,7 +138,8 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     topic = os.environ.get("AUCTION_TOPIC", "auction.trade.raw")  # compose의 kafka-init이 미리 만든다
-    interval = int(os.environ.get("POLL_SECONDS", "120"))  # REQ-NFR-003: 최악 지연을 5분 안에 넣으려고 2분
+    # REQ-NFR-003(5분 안 반영)과 하루 한도를 같이 맞추는 주기. 전국 32곳 × 240바퀴(12시간 ÷ 3분) = 7,680건
+    interval = int(os.environ.get("POLL_SECONDS", "180"))
     call_limit = int(os.environ.get("DAILY_CALL_LIMIT", "9000"))  # 한도 10,000건보다 여유 있게 멈춘다
     client = AuctionClient(os.environ["DATA_GO_KR_KEY"])
     producer = Producer({
