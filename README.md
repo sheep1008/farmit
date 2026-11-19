@@ -70,10 +70,11 @@ docker compose -f infra/docker-compose.yml down -v                            # 
 docker compose -f infra/docker-compose.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
 docker compose -f infra/docker-compose.yml exec flink-jobmanager ./bin/sql-client.sh
 
-# 코드 테이블 초기 데이터 (시장 32곳 = 수집 대상 5곳 + 나머지 27곳, 품목 155개). 여러 번 실행해도 중복되지 않는다
+# 코드 테이블 초기 데이터 (시장 32곳 = 수집 대상 5곳 + 나머지 27곳, 품목 242개). 여러 번 실행해도 중복되지 않는다
 docker compose -f infra/docker-compose.yml exec backend python manage.py loaddata markets_collect markets_national items
 ```
 
+- `items.json`의 품목은 실시간 경매 응답에 나온 것을 모은 것이다 (2026-11-19에 최근 7일치에서 빠진 87개를 더해 242개). 목록에 없는 품목의 낙찰은 저장하지 않고 수집기 로그에 `미등록 품목 N건`으로 남으니, 새 품목이 보이면 `items.json`에 추가하고 `loaddata items`를 다시 실행한다.
 - `markets_collect.json`은 처음 정한 5곳(4곳 + 가락), `markets_national.json`은 나머지 전국 시장이다. 2026-11-18부터 32곳 모두 수집 대상(`is_collect`)이다.
 - 시장 위도·경도는 도매시장 위치(OpenStreetMap 기준, 2026-11-17)다. 원주·강릉·전주·익산·정읍·순천·안동 7곳은 2026-11-18 시장 장소·주소 자료로 보정했다(원주·순천·안동은 카카오맵 장소 좌표와 65m 이내, 정읍은 약 150m 차이). 지도 표시·거리 계산용 대표 좌표이며 출하 차량 진입점과는 다를 수 있다. 좌표가 `0`인 시장이 생기면 `/api/recommendations/now`는 거리를 비우고 운송비를 반영하지 않는다.
 - `.env`의 `MYSQL_*` 값과 `infra/mysql/init/` 스크립트는 **DB 볼륨이 비어 있을 때(첫 실행)만** 적용된다. 바꾼 뒤에는 `down -v`로 볼륨을 지우고 다시 띄운다.
