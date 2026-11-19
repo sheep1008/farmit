@@ -1,14 +1,17 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { fetchAlerts, fetchCases } from '@/api/alerts'
 import { fetchMonthlyTasks } from '@/api/farming'
+import http from '@/api/http'
 import { fetchForecasts, fetchRealtimePrices } from '@/api/prices'
 import BaseButton from '@/components/common/BaseButton.vue'
 import InfoTip from '@/components/common/InfoTip.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import SellNowTrial from '@/components/recommend/SellNowTrial.vue'
 import { useAlertStore } from '@/stores/alerts'
 import { useAuthStore } from '@/stores/auth'
+import { useCurrentItemStore } from '@/stores/currentItem'
 import { formatKstDateTime } from '@/utils/dates'
 import { CASE_TYPES, alertTypeLabel, caseTypeLabel, formatPct, regionText } from '@/utils/alerts'
 import { CHAT_MAX_LENGTH, chatPrefillRoute } from '@/utils/chat'
@@ -22,7 +25,9 @@ import { realtimeStatusText } from '@/utils/realtime'
 // ④ 이번 달 할 일: 첫 관심 품목의 이번 달 시작·계속 농작업과 주의 시기 (K33, REQ-RAG-002, GET /api/farming/monthly)
 // ⑤ 특수 상황 과거 사례 요약: 첫 관심 품목의 사건 종류별 건수와 4주 뒤 평균 변화 (K20, REQ-HIS-001·002, GET /api/cases)
 // ⑥ 채팅 입력창: 입력 후 /chat?q=로 이동, 채팅 화면이 질문 칸을 채운다 (K33, REQ-CHT-001)
+// 비회원(K43, 공개 홈): 같은 화면을 기본 품목으로 보여 준다. 회원 전용인 ③ 알림과 ⑥ 채팅 자리는 가입 안내로 바꾼다.
 const auth = useAuthStore()
+const currentItem = useCurrentItemStore()
 const alertStore = useAlertStore()
 
 const alerts = ref([])
@@ -30,7 +35,29 @@ const alertsTotal = ref(0)
 const alertsLoading = ref(true)
 const alertsError = ref(false)
 
-const item = computed(() => auth.user?.interest_items?.[0] ?? null) // 관심 품목이 없으면 null
+// 로그인 여부를 알기 전에는 아무것도 그리지 않는다 (새로고침한 회원에게 비회원 화면이 잠깐 보이지 않게)
+const ready = ref(false)
+const isGuest = computed(() => !auth.isLoggedIn)
+
+// 비회원은 관심 품목이 없으므로 '지금 보는 품목' 규칙으로 고른다 (다른 화면에서 고른 품목 → 가격 예측 대상 → 첫 품목)
+const guestItems = ref([])
+const guestItemId = ref(null)
+const guestItem = computed(() => guestItems.value.find((it) => it.item_id === guestItemId.value) ?? null)
+
+async function loadGuestItems() {
+  try {
+    guestItems.value = (await http.get('/items')).data.data
+    guestItemId.value = currentItem.initial(guestItems.value)
+  } catch {
+    // 5xx·네트워크 오류 토스트는 인터셉터가 띄운다. 품목이 없으면 카드가 안내 문구를 보여 준다
+  }
+}
+
+// 회원: 첫 관심 품목 (없으면 null), 비회원: 위에서 고른 품목
+const item = computed(() => (isGuest.value ? guestItem.value : (auth.user?.interest_items?.[0] ?? null)))
+const noItemText = computed(() =>
+  isGuest.value ? '품목 목록을 불러오지 못했습니다. 새로고침해 주세요.' : '관심 품목을 등록하면 보여 드립니다.',
+)
 const caseMeta = ref(null)
 const casesLoading = ref(false)
 const casesError = ref(false)
@@ -150,12 +177,26 @@ async function loadForecast() {
 
 const forecastSummary = computed(() => summarizeForecast(forecast.value?.data))
 
-onMounted(() => {
+function loadItemCards() {
   loadRealtime()
   loadForecast()
-  loadAlerts()
   loadMonthly()
   loadCases()
+}
+
+onMounted(async () => {
+  await auth.init() // 이 화면은 비회원도 들어오므로 가드가 기다려 주지 않는다
+  if (isGuest.value) await loadGuestItems()
+  ready.value = true
+  loadItemCards()
+  if (!isGuest.value) loadAlerts() // 알림은 회원 전용 API
+})
+
+// 비회원이 품목을 바꾸면 다른 화면에서도 그 품목이 이어지게 기억하고 카드를 다시 불러온다
+watch(guestItemId, (id, old) => {
+  if (old == null) return // 처음 정해질 때는 onMounted가 불러온다
+  currentItem.set(id)
+  loadItemCards()
 })
 
 // 종류 순서는 화면 공통(CASE_TYPES)을 따르고, 사례가 있는 종류만
@@ -180,19 +221,38 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
 </script>
 
 <template>
-  <section class="dashboard">
+  <LoadingSpinner v-if="!ready" label="불러오는 중…" />
+  <section v-else class="dashboard">
     <header class="page-head">
       <div>
         <p class="eyebrow">{{ todayLabel }}</p>
         <h1>오늘 한눈에 보기</h1>
       </div>
-      <RouterLink v-if="item" :to="{ name: 'mypage' }" class="item-chip">
+      <label v-if="isGuest && guestItems.length" class="item-select">
+        품목
+        <select v-model="guestItemId">
+          <option v-for="it in guestItems" :key="it.item_id" :value="it.item_id">{{ it.name }}</option>
+        </select>
+      </label>
+      <RouterLink v-else-if="item" :to="{ name: 'mypage' }" class="item-chip">
         관심 품목 <strong>{{ item.name }}</strong>
       </RouterLink>
     </header>
 
+    <!-- 비회원: 가입하면 무엇이 더 되는지 한 번만 안내한다 (채팅 입력창 자리) -->
+    <div v-if="isGuest" class="onboarding">
+      <div>
+        <p class="onboarding-title">가입 없이 둘러보는 중입니다</p>
+        <p class="muted">
+          가입하면 내 품목·내 지역 기준으로 보여 드리고, 운송비를 반영한 4주 판매 추천, 날씨·사건 알림, AI 상담을 쓸 수
+          있습니다. <RouterLink :to="{ name: 'landing' }">서비스 소개</RouterLink>
+        </p>
+      </div>
+      <BaseButton :to="{ name: 'signup' }" variant="primary">무료로 시작하기</BaseButton>
+    </div>
+
     <!-- 관심 품목이 없으면 카드마다 등록 버튼을 반복하지 않고 여기서 한 번만 안내한다 -->
-    <div v-if="!item" class="onboarding">
+    <div v-else-if="!item" class="onboarding">
       <div>
         <p class="onboarding-title">관심 품목을 먼저 등록해 주세요</p>
         <p class="muted">오늘 경매가, 이번 주 예측, 이번 달 할 일을 그 품목 기준으로 보여 드립니다.</p>
@@ -200,8 +260,11 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
       <BaseButton :to="{ name: 'mypage' }" variant="primary">관심 품목 등록</BaseButton>
     </div>
 
+    <!-- 비회원 "지금 팔면" 체험: 가입 전에 품목·물량만으로 시장별 실수령액을 본다 (REQ-REC-007) -->
+    <SellNowTrial v-if="isGuest && item" :item-id="item.item_id" :item-name="item.name" />
+
     <!-- ⑥ 채팅 입력창: 보내면 채팅 화면으로 가서 질문 칸을 채운다 (실제 전송은 채팅 화면에서) -->
-    <form class="ask" @submit.prevent="goChat">
+    <form v-if="!isGuest" class="ask" @submit.prevent="goChat">
       <label for="dashboard-chat" class="ask-label">AI 농사 도우미에게 물어보기</label>
       <div class="ask-row">
         <textarea
@@ -229,7 +292,7 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
             가격 보기 ›
           </RouterLink>
         </header>
-        <p v-if="!item" class="state muted">관심 품목을 등록하면 보여 드립니다.</p>
+        <p v-if="!item" class="state muted">{{ noItemText }}</p>
         <LoadingSpinner v-else-if="realtimeLoading" size="sm" label="오늘 경매가를 불러오는 중…" />
         <p v-else-if="realtimeNotReady" class="state muted">
           {{ realtimeNotReady }} 경매는 보통 새벽부터 오전 11시쯤까지 열립니다.
@@ -266,11 +329,11 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
       <article class="card">
         <header class="card-head">
           <h2>이번 주 예측</h2>
-          <RouterLink v-if="item" :to="{ name: 'recommend', query: { item_id: item.item_id } }" class="more">
+          <RouterLink v-if="item && !isGuest" :to="{ name: 'recommend', query: { item_id: item.item_id } }" class="more">
             판매 추천 ›
           </RouterLink>
         </header>
-        <p v-if="!item" class="state muted">관심 품목을 등록하면 보여 드립니다.</p>
+        <p v-if="!item" class="state muted">{{ noItemText }}</p>
         <LoadingSpinner v-else-if="forecastLoading" size="sm" label="가격 예측을 불러오는 중…" />
         <p v-else-if="forecastNotReady" class="state muted">{{ forecastNotReady }}</p>
         <div v-else-if="forecastError" class="state">
@@ -303,8 +366,20 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
         </template>
       </article>
 
-      <!-- ③ 안 읽은 알림 -->
-      <article class="card">
+      <!-- ③ 안 읽은 알림 (비회원: 가입 안내) -->
+      <article v-if="isGuest" class="card">
+        <header class="card-head">
+          <h2>날씨·사건 알림</h2>
+        </header>
+        <div class="state">
+          <p class="muted">
+            내 지역 기상특보, 수입량 급증, 병해충 증가를 알려 드립니다. 지역과 품목을 알아야 해서 가입한 뒤에 받을 수
+            있습니다.
+          </p>
+          <BaseButton :to="{ name: 'signup' }">가입하고 알림 받기</BaseButton>
+        </div>
+      </article>
+      <article v-else class="card">
         <header class="card-head">
           <h2>
             안 읽은 알림
@@ -339,7 +414,7 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
             재배 정보 ›
           </RouterLink>
         </header>
-        <p v-if="!item" class="state muted">관심 품목을 등록하면 보여 드립니다.</p>
+        <p v-if="!item" class="state muted">{{ noItemText }}</p>
         <LoadingSpinner v-else-if="monthlyLoading" size="sm" label="이번 달 할 일을 불러오는 중…" />
         <div v-else-if="monthlyError" class="state">
           <p class="error">이번 달 할 일을 불러오지 못했습니다.</p>
@@ -373,7 +448,7 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
             자세히 ›
           </RouterLink>
         </header>
-        <p v-if="!item" class="state muted">관심 품목을 등록하면 보여 드립니다.</p>
+        <p v-if="!item" class="state muted">{{ noItemText }}</p>
         <LoadingSpinner v-else-if="casesLoading" size="sm" label="과거 사례를 불러오는 중…" />
         <div v-else-if="casesError" class="state">
           <p class="error">과거 사례를 불러오지 못했습니다.</p>
@@ -439,6 +514,26 @@ h1 {
 .item-chip strong {
   margin-left: 4px;
   font-weight: 700;
+}
+/* 비회원 품목 고르기 */
+.item-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.item-select select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border-hover);
+  border-radius: var(--radius);
+  background: var(--color-background);
+  color: var(--color-text);
+  font: inherit;
 }
 .onboarding {
   display: flex;
