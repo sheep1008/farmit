@@ -3,7 +3,9 @@ import { computed, ref, watch } from 'vue'
 import http from '@/api/http'
 import InfoTip from '@/components/common/InfoTip.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import SortTh from '@/components/common/SortTh.vue'
 import { addDays, todayKst } from '@/utils/dates'
+import { nextSort, sortRows } from '@/utils/tableSort'
 
 // 같은 날 수집 대상 시장의 가격 비교 표 (SCR-004, REQ-PRC-003, docs/api.md 2.3 GET /api/prices/compare).
 // 날짜를 비우면 서버가 가장 최근 정산일로 골라 주고, 그 날짜를 meta.date로 알려 준다.
@@ -49,6 +51,12 @@ const traded = computed(() => rows.value.filter((r) => r.avg_price != null))
 const maxPrice = computed(() => (traded.value.length > 1 ? Math.max(...traded.value.map((r) => r.avg_price)) : null))
 const minPrice = computed(() => (traded.value.length > 1 ? Math.min(...traded.value.map((r) => r.avg_price)) : null))
 
+// 열 제목을 누르면 그 열로 정렬한다 (한 번 더 누르면 반대 방향, 또 누르면 기본 순서)
+const sort = ref(null)
+const dirOf = (key) => (sort.value?.key === key ? sort.value.dir : null)
+const toggleSort = (key, firstDir) => (sort.value = nextSort(sort.value, key, firstDir))
+const sortedRows = computed(() => sortRows(rows.value, sort.value)) // 기본은 서버가 준 순서
+
 const fmt = (v) => Math.round(v).toLocaleString('ko-KR')
 </script>
 
@@ -73,13 +81,13 @@ const fmt = (v) => Math.round(v).toLocaleString('ko-KR')
     <table :class="{ dim: loading }">
       <thead>
         <tr>
-          <th scope="col">시장</th>
-          <th scope="col" class="num">평균가</th>
-          <th scope="col" class="num">물량</th>
+          <SortTh label="시장" :dir="dirOf('market_name')" @toggle="toggleSort('market_name', 'asc')" />
+          <SortTh label="평균가" class="num" :dir="dirOf('avg_price')" @toggle="toggleSort('avg_price')" />
+          <SortTh label="물량" class="num" :dir="dirOf('volume_kg')" @toggle="toggleSort('volume_kg')" />
         </tr>
       </thead>
       <tbody>
-        <tr v-for="r in rows" :key="r.market_id" :class="{ selected: r.market_id === selectedMarketId }">
+        <tr v-for="r in sortedRows" :key="r.market_id" :class="{ selected: r.market_id === selectedMarketId }">
           <th scope="row">
             {{ r.market_name }}
             <span v-if="r.avg_price != null && r.avg_price === maxPrice" class="tag high">가장 높음</span>
