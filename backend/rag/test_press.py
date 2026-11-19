@@ -179,6 +179,17 @@ class PressSearchEsTests(SimpleTestCase):
         total, hits = press_store.search('조류인플루엔자')
         self.assertEqual([h['news_id'] for h in hits], ['2'])
 
+    def test_part_of_a_word_matches(self):
+        """낱말 일부만 넣어도 찾는다 (K55). nori는 '인플루'를 '인'·'플'로 쪼개 형태소 검색으로는 0건이다"""
+        for q in ('인플루', '플루엔자', '조류인플'):
+            total, hits = press_store.search(q)
+            self.assertEqual((total, [h['news_id'] for h in hits]), (1, ['2']), q)
+
+    def test_every_word_must_match(self):
+        self.assertEqual(press_store.search('사과 인플루')[0], 0)       # 한 낱말만 맞으면 찾지 않는다
+        self.assertEqual(press_store.search('산란계 인플루')[0], 1)     # 요약의 낱말 + 제목의 부분 낱말
+        self.assertEqual(press_store.search('없는말')[0], 0)
+
     def test_same_news_id_is_overwritten_not_duplicated(self):
         press_store.index_docs([{'news_id': '1', 'title': '사과 수급 안정 대책(수정)', 'summary': '', 'published_date': '2026-11-10',
                                  'source': '농림축산식품부', 'url': 'u1', 'license': 'l'}])
