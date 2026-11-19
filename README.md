@@ -188,7 +188,7 @@ collectors/weather_warning/.venv/Scripts/python collectors/weather_warning/produ
 bash streaming/flink/submit.sh auction_trade    # 낙찰 1건 = 1행
 bash streaming/flink/submit.sh realtime_price   # (정산일자, 시장, 품목)별 당일 집계
 
-# 프로듀서: 한국 시간 00~12시 3분마다 / 한 날짜 한 번 / 테스트
+# 프로듀서: 한국 시간 00~12시 3분마다, 12~17시 30분마다 / 한 날짜 한 번 / 테스트
 docker compose -f infra/docker-compose.yml --profile auction up -d auction-producer
 docker compose -f infra/docker-compose.yml --profile auction run --rm auction-producer python producer.py --once --date 2026-11-06
 docker compose -f infra/docker-compose.yml --profile auction run --rm auction-producer python -m unittest

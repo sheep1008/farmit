@@ -17,9 +17,9 @@ from .models import RealtimePrice, SettlePrice
 KST = ZoneInfo('Asia/Seoul')
 # 경매 수집기(collectors/auction)가 쓰는 collect_log.source 값
 AUCTION_SOURCE = 'at_auction'
-# 한국 시간 이 시각 전까지는 경매 중(live)으로 본다. 경매는 11시쯤 끝나고 API 반영이 약 20분 늦어
-# 수집기도 12시까지 돈다 (collectors/auction/transform.py is_collect_time)
-AUCTION_END_HOUR = 12
+# 한국 시간 이 시각 전까지는 경매 중(live)으로 본다. 대부분 11시쯤 끝나지만 안동 등은 13시 넘어서도 낙찰이 있어
+# 수집기가 17시까지 돈다 (12시부터는 30분마다. collectors/auction/transform.py is_collect_time)
+AUCTION_END_HOUR = 17
 # 정산 수집기(collectors/settle)가 쓰는 collect_log.source 값
 SETTLE_SOURCE = 'at_settle'
 # 기간 제한 (api.md 2.3): 일 단위는 최대 1년, 주·월 단위는 최대 5년. 윤일에 걸리지 않게 일수가 아니라 연으로 센다

@@ -69,9 +69,11 @@ class RealtimePriceApiTest(TestCase):
         self.assertIsNone(row['avg_price'])
         self.assertEqual(row['trade_count'], 0)
 
-    def test_12시_이후는_closed(self):
+    def test_17시_전은_live_이후는_closed(self):
         self.log(utc(2026, 11, 13, 2, 55))
-        res = self.get(utc(2026, 11, 13, 3, 0), item_id=self.apple.pk)   # 한국 12:00
+        res = self.get(utc(2026, 11, 13, 7, 59), item_id=self.apple.pk)   # 한국 16:59
+        self.assertEqual(res.json()['data'][0]['status'], 'live')
+        res = self.get(utc(2026, 11, 13, 8, 0), item_id=self.apple.pk)   # 한국 17:00
         self.assertEqual(res.json()['data'][0]['status'], 'closed')
 
     def test_market_id로_한_시장만(self):

@@ -62,9 +62,17 @@ def to_message(row, item_id, collected_at):
     }
 
 
-def is_collect_time(now_kst):
-    """수집 시간: 한국 시간 00~12시. 경매는 11시쯤 끝나지만 API 반영이 약 20분 늦다."""
-    return 0 <= now_kst.hour < 12
+def is_collect_time(now_kst, last_collected=None):
+    """수집 시간: 한국 시간 00~12시는 매번, 12~17시는 지난 수집(last_collected)에서 30분이 지났을 때만.
+
+    대부분 11시쯤 끝나지만 안동·광주각화·진주 등은 13시 넘어서도 낙찰이 있다 (2026-11-18 정산분 1,834건, 마지막 16:18).
+    오후에는 건수가 적어 30분 주기로 호출 수를 아낀다 (32곳 × 10바퀴 = 320건).
+    """
+    if now_kst.hour < 12:
+        return True
+    if now_kst.hour < 17:
+        return last_collected is None or now_kst - last_collected >= timedelta(minutes=30)
+    return False
 
 
 def rows_until(rows, stop_before):
