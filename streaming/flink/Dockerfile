@@ -7,3 +7,6 @@ FROM flink:1.20.3-scala_2.12-java17
 ADD --chown=flink:flink https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.4.0-1.20/flink-sql-connector-kafka-3.4.0-1.20.jar /opt/flink/lib/
 ADD --chown=flink:flink https://repo1.maven.org/maven2/org/apache/flink/flink-connector-jdbc/3.3.0-1.20/flink-connector-jdbc-3.3.0-1.20.jar /opt/flink/lib/
 ADD --chown=flink:flink https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar /opt/flink/lib/
+
+# 체크포인트 폴더. 이름 있는 볼륨은 처음 만들어질 때 이미지의 폴더 소유권을 그대로 받으므로 flink 사용자가 쓸 수 있다
+RUN mkdir -p /opt/flink/checkpoints && chown flink:flink /opt/flink/checkpoints
