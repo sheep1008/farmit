@@ -284,7 +284,7 @@ erDiagram
 |---|---|---|---|
 | user_id | int | PK, FK | auth_user.id |
 | sido, sigungu | varchar(20) | | 위치 (시군까지만, REQ-NFR-006) |
-| lat, lng | decimal(9,6) | | 시군 중심 좌표 (거리 계산용) |
+| lat, lng | decimal(9,6) | | 시군 중심 좌표 (거리 계산용). 가입·내 정보 수정 때 서버가 `sido`·`sigungu`로 채운다 (`backend/codes/fixtures/sigungu_coords.json`). 목록에 없는 곳이면 NULL |
 | transport_cost_per_km | int | | 기본 운송비 (원/km) |
 | storage_cost_per_week | int | | 기본 보관비 (원/주) |
 | loss_rate | decimal(5,2) | | 기본 감모율(%), 기본값 0 |
@@ -387,7 +387,7 @@ erDiagram
 | `item` | `hs_code`, `ncpms_crop_code`, `nongsaro_code` | 해당 기능을 만들 때 채운다 (1주차엔 `at_code`만 필요) |
 | `market_closure` | `reason` | 직접 입력하며 사유를 모를 수 있다 |
 | `weather_daily` | `avg_temp`, `max_temp`, `min_temp`, `rain_mm`, `humidity` | 관측값이 빠진 날이 있다. 빠진 값을 0으로 채우지 않는다 |
-| `user_profile` | `lat`, `lng`, `transport_cost_per_km`, `storage_cost_per_week` | 가입 뒤에 채운다 (`sido`, `sigungu`는 가입 때 필수) |
+| `user_profile` | `lat`, `lng`, `transport_cost_per_km`, `storage_cost_per_week` | 운송비·보관비는 가입 뒤에 채운다. `lat`·`lng`는 서버가 시군구 중심 좌표로 채우고, 좌표 목록에 없는 시군구면 NULL (`sido`, `sigungu`는 가입 때 필수) |
 | `forecast` | `last_week_price` | 기준 시점에 지난주 실제 가격이 없을 수 있다 |
 | `collect_log` | `finished_at`, `error_msg` | 실행 중이거나 성공이면 없다 |
 

@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from chat.limits import remaining_today
 from codes.models import Item, Market
+from codes.regions import sigungu_coords
 
 from .models import UserInterestItem, UserInterestMarket, UserProfile
 from .validators import is_valid_username
@@ -69,10 +70,14 @@ class SignupSerializer(serializers.Serializer):
             username=validated_data['username'],
             password=validated_data['password'],
         )
+        # 좌표는 시군구 중심 (판매 추천의 시장까지 거리 계산용). 목록에 없는 곳이면 비워 둔다
+        lat, lng = sigungu_coords(validated_data['sido'], validated_data['sigungu'])
         UserProfile.objects.create(
             user=user,
             sido=validated_data['sido'],
             sigungu=validated_data['sigungu'],
+            lat=lat,
+            lng=lng,
         )
         UserInterestItem.objects.bulk_create(
             [UserInterestItem(user=user, item_id=item_id) for item_id in validated_data['interest_item_ids']]
@@ -118,6 +123,9 @@ class ProfileUpdateSerializer(serializers.Serializer):
         for field in self.PROFILE_FIELDS:
             if field in validated_data:
                 setattr(profile, field, validated_data[field])
+        # 위치를 바꾸면 좌표도 그 시군구 중심으로 다시 맞춘다 (옛 위치 좌표가 남지 않게)
+        if 'sido' in validated_data or 'sigungu' in validated_data:
+            profile.lat, profile.lng = sigungu_coords(profile.sido, profile.sigungu)
         profile.save()
 
         # 관심 품목은 보낸 목록으로 통째로 교체한다 (빈 목록이면 모두 해제)

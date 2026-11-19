@@ -52,6 +52,19 @@ class SignupTests(AccountTestBase):
         # 가입과 동시에 로그인 처리되었는지
         self.assertEqual(self.client.get(ME_URL).status_code, 200)
 
+    def test_signup_fills_sigungu_center_coords(self):
+        # 좌표가 있어야 판매 추천이 시장까지 거리를 계산한다
+        self.signup()
+        profile = UserProfile.objects.get(user__username='farmer01')
+        self.assertAlmostEqual(float(profile.lat), 36.99, delta=0.2)   # 충주시
+        self.assertAlmostEqual(float(profile.lng), 127.93, delta=0.2)
+
+    def test_signup_unknown_region_leaves_coords_empty(self):
+        self.signup(sido='충청북도', sigungu='없는군')
+        profile = UserProfile.objects.get(user__username='farmer01')
+        self.assertIsNone(profile.lat)
+        self.assertIsNone(profile.lng)
+
     def test_password_is_stored_as_hash(self):
         self.signup()
         self.assertNotEqual(User.objects.get(username='farmer01').password, 'apple2026')
@@ -181,6 +194,19 @@ class MeTests(AccountTestBase):
         self.assertEqual(data['loss_rate'], 2.5)
         # 저장되었는지 다시 읽어 확인
         self.assertEqual(self.client.get(ME_URL).data['data']['sigungu'], '청주시')
+
+    def test_patch_location_updates_coords(self):
+        before = UserProfile.objects.get(user__username='farmer01')
+        self.client.patch(ME_URL, {'sigungu': '청주시'}, format='json')
+        after = UserProfile.objects.get(user__username='farmer01')
+        self.assertAlmostEqual(float(after.lat), 36.64, delta=0.2)   # 청주시
+        self.assertNotEqual((after.lat, after.lng), (before.lat, before.lng))
+
+    def test_patch_without_location_keeps_coords(self):
+        before = UserProfile.objects.get(user__username='farmer01')
+        self.client.patch(ME_URL, {'loss_rate': 2.5}, format='json')
+        after = UserProfile.objects.get(user__username='farmer01')
+        self.assertEqual((after.lat, after.lng), (before.lat, before.lng))
 
     def test_patch_empty_item_list_clears_interest_items(self):
         self.client.patch(ME_URL, {'interest_item_ids': []}, format='json')
