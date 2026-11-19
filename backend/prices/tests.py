@@ -726,6 +726,10 @@ class RecommendationApiTest(TestCase):
 
 
 # ── 지금 팔면 실수령액 (Y16, REQ-REC-007) ──────────────────────────
+from django.core.cache import cache  # noqa: E402
+
+from .sell_now import NO_TRANSPORT_NOTICE, SellNowGuestThrottle  # noqa: E402
+
 SELL_NOW_URL = '/api/recommendations/now'
 NOW = date(2026, 11, 16)
 
@@ -760,6 +764,7 @@ class SellNowApiTest(TestCase):
         cls.profile = UserProfile.objects.create(user=cls.user, sido='대전', sigungu='서구', lat=0, lng=0)
 
     def setUp(self):
+        cache.clear()       # 비회원 호출 제한 횟수가 다른 테스트로 넘어가지 않게
         self.client = Client(enforce_csrf_checks=False)
         self.client.force_login(self.user)
         patcher = mock.patch('prices.sell_now._today_kst', return_value=NOW)
@@ -905,9 +910,27 @@ class SellNowApiTest(TestCase):
         self.assertEqual([r['market_id'] for r in res.json()['data']['results']], ['250001'])
         self.assertEqual(res.json()['data']['results'][0]['price'], 8000.0)
 
-    def test_로그인_필요(self):
-        res = Client().post(SELL_NOW_URL, {'item_id': 1, 'volume_kg': 1}, content_type='application/json')
-        self.assertEqual((res.status_code, res.json()['error']['code']), (401, 'NOT_AUTHENTICATED'))
+    def test_비회원도_계산되고_운송비_미반영_경고가_나온다(self):
+        res = Client(enforce_csrf_checks=True).post(      # 비회원은 CSRF 토큰 없이도 된다
+            SELL_NOW_URL, {'item_id': self.apple.pk, 'volume_kg': 100, 'transport_cost_per_km': 10},
+            content_type='application/json')
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(len(body['data']['results']), 4)
+        self.assertFalse(body['meta']['costs']['transport_applied'])
+        self.assertIn(NO_TRANSPORT_NOTICE, body['meta']['warnings'])
+
+    def test_비회원은_제한을_넘으면_429이고_회원은_제한이_없다(self):
+        with mock.patch.object(SellNowGuestThrottle, 'rate', '2/min', create=True):
+            guest = Client()
+            body = {'item_id': self.apple.pk, 'volume_kg': 100}
+            for _ in range(2):
+                self.assertEqual(guest.post(SELL_NOW_URL, body, content_type='application/json').status_code, 200)
+            res = guest.post(SELL_NOW_URL, body, content_type='application/json')
+            self.assertEqual((res.status_code, res.json()['error']['code']), (429, 'RATE_LIMITED'))
+            self.assertIn('Retry-After', res.headers)
+            for _ in range(3):      # 같은 주소여도 회원은 걸리지 않는다
+                self.assertEqual(self.post().status_code, 200)
 
     def test_CSRF_없으면_403(self):
         c = Client(enforce_csrf_checks=True)

@@ -8,7 +8,5 @@ export async function requireAuth(to) {
   const auth = useAuthStore()
   await auth.init() // 새로고침 직후에는 아직 /users/me 결과가 없으므로 기다린다
   if (auth.isLoggedIn) return true
-  // 첫 화면(대시보드)처럼 비회원이 자주 들어오는 곳은 안내 대신 공개 화면으로 보낸다
-  if (to.meta.guestRedirect) return { name: to.meta.guestRedirect }
   return { name: 'error', params: { kind: 'login-required' }, query: { next: to.fullPath } }
 }

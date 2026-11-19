@@ -4,7 +4,7 @@ import BaseButton from '@/components/common/BaseButton.vue'
 import NavIcon from '@/components/layout/NavIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 
-// SCR-018 소개 (docs/screens.md). 비회원이 첫 주소(/)로 오면 여기로 온다 (router meta.guestRedirect).
+// SCR-018 소개 (docs/screens.md). 공개 홈(/)의 "서비스 소개" 링크로 온다 (K43).
 // 숫자를 지어내지 않는다: 오른쪽 미리보기는 '예시 화면'임을 표시하고, 성과 수치는 넣지 않는다.
 const auth = useAuthStore()
 
