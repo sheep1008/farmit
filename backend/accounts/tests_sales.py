@@ -217,6 +217,64 @@ class SalesApiTest(TestCase):
         self.assertEqual(self.client.get(URL, {'from': 'x'}).json()['error']['code'], 'VALIDATION_ERROR')
         self.assertEqual(self.client.get(URL, {'size': 101}).json()['error']['code'], 'INVALID_PARAMETER')
 
+    # --- REQ-SAL-005 판매 성적 리포트 ---
+    def seed_report(self):
+        """11월 대전 +10%(100kg)·−10%(300kg), 10월 대전 +10%(50kg), 11월 천안 +20%(200kg), 정산 전 1건."""
+        SettlePrice.objects.create(trade_date=date(2026, 10, 20), market=self.m1, item=self.apple, grade='ALL',
+                                   avg_price=2000, min_price=1, max_price=9, volume_kg=10)
+        SettlePrice.objects.create(trade_date=date(2026, 11, 10), market=self.m2, item=self.apple, grade='ALL',
+                                   avg_price=1000, min_price=1, max_price=9, volume_kg=10)
+        self.make()
+        self.make(volume_kg=300, amount_won=810000)
+        self.make(sale_date=date(2026, 10, 20), volume_kg=50, amount_won=110000)
+        self.make(market=self.m2, volume_kg=200, amount_won=240000)
+        self.make(sale_date=date(2026, 11, 12))                      # 정산 평균 없음 → 비교 대기
+        self.make(user=self.other, amount_won=999999)                # 남의 기록은 섞이지 않는다
+
+    def summary(self, **params):
+        return self.client.get(f'{URL}/summary', params)
+
+    def test_리포트는_목록_값의_물량_가중_평균과_같다(self):
+        self.seed_report()
+        rows = [r for r in self.client.get(URL).json()['data'] if r['vs_avg_pct'] is not None]
+        volume = sum(r['volume_kg'] for r in rows)
+        expected = round(sum(r['volume_kg'] * r['vs_avg_pct'] for r in rows) / volume, 1)
+        data = self.summary().json()['data']
+        self.assertEqual(data['overall'], {'volume_kg': volume, 'vs_avg_pct': expected})
+        self.assertEqual(expected, 3.8)       # (100×10 − 300×10 + 50×10 + 200×20) / 650 = 3.846…
+
+    def test_리포트_월별_시장별_묶음과_비교_대기(self):
+        self.seed_report()
+        data = self.summary().json()['data']
+        self.assertEqual((data['total'], data['compared'], data['pending']), (5, 4, 1))
+        self.assertEqual(data['by_month'], [
+            {'month': '2026-10', 'count': 1, 'volume_kg': 50.0, 'vs_avg_pct': 10.0},
+            {'month': '2026-11', 'count': 3, 'volume_kg': 600.0, 'vs_avg_pct': 3.3},   # (1000 − 3000 + 4000) / 600
+        ])
+        self.assertEqual(data['by_market'], [                                           # 물량 많은 순
+            {'market_id': '250001', 'market_name': '대전오정', 'count': 3, 'volume_kg': 450.0,
+             'vs_avg_pct': -3.3},                                                       # (1000 − 3000 + 500) / 450
+            {'market_id': '340101', 'market_name': '천안', 'count': 1, 'volume_kg': 200.0, 'vs_avg_pct': 20.0},
+        ])
+
+    def test_리포트_기간_필터와_오류(self):
+        self.seed_report()
+        data = self.summary(**{'from': '2026-11-01'}).json()['data']
+        self.assertEqual((data['total'], [m['month'] for m in data['by_month']]), (4, ['2026-11']))
+        res = self.summary(**{'from': '2026-11-09', 'to': '2026-11-01'})
+        self.assertEqual((res.status_code, res.json()['error']['code']), (400, 'VALIDATION_ERROR'))
+        self.assertEqual(Client().get(f'{URL}/summary').status_code, 401)
+
+    def test_리포트_비교할_기록이_없으면_overall은_null(self):
+        self.make(sale_date=date(2026, 11, 12))
+        self.assertEqual(self.summary().json()['data'], {
+            'total': 1, 'compared': 0, 'pending': 1, 'overall': None, 'by_month': [], 'by_market': []})
+
+    def test_리포트_쿼리_수는_기록_수와_무관(self):
+        self.seed_report()
+        with self.assertNumQueries(4):    # 세션·회원 2 + 기록(시장 join) + 정산 평균
+            self.summary()
+
     # --- 탈퇴 ---
     def test_회원_탈퇴하면_판매_기록도_삭제된다(self):
         self.make()

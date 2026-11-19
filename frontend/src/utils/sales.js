@@ -25,6 +25,27 @@ export function formatVsAvg(pct) {
   return { text: `${sign}${Math.abs(pct).toFixed(1)}%`, tone: pct > 0 ? 'up' : 'down' }
 }
 
+// 판매 성적 리포트(REQ-SAL-005)를 보여 줄 최소 기록 수
+export const REPORT_MIN_RECORDS = 3
+
+// 월별 막대 (api.md 2.6 summary의 by_month). 가운데 선 기준 오른쪽(높게)·왼쪽(낮게)으로 뻗는다.
+// width: 가장 큰 |%|를 반쪽 너비 100으로 본 비율(0~100)
+export function monthBars(byMonth) {
+  const max = Math.max(0, ...byMonth.map((m) => Math.abs(m.vs_avg_pct)))
+  return byMonth.map((m) => ({
+    month: m.month,
+    label: m.month.replace('-', '.'),
+    ...formatVsAvg(m.vs_avg_pct),
+    width: max ? Math.round((Math.abs(m.vs_avg_pct) / max) * 100) : 0,
+  }))
+}
+
+// 리포트 맨 위 한 문장 (기간 전체, 물량 가중)
+export function overallSentence(pct) {
+  if (pct === 0) return '시장 평균과 같게 받았습니다.'
+  return `시장 평균보다 ${Math.abs(pct).toFixed(1)}% ${pct > 0 ? '높게' : '낮게'} 받았습니다.`
+}
+
 const won = (v) => Math.round(v).toLocaleString('ko-KR')
 
 // 저장 직후 보여 줄 "같은 날 평균 가격과 비교" 문장 (SCR-007, REQ-SAL-002). record는 api.md 2.6 기록 모양

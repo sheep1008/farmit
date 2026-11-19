@@ -12,6 +12,8 @@ import {
   recommendBody,
   recommendChatQuestion,
   recommendForm,
+  scoreHorizonLabel,
+  scorecard,
   sellNowBody,
   summaryCards,
   vsLastWeek,
@@ -163,5 +165,39 @@ describe('판매 판단 배치 (요약 카드·예측 차트·추천 한 줄)', 
     expect(bestPick(rows).gain).toBe(1200)
     expect(bestPick([{ horizon: 1, net_won: 100 }]).gain).toBeNull()
     expect(bestPick([])).toBeNull()
+  })
+})
+
+// docs/api.md 2.5 GET /api/forecasts/history — 예측 성적표 (K47, REQ-PRD-005)
+describe('예측 성적표', () => {
+  const history = {
+    data: [
+      { target_week: '2026-11-09', horizon: 1, in_range: true, error_pct: 0.7 },
+      { target_week: '2026-11-09', horizon: 2, in_range: false, error_pct: 14.0 },
+      { target_week: '2026-11-02', horizon: 1, in_range: false, error_pct: -17.3 },
+    ],
+    meta: {
+      weeks: 2,
+      summary: [
+        { horizon: 1, count: 2, mean_abs_error_pct: 9.0, in_range_rate_pct: 50.0 },
+        { horizon: 2, count: 1, mean_abs_error_pct: 14.0, in_range_rate_pct: 0.0 },
+      ],
+    },
+  }
+
+  it('고른 horizon의 행과 요약만 (최신 주 먼저 그대로)', () => {
+    const s = scorecard(history, 1)
+    expect(s.rows.map((r) => r.target_week)).toEqual(['2026-11-09', '2026-11-02'])
+    expect(s).toMatchObject({ count: 2, maePct: 9.0, hitPct: 50.0, hits: 1 })
+  })
+
+  it('그 horizon의 지난 예측이 없으면 null', () => {
+    expect(scorecard(history, 4)).toBeNull()
+    expect(scorecard({ data: [], meta: { weeks: 0, summary: [] } }, 1)).toBeNull()
+  })
+
+  it('horizon 이름: 1은 그 주 초, 나머지는 몇 주 전', () => {
+    expect(scoreHorizonLabel(1)).toBe('그 주 초 예측')
+    expect(scoreHorizonLabel(4)).toBe('3주 전 예측')
   })
 })

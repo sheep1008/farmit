@@ -338,7 +338,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 #### `GET /api/markets` — 시장 목록
 | 인증 | 화면 | REQ |
 |---|---|---|
-| 전체 | SCR-004, 005, 007 | REQ-PRC-001, REQ-NFR-010 |
+| 전체 | SCR-003, 004, 005, 007 | REQ-PRC-001, REQ-NFR-010, REQ-HOM-001 |
 
 | 쿼리 | 기본값 | 설명 |
 |---|---|---|
@@ -388,7 +388,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 #### `GET /api/prices/daily` — 기간별 가격 추이 (정산 확정)
 | 인증 | 화면 | REQ |
 |---|---|---|
-| 전체 | SCR-004 | REQ-PRC-001, 002, 005 |
+| 전체 | SCR-003, SCR-004 | REQ-PRC-001, 002, 005, REQ-HOM-001 |
 
 | 쿼리 | 필수 | 기본값 | 설명 |
 |---|---|---|---|
@@ -618,6 +618,43 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 **오류**: `400 VALIDATION_ERROR`(`item_id` 필수·숫자), `404 NOT_FOUND`(없는 품목·시장), `503 DATA_NOT_READY`(예측 대상인데 예측 행이 아직 없음)
 
+#### `GET /api/forecasts/history` — 예측 성적표 (지난 예측과 실제 가격)
+| 인증 | 화면 | REQ |
+|---|---|---|
+| 전체 | SCR-005 | REQ-PRD-005 |
+
+| 쿼리 | 필수 | 설명 |
+|---|---|---|
+| `item_id` | O | 품목 |
+| `market_id` | O | 시장 |
+
+이미 끝난 대상 주(일요일이 오늘보다 이전)의 예측을 실제 정산 주평균가와 나란히 돌려준다. 최근 12개 대상 주까지, 대상 주 최신순 → `horizon` 순.
+실제가는 `GET /api/prices/daily?unit=week`(등급 `ALL`)의 `avg_price`와 같은 값이다(물량 가중 평균). 그 주에 거래가 없어 실제가가 없는 행은 뺀다.
+
+**200**
+```json
+{
+  "data": [
+    { "target_week": "2026-11-09", "horizon": 1, "base_week": "2026-11-09",
+      "pred_price": 3100.0, "lower80": 2800.0, "upper80": 3400.0,
+      "actual_price": 3250.0, "error_pct": -4.6, "in_range": true,
+      "holiday_near": false, "model_version": "v4-5ed14b55" }
+  ],
+  "meta": { "item_id": 10, "market_id": "250001", "market_name": "대전오정", "forecast_available": true,
+            "weeks": 4, "price_unit": "원/kg",
+            "summary": [ { "horizon": 1, "count": 4, "mean_abs_error_pct": 6.2, "in_range_rate_pct": 75.0 } ] }
+}
+```
+- `error_pct`: (예측 − 실제) ÷ 실제 × 100, 소수 첫째 자리. 양수면 예측이 실제보다 높았다.
+- `in_range`: 실제가가 80% 예상 범위(`lower80`~`upper80`, 경계 포함) 안에 들었는지.
+- `holiday_near`: 대상 주가 명절(설날·추석)에서 21일 이내인지 (`GET /api/forecasts`의 `holiday_notice`와 같은 기준).
+- `meta.weeks`: `data`에 들어 있는 대상 주 수. 적으면 화면에서 "참고만" 안내를 붙인다.
+- `meta.summary`: `horizon`별 건수·평균 절대 오차(%)·범위 적중률(%). `data`에 있는 행으로만 계산한다.
+- 끝난 대상 주의 예측이 아직 없으면 `200` + `data: []`, `weeks: 0`, `summary: []`.
+- 예측 대상이 아닌 품목(`is_forecast` false): `200`, `data: []`, `meta.forecast_available: false`, `meta.message`.
+
+**오류**: `400 VALIDATION_ERROR`(`item_id`·`market_id` 필수, `item_id` 숫자), `404 NOT_FOUND`(없는 품목·시장)
+
 #### `POST /api/recommendations` — 판매 추천 계산
 | 인증 | 화면 | REQ |
 |---|---|---|
@@ -713,10 +750,10 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 ### 2.6 판매 기록 (회원 전용)
 
-네 API 모두 로그인 필요(`401 NOT_AUTHENTICATED`), 쓰기는 CSRF 필요. **남의 기록은 403이 아니라 `404 NOT_FOUND`**.
+다섯 API 모두 로그인 필요(`401 NOT_AUTHENTICATED`), 쓰기는 CSRF 필요. **남의 기록은 403이 아니라 `404 NOT_FOUND`**.
 | 화면 | REQ |
 |---|---|
-| SCR-006, SCR-007 | REQ-SAL-001, 002 |
+| SCR-006, SCR-007 | REQ-SAL-001, 002, 005 |
 
 기록 모양(목록·생성·수정 응답 공통):
 ```json
@@ -732,6 +769,24 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 쿼리: `from`·`to`(YYYY-MM-DD, 기본 전체), `page`, `size`(1.3절). 판매일 최신순.
 `meta`: `page`, `size`, `total`, `total_volume_kg`, `total_amount_won` (합계는 페이지가 아니라 **기간 전체**).
 **오류**: `400 VALIDATION_ERROR`(날짜 형식, `from` > `to`), `400 INVALID_PARAMETER`(`page`·`size`)
+
+#### `GET /api/sales/summary` — 내 판매 성적 리포트 (REQ-SAL-005)
+쿼리: `from`·`to`(목록과 같은 규칙, 기본 전체). 페이지 없음 — 기간 안의 기록 **전부**를 집계한다.
+```json
+{ "data": {
+  "total": 12, "compared": 10, "pending": 2,
+  "overall": { "volume_kg": 1500.0, "vs_avg_pct": 4.2 },
+  "by_month":  [ { "month": "2026-10", "count": 4, "volume_kg": 600.0, "vs_avg_pct": -1.5 } ],
+  "by_market": [ { "market_id": "250001", "market_name": "대전오정", "count": 7, "volume_kg": 1100.0, "vs_avg_pct": 5.0 } ]
+} }
+```
+- `total`: 기간 안 기록 수. `compared`: 그중 `vs_avg_pct`가 있는 기록 수. `pending` = `total − compared` (정산 평균이 아직 없어 집계에서 뺀 건수, 화면에 "비교 대기 n건").
+- 묶음의 `vs_avg_pct` = 기록별 `vs_avg_pct`(목록에 보이는 값 그대로)의 **물량 가중 평균** `Σ(volume_kg × vs_avg_pct) / Σ volume_kg`, 소수 첫째 자리. `count`·`volume_kg`도 비교된 기록만 센다.
+- `overall`: 비교된 기록 전체. `compared`가 0이면 `null`, `by_month`·`by_market`은 `[]`.
+- `by_month`: `sale_date`의 달(판매일은 한국 날짜로 입력받은 값이라 변환 없이 그대로) 오름차순. `by_market`: 물량 많은 순.
+- 3건 미만일 때 안내를 보여 주는 것은 화면 몫이다(`total`로 판단). API는 건수와 상관없이 집계해 준다.
+
+**오류**: `400 VALIDATION_ERROR`(날짜 형식, `from` > `to`)
 
 #### `POST /api/sales` — 판매 기록 추가
 | 본문 | 필수 | 설명 |
@@ -897,10 +952,12 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | 메서드 | 주소 | 인증 | 설명 | 화면 | REQ | 주차 |
 |---|---|---|---|---|---|---|
 | GET | `/api/sales` | 회원 | **(2.6에 상세)** 판매 기록 목록 (기간 필터, 평균 대비 %) | SCR-006 | REQ-SAL-001, 002 | 2 |
+| GET | `/api/sales/summary` | 회원 | **(2.6에 상세)** 판매 성적 리포트 (월별·시장별 평균 대비 %, 물량 가중) | SCR-006 | REQ-SAL-005 | 4 |
 | POST | `/api/sales` | 회원 | **(2.6에 상세)** 판매 기록 추가 | SCR-007 | REQ-SAL-001 | 2 |
 | PATCH | `/api/sales/{id}` | 회원 | **(2.6에 상세)** 판매 기록 수정 | SCR-007 | REQ-SAL-001 | 2 |
 | DELETE | `/api/sales/{id}` | 회원 | **(2.6에 상세)** 판매 기록 삭제 | SCR-007 | REQ-SAL-001 | 2 |
 | GET | `/api/forecasts` | 전체 | **(2.5에 상세)** 주간 예측 (item_id, market_id) — 예측값·80% 구간·명절 주의 | SCR-003, 005 | REQ-PRD-001~003 | 2 |
+| GET | `/api/forecasts/history` | 전체 | **(2.5에 상세)** 예측 성적표 (item_id, market_id) — 지난 예측·실제 주평균가·오차·범위 적중 | SCR-005 | REQ-PRD-005 | 4 |
 | POST | `/api/recommendations` | 회원 | **(2.5에 상세)** 판매 추천 계산 (품목·물량·시기·비용) | SCR-005 | REQ-REC-001~006 | 2 |
 | POST | `/api/recommendations/now` | 전체 | **(2.5에 상세)** 전국 시장 "지금 팔면" 실수령액 (비회원은 분당 20회) | SCR-003, SCR-005 | REQ-REC-007 | 2 |
 | GET | `/api/alerts` | 회원 | 알림 목록 (`unread=true` 필터) | SCR-003, 008 | REQ-ALT-003 | 3 |

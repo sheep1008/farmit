@@ -101,13 +101,9 @@ def sales(request):
     return list_sales(request)
 
 
-def list_sales(request):
-    """내 판매 기록. 기간(from·to, 기본 전체)·페이지, 최신 판매일 순. meta에 기간 전체 합계."""
+def _in_period(request):
+    """내 기록을 from·to(기본 전체)로 거른다. (queryset, None) 또는 (None, 400 응답). 목록·리포트 공통."""
     params = request.query_params
-    page = positive_int(params.get('page'), 1)
-    size = positive_int(params.get('size'), 20, MAX_SIZE)
-    if page is None or size is None:
-        return error(400, 'INVALID_PARAMETER', '쿼리 값이 허용 범위를 벗어났습니다.')
     qs = SaleRecord.objects.filter(user=request.user)
     details = {}
     start = end = None
@@ -123,13 +119,26 @@ def list_sales(request):
         else:
             end = value
     if details:
-        return _bad(details)
+        return None, _bad(details)
     if start and end and start > end:
-        return _bad({'from': ['`to`보다 늦을 수 없습니다.']})
+        return None, _bad({'from': ['`to`보다 늦을 수 없습니다.']})
     if start:
         qs = qs.filter(sale_date__gte=start)
     if end:
         qs = qs.filter(sale_date__lte=end)
+    return qs, None
+
+
+def list_sales(request):
+    """내 판매 기록. 기간(from·to, 기본 전체)·페이지, 최신 판매일 순. meta에 기간 전체 합계."""
+    params = request.query_params
+    page = positive_int(params.get('page'), 1)
+    size = positive_int(params.get('size'), 20, MAX_SIZE)
+    if page is None or size is None:
+        return error(400, 'INVALID_PARAMETER', '쿼리 값이 허용 범위를 벗어났습니다.')
+    qs, bad = _in_period(request)
+    if bad:
+        return bad
 
     sums = qs.aggregate(total=Count('id'), volume=Sum('volume_kg'), amount=Sum('amount_won'))
     total = sums['total']
@@ -141,6 +150,52 @@ def list_sales(request):
     rows = list(qs.select_related('market', 'item').order_by('-sale_date', '-id')[offset:offset + size])
     averages = _averages(rows)
     return ok([sale_data(r, averages) for r in rows], meta)
+
+
+def _add(groups, key, volume, pct):
+    """묶음별 [건수, 물량 합, Σ(물량 × 평균 대비 %)]를 쌓는다."""
+    g = groups.setdefault(key, [0, Decimal(0), Decimal(0)])
+    g[0] += 1
+    g[1] += volume
+    g[2] += volume * Decimal(str(pct))
+
+
+def _group(g):
+    count, volume, weighted = g          # 물량은 0.1 이상만 저장되므로 0으로 나눌 일이 없다
+    pct = (weighted / volume).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
+    return {'count': count, 'volume_kg': float(volume), 'vs_avg_pct': float(pct)}
+
+
+@api_view(['GET'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def sales_summary(request):
+    """내 판매 성적 리포트 (REQ-SAL-005, api.md 2.6). 기간 안 기록 전부를 월별·시장별로 묶어
+    목록에 보이는 vs_avg_pct의 물량 가중 평균을 낸다. 정산 평균이 없는 기록은 빼고 pending으로 센다."""
+    qs, bad = _in_period(request)
+    if bad:
+        return bad
+    rows = list(qs.select_related('market'))
+    averages = _averages(rows)
+    overall, months, markets, names = {}, {}, {}, {}
+    for r in rows:
+        avg = averages.get((r.sale_date, r.market_id, r.item_id, r.grade))
+        pct = _pct(Decimal(r.amount_won) / r.volume_kg, avg)
+        if pct is None:
+            continue
+        _add(overall, 'all', r.volume_kg, pct)
+        _add(months, r.sale_date.strftime('%Y-%m'), r.volume_kg, pct)   # 판매일은 한국 날짜라 변환 없이 그 달
+        _add(markets, r.market_id, r.volume_kg, pct)
+        names[r.market_id] = r.market.name
+    compared = overall['all'][0] if overall else 0
+    total = _group(overall['all']) if overall else None
+    return ok({
+        'total': len(rows), 'compared': compared, 'pending': len(rows) - compared,
+        'overall': {'volume_kg': total['volume_kg'], 'vs_avg_pct': total['vs_avg_pct']} if total else None,
+        'by_month': [{'month': m, **_group(g)} for m, g in sorted(months.items())],
+        'by_market': [{'market_id': m, 'market_name': names[m], **_group(g)}
+                      for m, g in sorted(markets.items(), key=lambda kv: -kv[1][1])],
+    })
 
 
 def create_sale(request):

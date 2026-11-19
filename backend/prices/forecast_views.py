@@ -12,8 +12,8 @@ from rest_framework.permissions import IsAuthenticated
 from api.responses import error, ok
 from codes.models import Holiday, Item, Market, MarketClosure
 
-from .models import Forecast
-from .views import _bad, _get_item, _kst_iso, _price, _today_kst, market_prices
+from .models import Forecast, SettlePrice
+from .views import _aggregate, _bad, _get_item, _kst_iso, _price, _today_kst, market_prices
 
 # 명절 이름. holiday 테이블에는 공휴일 전체가 들어 있어 이름으로 명절만 고른다 (결정 0009)
 HOLIDAY_KEYWORDS = ('설날', '추석')
@@ -22,6 +22,8 @@ HOLIDAY_NOTICE_DAYS = 21
 HOLIDAY_NOTICE = '명절 전후에는 가격이 크게 오를 수 있으나, 이 예측은 명절 급등 폭을 낮게 잡는 경향이 있습니다.'
 NO_FORECAST_NOTICE = '이 품목은 아직 가격 예측을 제공하지 않습니다.'
 EARTH_RADIUS_KM = 6371.0
+# 예측 성적표가 돌려주는 최근 대상 주 수 (api.md 2.5)
+HISTORY_WEEKS = 12
 
 
 def _holiday_dates(weeks):
@@ -93,6 +95,67 @@ def forecasts(request):
                      # 이번 주 월요일보다 이른 기준 주면 이번 주 예측 작업이 아직 안 돈 것
                      'is_stale': base_week < today - timedelta(days=today.weekday()),
                      'model_version': first.model_version, 'created_at': _kst_iso(first.created_at)})
+
+
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([])
+def forecast_history(request):
+    """예측 성적표 (REQ-PRD-005). 끝난 대상 주의 예측을 실제 정산 주평균가와 나란히 돌려준다.
+
+    실제가는 /prices/daily?unit=week 와 같은 계산(_aggregate, 등급 ALL)을 쓴다. 실제가가 없는 주는 뺀다.
+    """
+    params = request.query_params
+    details = {}
+    item = _get_item(params.get('item_id', ''), details)
+    market_id = params.get('market_id', '')
+    if not market_id:
+        details['market_id'] = ['필수 값입니다.']
+    if details:
+        return _bad(details)
+    if item is False:
+        return error(404, 'NOT_FOUND', '없는 품목입니다.')
+    market = Market.objects.filter(pk=market_id).first()
+    if market is None:
+        return error(404, 'NOT_FOUND', '없는 시장입니다.')
+
+    meta = {'item_id': item.item_id, 'market_id': market.market_id, 'market_name': market.name,
+            'price_unit': '원/kg'}
+    if not item.is_forecast:
+        return ok([], {**meta, 'forecast_available': False, 'message': NO_FORECAST_NOTICE,
+                       'weeks': 0, 'summary': []})
+
+    # 끝난 주만: 대상 주 일요일이 오늘보다 이전. 이번 주는 실제가가 일부뿐이라 넣지 않는다
+    past = Forecast.objects.filter(item=item, market=market,
+                                   target_week__lt=_today_kst() - timedelta(days=6))
+    weeks = list(past.order_by('-target_week').values_list('target_week', flat=True).distinct()[:HISTORY_WEEKS])
+    actuals = {}
+    if weeks:
+        settle = SettlePrice.objects.filter(item=item, market=market, grade='ALL',
+                                            trade_date__range=(min(weeks), max(weeks) + timedelta(days=6)))
+        actuals = {period: avg for period, avg, *_ in _aggregate(settle, 'week')}
+    holidays = _holiday_dates(weeks)
+
+    data, by_horizon = [], {}
+    for r in past.filter(target_week__in=weeks).order_by('-target_week', 'horizon'):
+        actual = actuals.get(r.target_week)
+        if not actual:
+            continue
+        error_pct = (r.pred_price - actual) / actual * 100
+        in_range = r.lower80 <= actual <= r.upper80
+        data.append({
+            'target_week': r.target_week.isoformat(), 'horizon': r.horizon, 'base_week': r.base_week.isoformat(),
+            'pred_price': _price(r.pred_price), 'lower80': _price(r.lower80), 'upper80': _price(r.upper80),
+            'actual_price': _price(actual), 'error_pct': _price(error_pct), 'in_range': in_range,
+            'holiday_near': _holiday_near(r.target_week, holidays), 'model_version': r.model_version})
+        by_horizon.setdefault(r.horizon, []).append((abs(error_pct), in_range))
+
+    summary = [{'horizon': h, 'count': len(rows),
+                'mean_abs_error_pct': _price(sum(e for e, _ in rows) / len(rows)),
+                'in_range_rate_pct': _price(Decimal(sum(1 for _, hit in rows if hit)) * 100 / len(rows))}
+               for h, rows in sorted(by_horizon.items())]
+    return ok(data, {**meta, 'forecast_available': True,
+                     'weeks': len({row['target_week'] for row in data}), 'summary': summary})
 
 
 class RecommendationSerializer(serializers.Serializer):

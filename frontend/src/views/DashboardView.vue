@@ -12,7 +12,8 @@ import SellNowTrial from '@/components/recommend/SellNowTrial.vue'
 import { useAlertStore } from '@/stores/alerts'
 import { useAuthStore } from '@/stores/auth'
 import { useCurrentItemStore } from '@/stores/currentItem'
-import { formatKstDateTime } from '@/utils/dates'
+import { BRIEFING_EMPTY_TEXT, buildBriefing } from '@/utils/briefing'
+import { addDays, formatKstDateTime, mondayOf, todayKst } from '@/utils/dates'
 import { CASE_TYPES, alertTypeLabel, caseTypeLabel, formatPct, regionText } from '@/utils/alerts'
 import { CHAT_MAX_LENGTH, chatPrefillRoute } from '@/utils/chat'
 import { formatWon, summarizeForecast, summarizeRealtime, summarizeMonthly } from '@/utils/dashboard'
@@ -25,6 +26,7 @@ import { realtimeStatusText } from '@/utils/realtime'
 // ④ 이번 달 할 일: 첫 관심 품목의 이번 달 시작·계속 농작업과 주의 시기 (K33, REQ-RAG-002, GET /api/farming/monthly)
 // ⑤ 특수 상황 과거 사례 요약: 첫 관심 품목의 사건 종류별 건수와 4주 뒤 평균 변화 (K20, REQ-HIS-001·002, GET /api/cases)
 // ⑥ 채팅 입력창: 입력 후 /chat?q=로 이동, 채팅 화면이 질문 칸을 채운다 (K33, REQ-CHT-001)
+// 맨 위 오늘의 한 줄 브리핑: 시세 변화·안 읽은 알림·이번 달 할 일을 한 문장으로 (K45, GET /api/markets, GET /api/prices/daily unit=week)
 // 비회원(K43, 공개 홈): 같은 화면을 기본 품목으로 보여 준다. 회원 전용인 ③ 알림과 ⑥ 채팅 자리는 가입 안내로 바꾼다.
 const auth = useAuthStore()
 const currentItem = useCurrentItemStore()
@@ -177,7 +179,54 @@ async function loadForecast() {
 
 const forecastSummary = computed(() => summarizeForecast(forecast.value?.data))
 
+// 오늘의 한 줄 브리핑 (K45). 시세는 기준 시장(market.is_reference, 가격 화면과 같은 규칙)의 주간 확정 평균가로 비교한다
+const refMarket = ref(null)
+const weekly = ref(null)
+const weeklyLoading = ref(false)
+
+async function loadWeekly() {
+  if (!item.value) return
+  weeklyLoading.value = true
+  weekly.value = null
+  try {
+    if (!refMarket.value) {
+      const markets = (await http.get('/markets')).data.data
+      refMarket.value = markets.find((m) => m.is_reference) ?? markets[0] ?? null
+    }
+    if (refMarket.value) {
+      // 지지난주 월요일부터 어제까지: 월요일(이번 주 정산 없음)에도 비교할 두 주가 들어온다
+      const params = {
+        item_id: item.value.item_id,
+        market_id: refMarket.value.market_id,
+        unit: 'week',
+        from: addDays(mondayOf(todayKst()), -14),
+      }
+      weekly.value = (await http.get('/prices/daily', { params })).data.data
+    }
+  } catch {
+    // 실패하면 브리핑에서 시세 조각만 빠진다 (5xx 토스트는 인터셉터가 띄운다)
+  } finally {
+    weeklyLoading.value = false
+  }
+}
+
+// 조각에 쓰는 데이터가 다 올 때까지 기다렸다가 한 번에 보여 준다 (문장이 중간에 바뀌지 않게)
+const briefingLoading = computed(
+  () => weeklyLoading.value || monthlyLoading.value || (!isGuest.value && alertsLoading.value),
+)
+const briefing = computed(() =>
+  buildBriefing({
+    item: item.value,
+    market: refMarket.value,
+    weekly: weekly.value,
+    today: todayKst(),
+    unreadAlerts: isGuest.value || alertsError.value ? null : alertsTotal.value,
+    monthly: monthly.value?.data,
+  }),
+)
+
 function loadItemCards() {
+  loadWeekly()
   loadRealtime()
   loadForecast()
   loadMonthly()
@@ -238,6 +287,18 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
         관심 품목 <strong>{{ item.name }}</strong>
       </RouterLink>
     </header>
+
+    <!-- 오늘의 한 줄 브리핑 (K45): 조각을 누르면 해당 화면으로 간다 -->
+    <p class="briefing" aria-live="polite">
+      <span class="briefing-label">오늘의 브리핑</span>
+      <span v-if="briefingLoading" class="muted">오늘 상황을 정리하는 중…</span>
+      <span v-else-if="!briefing.length" class="muted">{{ BRIEFING_EMPTY_TEXT }}</span>
+      <span v-else>
+        <template v-for="(p, i) in briefing" :key="p.key">
+          <RouterLink :to="p.to">{{ p.text }}</RouterLink>{{ i < briefing.length - 1 ? ', ' : '.' }}
+        </template>
+      </span>
+    </p>
 
     <!-- 비회원: 가입하면 무엇이 더 되는지 한 번만 안내한다 (채팅 입력창 자리) -->
     <div v-if="isGuest" class="onboarding">
@@ -534,6 +595,40 @@ h1 {
   background: var(--color-background);
   color: var(--color-text);
   font: inherit;
+}
+/* 오늘의 한 줄 브리핑: 카드보다 가볍게, 왼쪽 선으로만 구분한다 */
+.briefing {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 12px 18px;
+  border-left: 4px solid var(--color-primary);
+  border-radius: var(--radius);
+  background: var(--color-background);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--color-heading);
+  overflow-wrap: anywhere;
+}
+.briefing-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-primary);
+}
+.briefing .muted {
+  font-weight: 400;
+}
+.briefing a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-hover);
+  text-underline-offset: 4px;
+}
+.briefing a:hover {
+  color: var(--color-primary);
+  text-decoration-color: currentColor;
 }
 .onboarding {
   display: flex;
