@@ -1,6 +1,6 @@
 """RAG 색인: data/rag/docs/*.jsonl → 조각 나누기 → 임베딩 → Elasticsearch rag_docs (Y12)
 
-사용: python manage.py rag_index [--recreate] [--source ncpms|fieldtech|disaster]
+사용: python manage.py rag_index [--recreate] [--source ncpms|fieldtech|fieldqna|disaster]
 - --recreate: 인덱스를 지우고 새로 만든다 (임베딩 모델·매핑을 바꿨을 때)
 - 조각 id는 {doc_id}:{순번}이라 다시 실행해도 같은 조각은 덮어쓴다 (건수가 늘지 않는다)
 - 본문 해시(text_hash)가 같은 조각은 임베딩을 건너뛴다 (2,300개 전체 임베딩은 개발 PC에서 약 22분)
@@ -14,7 +14,7 @@ from rag import embed, store
 from rag.text import chunks_for_doc
 
 BATCH = 64
-SOURCE_TYPES = {'ncpms': 'ncpms_pest', 'fieldtech': 'fieldtech', 'disaster': 'disaster'}  # rag_collect 출처 → 조각의 source_type
+SOURCE_TYPES = {'ncpms': 'ncpms_pest', 'fieldtech': 'fieldtech', 'fieldqna': 'fieldqna', 'disaster': 'disaster'}  # rag_collect 출처 → 조각의 source_type
 
 
 class Command(BaseCommand):

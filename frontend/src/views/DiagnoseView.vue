@@ -77,7 +77,7 @@ function followUp(candidate = null) {
 <template>
   <section class="diagnose-view">
     <h1>증상 진단</h1>
-    <p class="lead">작물에 보이는 증상을 적으면 농촌진흥청 병해충·현장기술지원 자료에서 의심되는 병해충을 찾아 드립니다.</p>
+    <p class="lead">작물에 보이는 증상을 적으면 농촌진흥청 병해충·현장기술지원·상담 사례 자료에서 의심되는 병해충을 찾아 드립니다.</p>
 
     <form class="form" @submit.prevent="submit">
       <label>

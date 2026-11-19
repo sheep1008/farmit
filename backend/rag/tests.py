@@ -680,3 +680,77 @@ class CommonSourceCommandTests(SimpleTestCase):
         self.assertIn('guide', rag_collect.SOURCES)
         self.assertNotIn('guide', rag_index.SOURCE_TYPES)
         self.assertEqual(rag_index.SOURCE_TYPES['disaster'], 'disaster')
+
+
+QNA_VIEW = {'cntntsNo': '209159', 'cntntsSj': '사과 과수원 탄저병 방제 문의', 'regDt': '2018-10-01', 'wrterNm': '홍길동',
+            'placeInfo': '경상남도 밀양시', 'questDtl': '<p>수확 직전인데 탄저병이 번집니다. 방법이 있을까요?</p>',
+            'answerDtl': '<ul><li>- 병든 과실은 따내어 땅속 깊이 묻고, 살균제 1,000배액을 살포합니다.</li></ul>'
+                         '<p>이 내용은 박영희연구사가 조사했습니다. 자세한 내용은 인증관리팀 김철수(☎063-238-1234, a@b.com)에게 '
+                         '문의하시기 바랍니다. 담당 지도사와 상의하세요.</p>'}
+
+
+def _qna_xml(items):
+    rows = ''.join('<item>' + ''.join(f'<{k}><![CDATA[{v}]]></{k}>' for k, v in it.items()) + '</item>' for it in items)
+    return f'<response><header><resultCode>00</resultCode></header><body><items>{rows}</items></body></response>'
+
+
+class FieldQnaSourceTests(SimpleTestCase):
+    """K49: 농사로 현장애로기술사례 (농가 질문·전문가 답변)"""
+
+    def test_to_doc_finds_crop_and_drops_private_info(self):
+        from rag.sources import fieldqna
+        doc = fieldqna.to_doc(QNA_VIEW, ['사과', '배'])
+        self.assertEqual((doc['doc_id'], doc['source_type'], doc['crop_names']), ('fieldqna_209159', 'fieldqna', ['사과']))
+        self.assertTrue(doc['text'].startswith('(2018-10 처리된 상담 사례)\n[질문]\n'))
+        self.assertIn('[답변]\n- 병든 과실은', doc['text'])
+        dumped = json.dumps(doc, ensure_ascii=False)
+        for private in ('홍길동', '밀양', '김철수', '박영희', '238-1234', 'a@b.com', '☎'):
+            self.assertNotIn(private, dumped)             # 연락처가 든 문장은 통째로 지운다
+        self.assertIn('이 내용은 연구사가 조사했습니다. 담당 지도사와 상의하세요.', doc['text'])  # 직함 앞 이름만 지운다
+        self.assertIn(DOSE_TOKEN, doc['text'])
+        self.assertNotIn('1,000배액', doc['text'])
+
+    def test_to_doc_skips_post_without_known_crop(self):
+        from rag.sources import fieldqna
+        # 작물은 제목에서만 찾는다 (질문 본문의 "사과"는 보지 않는다). "차이점"의 "차"는 작물이 아니다
+        self.assertIsNone(fieldqna.to_doc({**QNA_VIEW, 'cntntsSj': '산소 주위 칡 방제', 'questDtl': '사과밭 옆 칡'}, ['사과']))
+        self.assertIsNone(fieldqna.to_doc({**QNA_VIEW, 'cntntsSj': '유정란과 무정란의 차이점'}, ['사과', '차']))
+        self.assertIsNone(fieldqna.to_doc({**QNA_VIEW, 'answerDtl': '<p>짧다</p>'}, ['사과']))
+
+    def test_collect_uses_recent_posts_only_and_failed_crop_is_not_done(self):
+        from rag.sources import fieldqna
+        rows = [{'cntntsNo': '1', 'cntntsSj': '사과 탄저병', 'regDt': '2018-10-01'},
+                {'cntntsNo': '2', 'cntntsSj': '배 검은별무늬병', 'regDt': '2019-05-01'},
+                {'cntntsNo': '3', 'cntntsSj': '사과 옛 글', 'regDt': '2012-01-02'},
+                {'cntntsNo': '4', 'cntntsSj': '산소 주위 칡 방제', 'regDt': '2020-03-01'},
+                {'cntntsNo': '../x', 'cntntsSj': '사과', 'regDt': '2020-01-01'}]
+
+        class FakeFetcher:
+            calls = 0
+            def get(self, url, params, cache_name=None, refresh=False):
+                self.calls += 1
+                if url.endswith('List'):
+                    return _qna_xml(rows)
+                if params['cntntsNo'] == '2':
+                    raise fieldqna.SourceError('fieldqna HTTP 500')
+                return _qna_xml([{**QNA_VIEW, 'cntntsNo': params['cntntsNo']}])
+            def save(self, *a):
+                pass
+
+        f = FakeFetcher()
+        res = fieldqna._collect(f, 'K', ['사과', '배'], lambda m: None, False, None)
+        # 2012년 글, 제목에 작물이 없는 글, 숫자가 아닌 번호는 상세를 부르지 않는다 (목록 1 + 상세 2)
+        self.assertEqual([d['doc_id'] for d in res.docs], ['fieldqna_1'])
+        self.assertEqual((res.calls, res.done_crops, res.errors), (3, ['사과'], 1))
+
+    def test_collect_without_key_fails(self):
+        from rag.sources import fieldqna
+        with mock.patch.dict('os.environ', {'NONGSARO_WEEKFARM_KEY': ''}), self.assertRaises(fieldqna.SourceError):
+            fieldqna.collect([])
+
+    def test_source_is_collected_indexed_and_used_for_diagnosis(self):
+        from chat.management.commands import rag_collect, rag_index
+        from farming import diagnose
+        self.assertIn('fieldqna', rag_collect.SOURCES)
+        self.assertEqual(rag_index.SOURCE_TYPES['fieldqna'], 'fieldqna')
+        self.assertIn('fieldqna', diagnose.SOURCE_TYPES)

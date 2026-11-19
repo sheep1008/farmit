@@ -1,6 +1,6 @@
-"""RAG 문서 수집: NCPMS 병해충 + 농사로 현장기술지원 → data/rag/docs/{source}.jsonl (Y12, REQ-COL-006 일부)
+"""RAG 문서 수집: NCPMS 병해충 + 농사로 현장기술지원·현장애로기술사례 → data/rag/docs/{source}.jsonl (Y12, REQ-COL-006 일부)
 
-사용: python manage.py rag_collect [--source ncpms|fieldtech|disaster|guide|all] [--crops 사과,배] [--max-per-crop N]
+사용: python manage.py rag_collect [--source ncpms|fieldtech|fieldqna|disaster|guide|all] [--crops 사과,배] [--max-per-crop N]
 - 작물은 기본으로 item 테이블의 모든 품목을 작물 이름으로 바꿔 쓴다 (rag/crop_names.json)
 - API 응답은 data/rag/raw/에 캐시해 다시 실행하면 호출하지 않는다. 실행 기록은 collect_log에 남긴다
 - --crops로 일부만 받으면 그 작물 문서만 바꾸고 나머지는 그대로 둔다
@@ -14,12 +14,13 @@ from django.utils import timezone
 from api.models import CollectLog
 from codes.models import Item
 from rag import crops as crop_util
-from rag.sources import disaster, ebook, ncpms, nongsaro
+from rag.sources import disaster, ebook, fieldqna, ncpms, nongsaro
 from rag.sources.http import SourceError
 
 SOURCES = {
     'ncpms': ('rag_ncpms', ncpms.collect, None),
     'fieldtech': ('rag_fieldtech', nongsaro.collect, 8),
+    'fieldqna': ('rag_fieldqna', fieldqna.collect, None),   # 현장애로기술사례 (농가 질문·전문가 답변)
     'disaster': ('rag_disaster', disaster.collect, None),
     'guide': ('rag_guide', ebook.collect, None),   # 색인하지 않는 길잡이 목차 (원문 링크용)
 }
@@ -44,7 +45,7 @@ def write_docs(source, docs):
 
 
 class Command(BaseCommand):
-    help = 'RAG 문서를 수집한다 (NCPMS 병해충, 농사로 현장기술지원)'
+    help = 'RAG 문서를 수집한다 (NCPMS 병해충, 농사로 현장기술지원·현장애로기술사례)'
 
     def add_arguments(self, parser):
         parser.add_argument('--source', default='all', choices=['all', *SOURCES])

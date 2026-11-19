@@ -335,7 +335,7 @@ class DiagnoseTests(Base):
         self.assertEqual(d['sources'][0]['url'], 'u1')
         self.assertIn('disclaimer', d)
         self.assertEqual(self.search.call_args.kwargs['crop'], '사과')
-        self.assertEqual(self.search.call_args.kwargs['source_types'], ['ncpms_pest', 'fieldtech'])
+        self.assertEqual(self.search.call_args.kwargs['source_types'], ['ncpms_pest', 'fieldtech', 'fieldqna'])
 
     def test_dose_text_is_masked(self):
         self.complete.return_value = llm_result({'candidates': [
