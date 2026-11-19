@@ -954,3 +954,115 @@ class SellNowApiTest(TestCase):
         res = self.post()
         self.assertEqual(res.status_code, 200)
         self.assertFalse(res.json()['meta']['costs']['transport_applied'])
+
+
+# ── 예측 성적표 (K47, REQ-PRD-005) ──────────────────────────
+HISTORY_URL = '/api/forecasts/history'
+HISTORY_TODAY = date(2026, 11, 19)      # 목요일. 이번 주 월요일은 11/16
+
+
+class ForecastHistoryApiTest(TestCase):
+    """GET /api/forecasts/history (REQ-PRD-005)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.m1 = Market.objects.create(market_id='250001', name='대전오정', sido='대전', lat=36.4, lng=127.4,
+                                       is_collect=True)
+        cls.m2 = Market.objects.create(market_id='340101', name='천안', sido='충남', lat=36.8, lng=127.1,
+                                       is_collect=True)
+        cls.apple = Item.objects.create(at_code='0601', name='사과', category='과일', is_forecast=True)
+        cls.cabbage = Item.objects.create(at_code='1101', name='배추', category='채소', is_forecast=False)
+        # 기준 주 11/2: h1→11/2(3100), h2→11/9(3200) … / 기준 주 11/9: h1→11/9(3100), h2→11/16(이번 주) …
+        make_forecasts(cls.apple, [cls.m1], base_week=date(2026, 11, 2), version='v2')
+        make_forecasts(cls.apple, [cls.m1], base_week=date(2026, 11, 9), version='v3')
+        # 11/2 주: 3000원×1000kg + 4000원×3000kg → 물량 가중 3750 / 11/9 주: 3150 / 이번 주(11/16)도 거래는 있다
+        settle(cls.apple, cls.m1, date(2026, 11, 3), 3000, 1000)
+        settle(cls.apple, cls.m1, date(2026, 11, 5), 4000, 3000)
+        settle(cls.apple, cls.m1, date(2026, 11, 10), 3150, 1000)
+        settle(cls.apple, cls.m1, date(2026, 11, 17), 3300, 1000)
+
+    def setUp(self):
+        patcher = mock.patch('prices.forecast_views._today_kst', return_value=HISTORY_TODAY)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def get(self, **params):
+        return self.client.get(HISTORY_URL, {'item_id': self.apple.pk, 'market_id': '250001', **params})
+
+    def test_끝난_주만_최신순으로_예측과_실제와_오차(self):
+        res = self.get()
+        self.assertEqual(res.status_code, 200)
+        data = res.json()['data']
+        self.assertEqual([(r['target_week'], r['horizon'], r['base_week']) for r in data],
+                         [('2026-11-09', 1, '2026-11-09'), ('2026-11-09', 2, '2026-11-02'),
+                          ('2026-11-02', 1, '2026-11-02')])
+        self.assertEqual(data[0], {
+            'target_week': '2026-11-09', 'horizon': 1, 'base_week': '2026-11-09',
+            'pred_price': 3100.0, 'lower80': 2800.0, 'upper80': 3400.0,
+            'actual_price': 3150.0, 'error_pct': -1.6, 'in_range': True,
+            'holiday_near': False, 'model_version': 'v3'})
+        # 11/2 주: 예측 3100, 실제 3750 → -17.3%, 상한 3400을 넘어 범위 밖
+        self.assertEqual((data[2]['actual_price'], data[2]['error_pct'], data[2]['in_range'], data[2]['model_version']),
+                         (3750.0, -17.3, False, 'v2'))
+
+    def test_요약은_horizon별_평균_절대_오차와_범위_적중률(self):
+        meta = self.get().json()['meta']
+        self.assertEqual(meta['weeks'], 2)
+        self.assertTrue(meta['forecast_available'])
+        self.assertEqual(meta['market_name'], '대전오정')
+        self.assertEqual(meta['summary'], [
+            {'horizon': 1, 'count': 2, 'mean_abs_error_pct': 9.5, 'in_range_rate_pct': 50.0},
+            {'horizon': 2, 'count': 1, 'mean_abs_error_pct': 1.6, 'in_range_rate_pct': 100.0}])
+
+    def test_실제가는_가격_통계의_주평균과_같다(self):
+        weekly = self.client.get('/api/prices/daily', {
+            'item_id': self.apple.pk, 'market_id': '250001', 'unit': 'week',
+            'from': '2026-11-02', 'to': '2026-11-15'}).json()['data']
+        expected = {r['period']: r['avg_price'] for r in weekly}
+        self.assertEqual(expected, {'2026-11-02': 3750.0, '2026-11-09': 3150.0})
+        for row in self.get().json()['data']:
+            self.assertEqual(row['actual_price'], expected[row['target_week']])
+
+    def test_실제가가_없는_주는_뺀다(self):
+        make_forecasts(self.apple, [self.m1], base_week=date(2026, 10, 26))   # 10/26 주는 거래 없음
+        weeks = {r['target_week'] for r in self.get().json()['data']}
+        self.assertEqual(weeks, {'2026-11-02', '2026-11-09'})
+
+    def test_최근_12개_대상_주까지만(self):
+        for i in range(2, 15):      # 11/2에서 2~14주 전: 대상 주 13개 추가
+            week = date(2026, 11, 2) - timedelta(weeks=i)
+            Forecast.objects.create(item=self.apple, market=self.m1, base_week=week, horizon=1, target_week=week,
+                                    pred_price=3000, lower80=2700, upper80=3300, model_version='v1',
+                                    created_at=utc(2026, 1, 1))
+            settle(self.apple, self.m1, week, 3000, 1000)
+        body = self.get().json()
+        self.assertEqual(body['meta']['weeks'], 12)
+        # 11/9, 11/2 + 2~11주 전 10개 = 12개. 가장 오래된 주는 11/2의 11주 전
+        self.assertEqual(min(r['target_week'] for r in body['data']), '2026-08-17')
+
+    def test_명절_3주_이내_주는_표시(self):
+        Holiday.objects.create(holiday_date=date(2026, 11, 25), name='추석')   # 11/9 주(일요일 11/15)에서 10일 뒤
+        Holiday.objects.create(holiday_date=date(2026, 10, 9), name='한글날')
+        self.assertTrue(all(r['holiday_near'] for r in self.get().json()['data']))
+
+    def test_지난_예측이_없는_시장은_빈_결과(self):
+        body = self.get(market_id='340101').json()
+        self.assertEqual((body['data'], body['meta']['weeks'], body['meta']['summary']), ([], 0, []))
+        self.assertTrue(body['meta']['forecast_available'])
+
+    def test_예측_대상이_아닌_품목(self):
+        body = self.get(item_id=self.cabbage.pk).json()
+        self.assertEqual(body['data'], [])
+        self.assertFalse(body['meta']['forecast_available'])
+        self.assertIn('message', body['meta'])
+
+    def test_입력_오류(self):
+        res = self.client.get(HISTORY_URL)
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(set(res.json()['error']['details']), {'item_id', 'market_id'})
+        self.assertEqual(self.get(item_id='abc').status_code, 400)
+        self.assertEqual(self.get(item_id=999999).status_code, 404)
+        self.assertEqual(self.get(market_id='999999').status_code, 404)
+
+    def test_로그인_없이_조회(self):
+        self.assertEqual(Client().get(HISTORY_URL, {'item_id': self.apple.pk, 'market_id': '250001'}).status_code, 200)

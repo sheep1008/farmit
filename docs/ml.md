@@ -287,7 +287,7 @@ mlflow ui --backend-store-uri sqlite:///mlruns/airflow.db
 ```
 
 ### 예측 이력 (REQ-PRD-005, K19)
-`forecast` 테이블은 지난 기준 주를 지우지 않는다. `farmit_ml.monitor`가 지난 예측과 실제 주평균을 나란히 놓는다 (Airflow `forecast_weekly`의 `monitor` 태스크가 매주 돈다).
+`forecast` 테이블은 지난 기준 주를 지우지 않는다. `farmit_ml.monitor`가 지난 예측과 실제 주평균을 나란히 놓는다 (Airflow `forecast_weekly`의 `monitor` 태스크가 매주 돈다). 사용자에게는 `GET /api/forecasts/history`와 판매 추천 화면의 예측 성적표로 공개한다 (K47, api.md 2.5).
 ```bash
 python -m farmit_ml.monitor --item 0601                     # 실제가 있는 가장 최근 주(지난주)를 채점
 python -m farmit_ml.monitor --item 0601 --week 2026-11-09   # 그 주를 다시 채점

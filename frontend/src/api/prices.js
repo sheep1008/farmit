@@ -22,3 +22,13 @@ export async function fetchForecasts(itemId) {
   const res = await http.get('/forecasts', { params: { item_id: itemId } })
   return res.data
 }
+
+/**
+ * 예측 성적표 GET /api/forecasts/history (docs/api.md 2.5, K47). 끝난 대상 주의 예측과 실제 주평균가.
+ * 반환: { data: [{ target_week, horizon, pred_price, lower80, upper80, actual_price, error_pct, in_range, holiday_near, ... }],
+ *        meta: { weeks, summary: [{ horizon, count, mean_abs_error_pct, in_range_rate_pct }] } }
+ */
+export async function fetchForecastHistory(itemId, marketId) {
+  const res = await http.get('/forecasts/history', { params: { item_id: itemId, market_id: marketId } })
+  return res.data
+}

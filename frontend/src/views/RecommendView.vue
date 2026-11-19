@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { fetchAlerts, fetchCases } from '@/api/alerts'
 import http from '@/api/http'
 import { fieldErrors } from '@/api/interceptors'
-import { fetchForecasts } from '@/api/prices'
+import { fetchForecastHistory, fetchForecasts } from '@/api/prices'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
 import InfoTip from '@/components/common/InfoTip.vue'
@@ -19,6 +19,7 @@ import { addDays, todayKst } from '@/utils/dates'
 import {
   DEFAULT_VOLUME_KG,
   PAY_RATIO_MIN_RECORDS,
+  SCORE_MIN_WEEKS,
   bestPick,
   closedText,
   desiredWeekOptions,
@@ -31,6 +32,8 @@ import {
   recommendBody,
   recommendChatQuestion,
   recommendForm,
+  scoreHorizonLabel,
+  scorecard,
   sellNowBody,
   summaryCards,
   vsLastWeek,
@@ -38,7 +41,7 @@ import {
 } from '@/utils/recommend'
 
 // SCR-005 판매 추천 = "오늘의 판매 판단" (REQ-REC-001~007, REQ-PRD-001~003, REQ-HIS-002, docs/api.md 2.5).
-// 위에서부터: 특수 상황 띠(최근 2주 내 알림) → 요약 카드 3개 → 가격 추이와 4주 예측 차트 → 판매 추천 표 → 과거 사례.
+// 위에서부터: 특수 상황 띠(최근 2주 내 알림) → 요약 카드 3개 → 가격 추이와 4주 예측 차트 → 예측 성적표 → 판매 추천 표 → 과거 사례.
 // 오른쪽(모바일은 아래)에 판매 상담 채팅 패널 (ChatPanel, 지금 보는 품목으로 질문).
 // 판매 추천은 들어오자마자 물량 10kg·내 정보 비용으로 계산하고, "조건 바꾸기"에서 물량·시기·비용을 바꾸면 다시 계산한다.
 //  - 주간 추천: POST /api/recommendations — 시장 × 이번 주~3주 후, 예상 수령액 순위 (예측 대상 품목만)
@@ -255,7 +258,10 @@ watch([() => rows.value[0]?.market_id, forecastMarkets], ([topId]) => {
   chartMarketId.value = ids.includes(topId) ? topId : (ids[0] ?? '')
 })
 watch(chartMarketId, (marketId) => {
-  if (marketId) loadWeekly(form.value.item_id, marketId)
+  history.value = null
+  if (!marketId) return
+  loadWeekly(form.value.item_id, marketId)
+  loadHistory(form.value.item_id, marketId)
 })
 function chooseMarket(id) {
   marketChosen.value = true
@@ -272,6 +278,28 @@ const cards = computed(() =>
     ? summaryCards(weekly.value.rows, forecast.value.rows, chartMarketId.value, forecast.value.baseWeek)
     : null,
 )
+
+// ── 예측 성적표 (REQ-PRD-005) ───────────────
+// GET /api/forecasts/history: 차트에서 고른 시장의 끝난 주 예측과 실제 주평균가. 틀린 주도 그대로 보여 준다.
+// 보조 정보라 못 불러오면 카드를 숨긴다.
+const history = ref(null) // { data, meta } (API 응답 그대로)
+const scoreHorizon = ref(1)
+async function loadHistory(itemId, marketId) {
+  try {
+    const res = await fetchForecastHistory(itemId, marketId)
+    if (chartMarketId.value === marketId && form.value?.item_id === itemId) history.value = res
+  } catch {
+    // 숨김 (history는 null 그대로)
+  }
+}
+const scoreHorizons = computed(() => history.value?.meta.summary.map((s) => s.horizon) ?? [])
+// 고른 horizon의 성적. 시장을 바꿔 그 horizon이 없으면 가장 가까운 예측(첫 horizon)으로
+const score = computed(() => {
+  if (!history.value) return null
+  const h = scoreHorizons.value.includes(scoreHorizon.value) ? scoreHorizon.value : scoreHorizons.value[0]
+  return scorecard(history.value, h)
+})
+const shownScoreHorizon = computed(() => score.value?.rows[0]?.horizon)
 
 // ── 과거 사례 요약 (REQ-HIS-002) ───────────────
 // GET /api/cases meta.summary: 사건 종류별 건수와 4주 뒤 평균 변화(사건 뒤 vs 평소 같은 시기)
@@ -403,6 +431,80 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
               실제 평균가는 끝난 주의 확정 가격(전 등급)이고, 예측은 aT 정산 가격·달력·날씨로 학습한 모델 결과이며 참고용입니다.
               띠는 80% 예측 범위입니다.
             </p>
+          </div>
+
+          <!-- 예측 성적표: 지난 예측과 실제 가격 (REQ-PRD-005) -->
+          <div v-if="history" class="card">
+            <div class="card-head">
+              <h2>지난 예측은 얼마나 맞았나 · {{ chartMarketName }}</h2>
+              <p v-if="score" class="meta">끝난 {{ history.meta.weeks }}주 기록</p>
+            </div>
+            <p v-if="!score" class="hint">
+              아직 끝난 주의 예측이 없습니다. 예측한 주가 지나면 실제 가격과 나란히 보여 줍니다.
+            </p>
+            <template v-else>
+              <div class="tabs" role="tablist" aria-label="언제 한 예측인지">
+                <button
+                  v-for="h in scoreHorizons"
+                  :key="h"
+                  type="button"
+                  role="tab"
+                  :aria-selected="h === shownScoreHorizon"
+                  :class="{ active: h === shownScoreHorizon }"
+                  @click="scoreHorizon = h"
+                >
+                  {{ scoreHorizonLabel(h) }}
+                </button>
+              </div>
+              <div class="cards">
+                <div class="card stat">
+                  <p class="stat-label">평균 오차</p>
+                  <p class="stat-value">{{ fmt(score.maePct, 1) }}<span class="unit">%</span></p>
+                  <p class="stat-sub">예측가와 실제 평균가의 차이 (작을수록 좋음)</p>
+                </div>
+                <div class="card stat">
+                  <p class="stat-label">예상 범위 적중<InfoTip term="range80" /></p>
+                  <p class="stat-value">{{ score.hits }}<span class="unit">/ {{ score.count }}주</span></p>
+                  <p class="stat-sub">실제 가격이 예상 범위 안에 든 주 ({{ fmt(score.hitPct, 1) }}%)</p>
+                </div>
+              </div>
+              <p v-if="history.meta.weeks < SCORE_MIN_WEEKS" class="notice" role="note">
+                아직 {{ history.meta.weeks }}주치 기록이라 참고만 해 주세요. 주가 쌓일수록 믿을 만한 숫자가 됩니다.
+              </p>
+              <div class="table-wrap">
+                <table class="stack-on-mobile">
+                  <thead>
+                    <tr>
+                      <th scope="col">대상 주</th>
+                      <th scope="col" class="num">예측가 (원/kg)<span class="th-sub">예상 범위</span></th>
+                      <th scope="col" class="num">실제 평균가</th>
+                      <th scope="col" class="num">오차</th>
+                      <th scope="col">예상 범위</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="r in score.rows" :key="r.target_week">
+                      <td data-label="대상 주">
+                        {{ weekRange(r.target_week) }}
+                        <span v-if="r.holiday_near" class="badge warn" title="명절 3주 이내인 주는 예측이 어긋나기 쉽습니다">명절</span>
+                      </td>
+                      <td class="num" data-label="예측가 (원/kg)">
+                        {{ fmt(r.pred_price) }}
+                        <span class="line">{{ fmt(r.lower80) }}~{{ fmt(r.upper80) }}</span>
+                      </td>
+                      <td class="num" data-label="실제 평균가"><span class="strong">{{ fmt(r.actual_price) }}</span></td>
+                      <td class="num" data-label="오차">{{ formatPct(r.error_pct) }}</td>
+                      <td data-label="예상 범위">
+                        <span class="badge" :class="{ closed: !r.in_range }">{{ r.in_range ? '안' : '밖' }}</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="hint">
+                오차 = (예측가 − 실제 평균가) ÷ 실제 평균가. +는 예측이 실제보다 높았다는 뜻입니다. 맞지 않은 주도 빼지 않고 보여 줍니다.
+              </p>
+            </template>
           </div>
         </template>
 

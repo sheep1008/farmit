@@ -151,3 +151,27 @@ export function bestPick(rows) {
   const gain = thisWeek && top.horizon !== 1 ? top.net_won - thisWeek.net_won : null
   return { top, gain }
 }
+
+// ── 예측 성적표 (K47, REQ-PRD-005, GET /api/forecasts/history) ─────────────────
+
+export const SCORE_MIN_WEEKS = 8 // 끝난 주가 이보다 적으면 "참고만" 안내를 붙인다
+
+// 그 예측을 대상 주보다 얼마나 먼저 했는지. horizon 1은 대상 주 월요일에 한 예측
+export const scoreHorizonLabel = (h) => (h === 1 ? '그 주 초 예측' : `${h - 1}주 전 예측`)
+
+/**
+ * 성적표에서 한 horizon만 골라 화면용으로. history = { data, meta } (API 응답 그대로).
+ * 반환: { rows, count, maePct, hitPct, hits } · 그 horizon의 행이 없으면 null
+ */
+export function scorecard(history, horizon) {
+  const summary = history.meta.summary.find((s) => s.horizon === horizon)
+  if (!summary) return null
+  const rows = history.data.filter((r) => r.horizon === horizon)
+  return {
+    rows,
+    count: summary.count,
+    maePct: summary.mean_abs_error_pct,
+    hitPct: summary.in_range_rate_pct,
+    hits: rows.filter((r) => r.in_range).length,
+  }
+}
