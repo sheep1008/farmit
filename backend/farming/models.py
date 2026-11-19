@@ -21,3 +21,23 @@ class FarmSchedule(models.Model):
     class Meta:
         db_table = 'farm_schedule'
         indexes = [models.Index(fields=['item', 'start_month'], name='ix_farm_schedule_item')]
+
+
+class WeeklyFarmInfo(models.Model):
+    """농사로 주간농사정보 한 호 (erd.md weekly_farm_info, REQ-RAG-008).
+
+    summary: PDF '요약' 쪽을 분야별로 자른 [{"section": "과수", "items": [...]}]. 못 읽으면 [].
+    작성자 실명과 본문은 저장하지 않는다 (REQ-NFR-007).
+    """
+    content_no = models.PositiveIntegerField()              # 농사로 글 번호 (cntntsNo)
+    title = models.CharField(max_length=200)
+    week_start = models.DateField(null=True, blank=True)    # 제목의 기간 (한국 날짜). 못 읽으면 NULL
+    week_end = models.DateField(null=True, blank=True)
+    registered_on = models.DateField()                      # 농사로 등록일
+    pdf_url = models.CharField(max_length=500)              # PDF 원문 주소. 첨부가 없으면 ''
+    summary = models.JSONField(default=list)
+    collected_at = models.DateTimeField()                   # UTC
+
+    class Meta:
+        db_table = 'weekly_farm_info'
+        constraints = [models.UniqueConstraint(fields=['content_no'], name='uk_weekly_farm_info')]

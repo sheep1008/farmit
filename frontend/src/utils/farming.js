@@ -44,3 +44,37 @@ export function diagnoseFollowUp(itemName, symptom, candidate = null) {
     ? `${itemName} ${candidate.name}에 대해 더 알려줘. 내 증상: ${symptom}`
     : `${itemName}에 이런 증상이 있어. 원인이 뭘까? ${symptom}`
 }
+
+/** 주간농사정보 기간 "2026-11-16"·"2026-11-22" → "11월 16일~22일" (달이 다르면 "9월 28일~10월 4일"). 기간이 없으면 '' */
+export function weeklyPeriodText(start, end) {
+  if (!start || !end) return ''
+  const [, sm, sd] = start.split('-').map(Number)
+  const [, em, ed] = end.split('-').map(Number)
+  return `${sm}월 ${sd}일~${sm === em ? '' : `${em}월 `}${ed}일`
+}
+
+/** 요약 항목 "(과원 정비) 낙엽 제거" → { topic: '과원 정비', text: '낙엽 제거' }. 괄호로 시작하지 않으면 topic은 '' */
+export function splitWeeklyItem(item) {
+  const m = /^\(([^)]+)\)\s*(.*)$/s.exec(item ?? '')
+  return m ? { topic: m[1], text: m[2] } : { topic: '', text: item ?? '' }
+}
+
+/** 재배 정보 탭: 내 품목 분야(focus)를 맨 앞에, 나머지는 원문 순서 그대로 (GET /api/farming/weekly 의 data) */
+export function orderWeeklySections(data) {
+  const sections = data?.sections ?? []
+  return [...sections.filter((s) => s.section === data?.focus), ...sections.filter((s) => s.section !== data?.focus)]
+}
+
+/**
+ * 홈 카드 요약: 내 품목 분야(없으면 첫 분야)의 항목을 limit개까지, 나머지는 hidden 수로만.
+ * 요약을 읽지 못한 호는 section: null.
+ */
+export function summarizeWeeklyFarm(data, limit = 3) {
+  const section = orderWeeklySections(data)[0]
+  if (!section) return { section: null, items: [], hidden: 0 }
+  return {
+    section: section.section,
+    items: section.items.slice(0, limit).map(splitWeeklyItem),
+    hidden: Math.max(0, section.items.length - limit),
+  }
+}
