@@ -1,7 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import http from '@/api/http'
-import BaseButton from '@/components/common/BaseButton.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { formatKstDateTime } from '@/utils/dates'
 import { realtimeState, realtimeStatusText, sortRealtime } from '@/utils/realtime'
@@ -55,7 +54,20 @@ const fmt = (v) => (v == null ? '-' : Math.round(v).toLocaleString('ko-KR'))
   <div class="realtime">
     <div class="head">
       <h2>당일 경매가 <span class="badge">확정 전</span> <small>(원/kg)</small></h2>
-      <BaseButton :loading="loading" :disabled="!itemId" @click="load">새로고침</BaseButton>
+      <button
+        type="button"
+        class="refresh"
+        :class="{ spinning: loading }"
+        :disabled="loading || !itemId"
+        aria-label="새로고침"
+        title="새로고침"
+        @click="load"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+        </svg>
+      </button>
     </div>
     <p class="sub">
       <template v-if="collectedAt">마지막 수집 {{ formatKstDateTime(collectedAt) }} · </template>
@@ -96,6 +108,49 @@ const fmt = (v) => (v == null ? '-' : Math.round(v).toLocaleString('ko-KR'))
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+/* 새로고침: 둥근 화살표 아이콘 버튼. 불러오는 동안 돈다 */
+.refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.refresh:hover:not(:disabled) {
+  background: var(--color-background-soft, rgba(0, 0, 0, 0.05));
+  color: var(--color-primary);
+}
+.refresh:disabled {
+  cursor: default;
+}
+.refresh svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.refresh.spinning svg {
+  animation: refresh-spin 0.8s linear infinite;
+}
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .refresh.spinning svg {
+    animation: none;
+  }
 }
 h2 {
   font-size: var(--font-size-lg);
