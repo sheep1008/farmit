@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime
 
 from transform import (
-    at_code, is_collect_time, kst_to_utc, overlap_start, rows_until, source_key, to_message,
+    at_code, is_collect_time, kst_to_utc, new_item, overlap_start, rows_until, source_key, to_message,
 )
 
 
@@ -60,6 +60,16 @@ class TransformTest(unittest.TestCase):
         m = to_message(row(plor_nm="가" * 40, corp_nm="나" * 40), 1, "t")
         self.assertEqual(len(m["origin"]), 30)
         self.assertEqual(len(m["corp_name"]), 30)
+
+    def test_new_item_uses_class_names(self):
+        self.assertEqual(new_item(row(gds_lclsf_nm="엽경채류")),
+                         {"at_code": "1011", "name": "깻잎", "category": "엽경채류"})
+        self.assertEqual(new_item(row())["category"], "")   # 대분류명이 없어도 등록은 한다
+        long = new_item(row(gds_mclsf_nm="가" * 60, gds_lclsf_nm="나" * 30))
+        self.assertEqual((len(long["name"]), len(long["category"])), (50, 20))   # 컬럼 길이에 맞춰 자른다
+
+    def test_new_item_without_name_is_none(self):
+        self.assertIsNone(new_item(row(gds_mclsf_nm="  ")))
 
     def test_collect_time_window(self):
         self.assertTrue(is_collect_time(datetime(2026, 11, 6, 0, 0)))

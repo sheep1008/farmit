@@ -62,6 +62,17 @@ def to_message(row, item_id, collected_at):
     }
 
 
+def new_item(row):
+    """item 테이블에 없는 품목을 등록할 때 넣을 값. 이름은 중분류명, 분류는 대분류명 (items.json과 같은 기준).
+
+    이름이 비어 있으면 화면에서 고를 수 없으므로 None (등록하지 않는다).
+    """
+    name = _clean(row.get("gds_mclsf_nm") or "", 50)
+    if not name:
+        return None
+    return {"at_code": at_code(row), "name": name, "category": _clean(row.get("gds_lclsf_nm") or "", 20)}
+
+
 def is_collect_time(now_kst, last_collected=None):
     """수집 시간: 한국 시간 00~12시는 매번, 12~17시는 지난 수집(last_collected)에서 30분이 지났을 때만.
 

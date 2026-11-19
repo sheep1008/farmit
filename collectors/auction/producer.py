@@ -18,10 +18,15 @@ import pymysql
 from confluent_kafka import Producer
 
 from client import PAGE_SIZE, AuctionClient
-from transform import KST, TIME_FMT, at_code, is_collect_time, overlap_start, rows_until, source_key, to_message
+from transform import (
+    KST, TIME_FMT, at_code, is_collect_time, new_item, overlap_start, rows_until, source_key, to_message,
+)
 
 log = logging.getLogger("auction")
 SOURCE = "at_auction"
+# 자동 등록 품목의 item_id 시작 번호. items.json(초기 데이터)이 pk를 직접 적으므로 번호가 겹치지 않게 띄운다.
+# 겹치면 loaddata가 그 번호의 품목을 다른 품목으로 덮어써 가격이 엉뚱한 이름으로 보인다
+AUTO_ITEM_ID_START = 10000
 
 
 class LimitReached(Exception):
@@ -62,13 +67,30 @@ class State:
                                       (SOURCE, today.strftime(TIME_FMT)))[0][0])
 
 
+def register_item(conn, row):
+    """item 테이블에 없는 품목을 등록하고 item_id를 돌려준다. 이름이 없어 등록할 수 없으면 None.
+
+    예측·저장성 표시는 false로 둔다 (사람이 정하는 값). 같은 at_code가 이미 있으면 그대로 두고 그 번호를 돌려준다.
+    """
+    item = new_item(row)
+    if item is None:
+        return None
+    query(conn, "INSERT INTO item (item_id, at_code, name, category, is_storable, is_forecast) "
+                "SELECT GREATEST(%s, COALESCE(MAX(item_id), 0) + 1), %s, %s, %s, 0, 0 FROM item "
+                "ON DUPLICATE KEY UPDATE item_id = item_id",
+          (AUTO_ITEM_ID_START, item["at_code"], item["name"], item["category"]))
+    item_id = query(conn, "SELECT item_id FROM item WHERE at_code = %s", (item["at_code"],))[0][0]
+    log.info("새 품목 등록: %s %s (%s), item_id %d", item["at_code"], item["name"], item["category"], item_id)
+    return item_id
+
+
 def collect_once(conn, producer, client, topic, state, call_limit):
     """수집 대상 시장을 한 바퀴 돌며 새 건을 Kafka로 보내고 collect_log에 한 줄 남긴다."""
     started = datetime.now(timezone.utc)
     markets = [r[0] for r in query(conn, "SELECT market_id FROM market WHERE is_collect OR is_reference ORDER BY market_id")]
     items = dict(query(conn, "SELECT at_code, item_id FROM item"))
     client.calls = 0
-    sent, skipped_unit, errors = 0, 0, []
+    sent, skipped_unit, registered, errors = 0, 0, 0, []
     unknown = collections.Counter()
     collected_at = started.strftime(TIME_FMT)
 
@@ -90,8 +112,13 @@ def collect_once(conn, producer, client, topic, state, call_limit):
                         continue
                     item_id = items.get(at_code(row))
                     if item_id is None:
-                        unknown[f"{at_code(row)}:{row['gds_mclsf_nm']}"] += 1
-                        continue
+                        # 처음 보는 품목은 item에 등록하고 이어서 보낸다 (REQ-COL-002). Flink가 쓰기 전에 item 행이 있어야 한다
+                        item_id = register_item(conn, row)
+                        if item_id is None:
+                            unknown[f"{at_code(row)}:{row['gds_mclsf_nm']}"] += 1
+                            continue
+                        items[at_code(row)] = item_id
+                        registered += 1
                     msg = to_message(row, item_id, collected_at)
                     if msg is None:
                         skipped_unit += 1
@@ -124,8 +151,8 @@ def collect_once(conn, producer, client, topic, state, call_limit):
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
           (SOURCE, state.date, started.strftime(TIME_FMT), datetime.now(timezone.utc).strftime(TIME_FMT),
            status, sent, client.calls, "\n".join(errors) or None))
-    log.info("%s 전송 %d건, 호출 %d건(오늘 누적 %d), kg 아님 %d건, 미등록 품목 %d건 %s, 상태 %s",
-             state.date, sent, client.calls, state.calls_before, skipped_unit,
+    log.info("%s 전송 %d건, 호출 %d건(오늘 누적 %d), kg 아님 %d건, 새 품목 등록 %d개, 미등록 품목 %d건 %s, 상태 %s",
+             state.date, sent, client.calls, state.calls_before, skipped_unit, registered,
              sum(unknown.values()), dict(unknown.most_common(5)), status)
     return status
 
