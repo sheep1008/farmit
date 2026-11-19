@@ -937,7 +937,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 **오류**: `400 VALIDATION_ERROR`(`item_id` 형식), `404 NOT_FOUND`(없는 품목)
 
 #### `POST /api/farming/diagnose` — 증상 진단 (REQ-RAG-001, 회원)
-본문 `{"item_id": 10, "symptom": "잎에 갈색 둥근 반점이 생겨요"}` (`symptom` 1~300자). 병해충·현장기술지원 자료를 검색해 근거로만 후보를 만든다. **200**
+본문 `{"item_id": 10, "symptom": "잎에 갈색 둥근 반점이 생겨요"}` (`symptom` 1~300자). 병해충·현장기술지원·현장애로기술사례 자료를 검색해 근거로만 후보를 만든다. **200**
 ```json
 { "data": { "item": {"item_id": 10, "name": "사과"}, "symptom": "...",
     "candidates": [ {"name": "갈색무늬병", "matching": "맞는 증상", "distinguish": "구분점", "action": "대응 요약", "evidence": [4]} ],

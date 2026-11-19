@@ -101,6 +101,13 @@ export const DATA_SOURCES = [
         url: 'https://www.nongsaro.go.kr',
       },
       {
+        name: '현장애로기술사례',
+        provider: '농촌진흥청 농사로',
+        use: '채팅 상담·증상 진단 근거 (농가 질문과 전문가 답변)',
+        terms: '공공누리 제1유형 (출처 표시). 작성자 실명·연락처는 저장하지 않음',
+        url: 'https://www.nongsaro.go.kr',
+      },
+      {
         name: '농작물 재해예방 정보',
         provider: '농촌진흥청 농사로',
         use: '재해 대응 체크리스트, 채팅 상담 근거',

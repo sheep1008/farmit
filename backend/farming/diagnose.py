@@ -1,6 +1,6 @@
 """증상 진단 (REQ-RAG-001): 품목 + 증상 → 병해충 후보 최대 3개 (맞는 증상·구분점·대응 요약·근거).
 
-흐름: 하이브리드 검색(병해충·현장기술지원 자료만) → LLM 1번(JSON) → 근거 번호 검사(근거 없는 후보 제거)
+흐름: 하이브리드 검색(병해충·현장기술지원·현장애로기술사례 자료만) → LLM 1번(JSON) → 근거 번호 검사(근거 없는 후보 제거)
 → 약제 사용량 치환 → 인용된 근거만 출처로. 근거에 없는 말은 쓰지 않게 시킨다.
 """
 from chat.prompts import DISCLAIMER, NOT_FOUND
@@ -9,7 +9,7 @@ from rag.dose_filter import KEEP_RE, NOTICE, SENT_SPLIT_RE, DOSE_RE, mask_senten
 
 MAX_CANDIDATES = 3
 EVIDENCE_SIZE = 8
-SOURCE_TYPES = ['ncpms_pest', 'fieldtech']
+SOURCE_TYPES = ['ncpms_pest', 'fieldtech', 'fieldqna']
 FIELDS = ('matching', 'distinguish', 'action')
 
 SYSTEM = f"""\
@@ -21,7 +21,7 @@ SYSTEM = f"""\
 - 후보마다 matching(입력한 증상과 맞는 점), distinguish(비슷한 병해충과 구분하는 점. 근거에 없으면 빈 문자열), action(대응 요약)을 각각 1~2문장으로 쓴다
 - evidence에는 그 후보의 내용이 실제로 들어 있는 근거 번호만 정수 목록으로 쓴다. [근거] 목록에 없는 번호는 쓰지 않는다
 - 농약·약제의 사용량, 희석 배수 같은 수치는 근거에 있어도 쓰지 않는다. 필요하면 "등록된 사용 기준을 확인하세요"라고 쓴다
-- 현장기술지원 근거는 특정 농가의 사례다. 일반 원칙처럼 단정하지 않는다
+- 현장기술지원·현장애로기술사례 근거는 특정 농가의 사례다. 일반 원칙처럼 단정하지 않는다
 - 다른 작물에 대한 근거를 선택 작물의 내용처럼 쓰지 않는다
 - 설명 없이 JSON 객체 하나만 출력한다: {{"candidates": [{{"name": "병해충 이름", "matching": "", "distinguish": "", "action": "", "evidence": [1]}}]}}"""
 
