@@ -145,10 +145,14 @@ services:
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
+        # 체크포인트를 파일로 저장한다. 기본값(JobManager 메모리)은 상태 하나가 5MB를 넘으면 실패한다
+        # (realtime_price의 중복 제거 상태가 전국 32곳에서 약 11MB). jobmanager·taskmanager가 같은 볼륨을 본다
+        execution.checkpointing.dir: file:///opt/flink/checkpoints
     ports:
       - "127.0.0.1:8081:8081"      # Flink 웹 UI, 내 PC에서만 접속
     volumes:
       - ../streaming:/opt/farmit/streaming:ro   # Flink SQL 파일을 컨테이너 안에서 바로 실행
+      - flink-checkpoints:/opt/flink/checkpoints
     depends_on:
       kafka-init:
         condition: service_completed_successfully   # 토픽이 만들어진 뒤 시작
@@ -161,12 +165,16 @@ services:
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
+        # jobmanager와 같은 값
+        execution.checkpointing.dir: file:///opt/flink/checkpoints
         # Flink 작업 1개가 슬롯 1개를 쓴다. 지금 2개(weather_warning, auction_trade) + 2주차 realtime_price 등 여유
         taskmanager.numberOfTaskSlots: 4
+    volumes:
+      - flink-checkpoints:/opt/flink/checkpoints
     depends_on:
       - flink-jobmanager
 
-  # 실시간 경매 프로듀서: 한국 시간 00~12시에 3분마다(POLL_SECONDS) API → Kafka(auction.trade.raw)
+  # 실시간 경매 프로듀서: 한국 시간 00~12시에 3분마다(POLL_SECONDS), 12~17시에 30분마다 API → Kafka(auction.trade.raw)
   # 각자 인증키로 API를 부르므로 기본으로는 뜨지 않는다. 켤 때: --profile auction up -d
   auction-producer:
     build: ../collectors/auction
@@ -326,4 +334,5 @@ volumes:
   airflow-db-data:
   airflow-logs:
   es-data:
+  flink-checkpoints:
   model-cache:

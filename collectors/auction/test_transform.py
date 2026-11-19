@@ -64,8 +64,17 @@ class TransformTest(unittest.TestCase):
     def test_collect_time_window(self):
         self.assertTrue(is_collect_time(datetime(2026, 11, 6, 0, 0)))
         self.assertTrue(is_collect_time(datetime(2026, 11, 6, 11, 59)))
-        self.assertFalse(is_collect_time(datetime(2026, 11, 6, 12, 0)))
+        self.assertFalse(is_collect_time(datetime(2026, 11, 6, 17, 0)))
         self.assertFalse(is_collect_time(datetime(2026, 11, 6, 23, 59)))
+
+    def test_collect_time_afternoon_every_30_minutes(self):
+        last = datetime(2026, 11, 6, 11, 57)
+        self.assertFalse(is_collect_time(datetime(2026, 11, 6, 12, 0), last))
+        self.assertFalse(is_collect_time(datetime(2026, 11, 6, 12, 24), last))
+        self.assertTrue(is_collect_time(datetime(2026, 11, 6, 12, 27), last))
+        self.assertTrue(is_collect_time(datetime(2026, 11, 6, 16, 59), datetime(2026, 11, 6, 16, 29)))
+        self.assertTrue(is_collect_time(datetime(2026, 11, 6, 14, 0)))   # 오후에 새로 켜면 바로 한 번
+        self.assertTrue(is_collect_time(datetime(2026, 11, 6, 11, 59), datetime(2026, 11, 6, 11, 57)))   # 오전은 매번
 
     def test_rows_until_stops_at_older(self):
         rows = [row(scsbd_dt=t) for t in ("2026-11-06 10:00:00", "2026-11-06 09:40:00", "2026-11-06 09:20:00")]

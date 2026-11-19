@@ -1724,5 +1724,962 @@
       "is_storable": false,
       "is_forecast": false
     }
+  },
+  {
+    "model": "codes.item",
+    "pk": 156,
+    "fields": {
+      "at_code": "0201",
+      "name": "보리",
+      "category": "맥류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 157,
+    "fields": {
+      "at_code": "0404",
+      "name": "메밀",
+      "category": "잡곡류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 158,
+    "fields": {
+      "at_code": "0503",
+      "name": "야콘",
+      "category": "서류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 159,
+    "fields": {
+      "at_code": "0505",
+      "name": "얌빈(히카마)",
+      "category": "서류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 160,
+    "fields": {
+      "at_code": "0609",
+      "name": "모과",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 161,
+    "fields": {
+      "at_code": "0616",
+      "name": "탄제린",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 162,
+    "fields": {
+      "at_code": "0622",
+      "name": "오디",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 163,
+    "fields": {
+      "at_code": "0624",
+      "name": "석류",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 164,
+    "fields": {
+      "at_code": "0631",
+      "name": "아몬드",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 165,
+    "fields": {
+      "at_code": "0637",
+      "name": "망고스턴",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 166,
+    "fields": {
+      "at_code": "0638",
+      "name": "코코넛",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 167,
+    "fields": {
+      "at_code": "0639",
+      "name": "보리수",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 168,
+    "fields": {
+      "at_code": "0644",
+      "name": "듀리안",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 169,
+    "fields": {
+      "at_code": "0646",
+      "name": "파파야",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 170,
+    "fields": {
+      "at_code": "0657",
+      "name": "체리",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 171,
+    "fields": {
+      "at_code": "0663",
+      "name": "아로니아",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 172,
+    "fields": {
+      "at_code": "0670",
+      "name": "흑노호",
+      "category": "과실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 173,
+    "fields": {
+      "at_code": "0704",
+      "name": "호두",
+      "category": "수실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 174,
+    "fields": {
+      "at_code": "0706",
+      "name": "도토리",
+      "category": "수실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 175,
+    "fields": {
+      "at_code": "0709",
+      "name": "다래",
+      "category": "수실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 176,
+    "fields": {
+      "at_code": "0713",
+      "name": "곶감",
+      "category": "수실류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 177,
+    "fields": {
+      "at_code": "0802",
+      "name": "참외",
+      "category": "과일과채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 178,
+    "fields": {
+      "at_code": "0904",
+      "name": "박",
+      "category": "과채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 179,
+    "fields": {
+      "at_code": "1026",
+      "name": "호박잎",
+      "category": "엽경채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 180,
+    "fields": {
+      "at_code": "1028",
+      "name": "신선초",
+      "category": "엽경채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 181,
+    "fields": {
+      "at_code": "1030",
+      "name": "쑥",
+      "category": "엽경채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 182,
+    "fields": {
+      "at_code": "1035",
+      "name": "동초",
+      "category": "엽경채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 183,
+    "fields": {
+      "at_code": "1056",
+      "name": "보리순",
+      "category": "엽경채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 184,
+    "fields": {
+      "at_code": "1057",
+      "name": "시레기",
+      "category": "엽경채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 185,
+    "fields": {
+      "at_code": "1058",
+      "name": "가랏",
+      "category": "엽경채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 186,
+    "fields": {
+      "at_code": "1074",
+      "name": "어린잎",
+      "category": "엽경채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 187,
+    "fields": {
+      "at_code": "1107",
+      "name": "삼채",
+      "category": "근채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 188,
+    "fields": {
+      "at_code": "1199",
+      "name": "기타",
+      "category": "근채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 189,
+    "fields": {
+      "at_code": "1212",
+      "name": "양하",
+      "category": "조미채소류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 190,
+    "fields": {
+      "at_code": "1213",
+      "name": "방아",
+      "category": "조미채소류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 191,
+    "fields": {
+      "at_code": "1309",
+      "name": "방울양배추(스프로스)",
+      "category": "양채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 192,
+    "fields": {
+      "at_code": "1321",
+      "name": "오크라",
+      "category": "양채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 193,
+    "fields": {
+      "at_code": "1323",
+      "name": "알로애",
+      "category": "양채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 194,
+    "fields": {
+      "at_code": "1408",
+      "name": "마",
+      "category": "산채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 195,
+    "fields": {
+      "at_code": "1411",
+      "name": "돌나물",
+      "category": "산채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 196,
+    "fields": {
+      "at_code": "1412",
+      "name": "산마늘",
+      "category": "산채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 197,
+    "fields": {
+      "at_code": "1413",
+      "name": "고비",
+      "category": "산채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 198,
+    "fields": {
+      "at_code": "1416",
+      "name": "금강초",
+      "category": "산채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 199,
+    "fields": {
+      "at_code": "1443",
+      "name": "산나물",
+      "category": "산채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 200,
+    "fields": {
+      "at_code": "1444",
+      "name": "곰방부리나물",
+      "category": "산채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 201,
+    "fields": {
+      "at_code": "1446",
+      "name": "유채나물",
+      "category": "산채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 202,
+    "fields": {
+      "at_code": "1499",
+      "name": "기타",
+      "category": "산채류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 203,
+    "fields": {
+      "at_code": "1601",
+      "name": "참깨",
+      "category": "특용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 204,
+    "fields": {
+      "at_code": "1607",
+      "name": "고추씨",
+      "category": "특용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 205,
+    "fields": {
+      "at_code": "1610",
+      "name": "호박씨",
+      "category": "특용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 206,
+    "fields": {
+      "at_code": "1615",
+      "name": "수세미",
+      "category": "특용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 207,
+    "fields": {
+      "at_code": "1699",
+      "name": "기타",
+      "category": "특용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 208,
+    "fields": {
+      "at_code": "1708",
+      "name": "석이",
+      "category": "버섯류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 209,
+    "fields": {
+      "at_code": "1719",
+      "name": "상황버섯",
+      "category": "버섯류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 210,
+    "fields": {
+      "at_code": "1721",
+      "name": "능이버섯",
+      "category": "버섯류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 211,
+    "fields": {
+      "at_code": "1722",
+      "name": "자연산송이",
+      "category": "버섯류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 212,
+    "fields": {
+      "at_code": "1724",
+      "name": "노루궁뎅이버섯",
+      "category": "버섯류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 213,
+    "fields": {
+      "at_code": "1726",
+      "name": "송화버섯",
+      "category": "버섯류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 214,
+    "fields": {
+      "at_code": "1801",
+      "name": "수삼",
+      "category": "인삼류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 215,
+    "fields": {
+      "at_code": "1917",
+      "name": "천궁",
+      "category": "약용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 216,
+    "fields": {
+      "at_code": "1924",
+      "name": "황기",
+      "category": "약용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 217,
+    "fields": {
+      "at_code": "1931",
+      "name": "치자",
+      "category": "약용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 218,
+    "fields": {
+      "at_code": "1935",
+      "name": "오가피",
+      "category": "약용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 219,
+    "fields": {
+      "at_code": "1991",
+      "name": "우슬",
+      "category": "약용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 220,
+    "fields": {
+      "at_code": "19B4",
+      "name": "감초",
+      "category": "약용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 221,
+    "fields": {
+      "at_code": "19B5",
+      "name": "강황",
+      "category": "약용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 222,
+    "fields": {
+      "at_code": "19N5",
+      "name": "울금",
+      "category": "약용작물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 223,
+    "fields": {
+      "at_code": "2149",
+      "name": "여주",
+      "category": "초화류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 224,
+    "fields": {
+      "at_code": "26G7",
+      "name": "야생화",
+      "category": "관엽식물류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 225,
+    "fields": {
+      "at_code": "2901",
+      "name": "종자",
+      "category": "산림종묘",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 226,
+    "fields": {
+      "at_code": "4703",
+      "name": "꿀벌",
+      "category": "기타동물생산물",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 227,
+    "fields": {
+      "at_code": "6131",
+      "name": "멸치",
+      "category": "활 해면어류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 228,
+    "fields": {
+      "at_code": "7602",
+      "name": "꼬시래기",
+      "category": "신선 해조류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 229,
+    "fields": {
+      "at_code": "7603",
+      "name": "다시마",
+      "category": "신선 해조류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 230,
+    "fields": {
+      "at_code": "7605",
+      "name": "말",
+      "category": "신선 해조류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 231,
+    "fields": {
+      "at_code": "7606",
+      "name": "모자반",
+      "category": "신선 해조류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 232,
+    "fields": {
+      "at_code": "7610",
+      "name": "파래",
+      "category": "신선 해조류",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 233,
+    "fields": {
+      "at_code": "8914",
+      "name": "미역",
+      "category": "건제품",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 234,
+    "fields": {
+      "at_code": "8928",
+      "name": "청각",
+      "category": "건제품",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 235,
+    "fields": {
+      "at_code": "8930",
+      "name": "파래",
+      "category": "건제품",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 236,
+    "fields": {
+      "at_code": "9104",
+      "name": "절임식품",
+      "category": "농림가공",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 237,
+    "fields": {
+      "at_code": "9105",
+      "name": "유지",
+      "category": "농림가공",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 238,
+    "fields": {
+      "at_code": "9109",
+      "name": "차",
+      "category": "농림가공",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 239,
+    "fields": {
+      "at_code": "9110",
+      "name": "기타식품",
+      "category": "농림가공",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 240,
+    "fields": {
+      "at_code": "9302",
+      "name": "조미가공",
+      "category": "수산가공",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 241,
+    "fields": {
+      "at_code": "9303",
+      "name": "젓갈",
+      "category": "수산가공",
+      "is_storable": false,
+      "is_forecast": false
+    }
+  },
+  {
+    "model": "codes.item",
+    "pk": 242,
+    "fields": {
+      "at_code": "9304",
+      "name": "어묵,어분,어비",
+      "category": "수산가공",
+      "is_storable": false,
+      "is_forecast": false
+    }
   }
 ]

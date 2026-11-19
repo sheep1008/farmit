@@ -70,10 +70,11 @@ docker compose -f infra/docker-compose.yml down -v                            # 
 docker compose -f infra/docker-compose.yml exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
 docker compose -f infra/docker-compose.yml exec flink-jobmanager ./bin/sql-client.sh
 
-# 코드 테이블 초기 데이터 (시장 32곳 = 수집 대상 5곳 + 나머지 27곳, 품목 155개). 여러 번 실행해도 중복되지 않는다
+# 코드 테이블 초기 데이터 (시장 32곳 = 수집 대상 5곳 + 나머지 27곳, 품목 242개). 여러 번 실행해도 중복되지 않는다
 docker compose -f infra/docker-compose.yml exec backend python manage.py loaddata markets_collect markets_national items
 ```
 
+- `items.json`의 품목은 실시간 경매 응답에 나온 것을 모은 것이다 (2026-11-19에 최근 7일치에서 빠진 87개를 더해 242개). 목록에 없는 품목의 낙찰은 저장하지 않고 수집기 로그에 `미등록 품목 N건`으로 남으니, 새 품목이 보이면 `items.json`에 추가하고 `loaddata items`를 다시 실행한다.
 - `markets_collect.json`은 처음 정한 5곳(4곳 + 가락), `markets_national.json`은 나머지 전국 시장이다. 2026-11-18부터 32곳 모두 수집 대상(`is_collect`)이다.
 - 시장 위도·경도는 도매시장 위치(OpenStreetMap 기준, 2026-11-17)다. 원주·강릉·전주·익산·정읍·순천·안동 7곳은 2026-11-18 시장 장소·주소 자료로 보정했다(원주·순천·안동은 카카오맵 장소 좌표와 65m 이내, 정읍은 약 150m 차이). 지도 표시·거리 계산용 대표 좌표이며 출하 차량 진입점과는 다를 수 있다. 좌표가 `0`인 시장이 생기면 `/api/recommendations/now`는 거리를 비우고 운송비를 반영하지 않는다.
 - `.env`의 `MYSQL_*` 값과 `infra/mysql/init/` 스크립트는 **DB 볼륨이 비어 있을 때(첫 실행)만** 적용된다. 바꾼 뒤에는 `down -v`로 볼륨을 지우고 다시 띄운다.
@@ -174,6 +175,8 @@ collectors/weather_warning/.venv/Scripts/python collectors/weather_warning/produ
 
 - Flink SQL 파일의 `${MYSQL_...}`는 `submit.sh`가 `.env` 값으로 채운다. SQL 파일에 비밀번호를 직접 적지 않는다.
 - Kafka는 볼륨이 없어 `down` 하면 토픽과 Flink 작업이 사라진다. 다시 `up` 한 뒤 `submit.sh`부터 실행한다.
+- Flink 컨테이너만 다시 떠도(PC 재부팅, Docker 재시작) 작업은 사라진다. http://localhost:8081 에 작업이 없으면 `submit.sh`로 다시 제출한다.
+- 체크포인트는 `flink-checkpoints` 볼륨(`/opt/flink/checkpoints`)에 파일로 저장한다. 기본값(JobManager 메모리)은 상태 하나가 5MB를 넘으면 체크포인트가 실패해 작업이 계속 재시작한다 (`realtime_price`의 중복 제거 상태가 전국 32곳에서 약 14MB). 작업을 Cancel하지 않고 컨테이너를 내리면 지난 작업의 체크포인트 폴더가 볼륨에 남는다. 쌓이면 `docker volume rm farmit_flink-checkpoints`로 지운다 (Flink를 내린 상태에서).
 - Flink 작업을 새로 제출하면 "이미 본 특보" 상태가 비어 최근 6일치 이벤트가 한 번 다시 나간다. 알림은 DB UNIQUE 제약으로 중복되지 않는다.
 
 #### 실시간 경매 (수집기 → Kafka `auction.trade.raw` → Flink → MySQL `auction_trade`, `realtime_price`)
@@ -185,7 +188,7 @@ collectors/weather_warning/.venv/Scripts/python collectors/weather_warning/produ
 bash streaming/flink/submit.sh auction_trade    # 낙찰 1건 = 1행
 bash streaming/flink/submit.sh realtime_price   # (정산일자, 시장, 품목)별 당일 집계
 
-# 프로듀서: 한국 시간 00~12시 3분마다 / 한 날짜 한 번 / 테스트
+# 프로듀서: 한국 시간 00~12시 3분마다, 12~17시 30분마다 / 한 날짜 한 번 / 테스트
 docker compose -f infra/docker-compose.yml --profile auction up -d auction-producer
 docker compose -f infra/docker-compose.yml --profile auction run --rm auction-producer python producer.py --once --date 2026-11-06
 docker compose -f infra/docker-compose.yml --profile auction run --rm auction-producer python -m unittest
@@ -197,6 +200,10 @@ docker compose -f infra/docker-compose.yml --profile auction run --rm auction-pr
   docker compose -f infra/docker-compose.yml exec -e KAFKA_BOOTSTRAP_SERVERS=kafka:9092 backend python manage.py measure_realtime_latency --probes 5
   ```
 - `realtime_price`는 집계 전에 `source_key`로 중복을 걸러 같은 건이 두 번 더해지지 않는다. 다만 작업을 Cancel 후 새로 제출하면 집계 상태가 비어 그 뒤에 온 건부터 다시 센다 (당일 값이 작아질 수 있다). 당일 중에 다시 띄워야 하면 `realtime_price`의 오늘 행을 지우고 소비자 그룹 `flink-realtime-price` 오프셋을 처음으로 돌린 뒤 제출한다.
+  ```bash
+  # 작업이 없는 상태에서 실행한다. 토픽에 남아 있는 건 전체로 다시 집계한다 (지연 측정 탐침 2099-12-31 행도 다시 생기면 지운다)
+  docker compose -f infra/docker-compose.yml exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group flink-realtime-price --topic auction.trade.raw --reset-offsets --to-earliest --execute
+  ```
 - 제출된 작업 설정에는 DB 비밀번호가 들어 있어 Flink 웹 UI(내 PC에서만 열림)에서 보인다. 배포 설정에서는 다른 방법이 필요하다.
 
 ## 개발 규칙

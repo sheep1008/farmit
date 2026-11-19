@@ -1,7 +1,7 @@
 """실시간 경매 프로듀서 (REQ-COL-002).
 
-한국 시간 00~12시에 3분마다 수집 대상 시장(market.is_collect 또는 is_reference)의 새 낙찰 건을 받아
-Kafka 토픽에 보낸다. 실행 결과는 collect_log에 남긴다.
+한국 시간 00~12시에 3분마다, 12~17시에 30분마다 수집 대상 시장(market.is_collect 또는 is_reference)의
+새 낙찰 건을 받아 Kafka 토픽에 보낸다. 실행 결과는 collect_log에 남긴다.
 
     python producer.py                      # 계속 실행 (3분 주기, POLL_SECONDS로 바꾼다)
     python producer.py --once --date 2026-11-06   # 그 날짜를 한 번만 수집 (시간 제한 없음, 테스트·누락 보충용)
@@ -139,6 +139,7 @@ def main():
 
     topic = os.environ.get("AUCTION_TOPIC", "auction.trade.raw")  # compose의 kafka-init이 미리 만든다
     # REQ-NFR-003(5분 안 반영)과 하루 한도를 같이 맞추는 주기. 전국 32곳 × 240바퀴(12시간 ÷ 3분) = 7,680건
+    # (12~17시는 30분마다 돌아 320건이 더 든다. is_collect_time)
     interval = int(os.environ.get("POLL_SECONDS", "180"))
     call_limit = int(os.environ.get("DAILY_CALL_LIMIT", "9000"))  # 한도 10,000건보다 여유 있게 멈춘다
     client = AuctionClient(os.environ["DATA_GO_KR_KEY"])
@@ -149,6 +150,7 @@ def main():
     })
     conn = connect_db()
     state = None
+    last_collected = None  # 지난 수집을 시작한 시각 (오후 30분 주기 판단용)
 
     while True:
         now = datetime.now(KST)
@@ -159,9 +161,10 @@ def main():
         if args.once:
             collect_once(conn, producer, client, topic, state, call_limit)
             return
-        if is_collect_time(now):
+        if is_collect_time(now, last_collected):
             conn.ping(reconnect=True)
             collect_once(conn, producer, client, topic, state, call_limit)
+            last_collected = now
         time.sleep(interval - time.time() % interval)  # 주기 경계(2분이면 …:00, …:02)에 맞춰 깬다
 
 
