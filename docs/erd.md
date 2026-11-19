@@ -324,7 +324,7 @@ erDiagram
 - 인덱스: (market_id, item_id, auction_at)
 - `source_key`: `auctn_seq`(경매고유번호)·`spm_no`(원표번호)만으로는 겹친다. 같은 원표가 시각을 달리해 나눠 낙찰되므로 낙찰 일시까지 합친다 (2026-11-06 실제 응답으로 확인).
 - 단위(`unit_nm`)가 kg가 아니거나 `unit_qty`가 0인 건은 환산할 수 없어 저장하지 않는다. 원본(포장 단위)은 Kafka 메시지의 `raw`에 그대로 담긴다.
-- `item`에 없는 품목(`at_code`)의 건은 저장하지 않고 프로듀서 로그에 건수를 남긴다. 품목 초기 데이터: `backend/codes/fixtures/items.json`.
+- `item`에 없는 품목(`at_code`)은 프로듀서가 `item`에 등록한 뒤 저장한다 (2026-11-19부터. 이름 = 중분류명, 분류 = 대분류명, `is_storable`·`is_forecast` = false). 자동 등록 품목의 `item_id`는 10000번부터다: 초기 데이터 `backend/codes/fixtures/items.json`이 pk를 직접 적으므로(1~9999) 번호가 겹치지 않게 띄운다. 이름이 비어 등록할 수 없는 건만 저장하지 않고 로그에 건수를 남긴다.
 
 ### 2.4 날씨
 
