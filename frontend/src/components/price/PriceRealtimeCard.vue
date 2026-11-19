@@ -1,9 +1,10 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import http from '@/api/http'
+import BaseButton from '@/components/common/BaseButton.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { formatKstDateTime } from '@/utils/dates'
-import { realtimeStatusText } from '@/utils/realtime'
+import { realtimeState, realtimeStatusText, sortRealtime } from '@/utils/realtime'
 
 // 당일 경매 가격 (SCR-004, REQ-PRC-004, docs/api.md 2.3 GET /api/prices/realtime).
 // 정산 전 값이라 "확정 전"으로 표시한다. 다음 날 정산되면 확정 가격은 위 추이 차트(/prices/daily)에서 본다.
@@ -12,6 +13,7 @@ const props = defineProps({
 })
 
 const rows = ref([])
+const loadedAt = ref(new Date()) // 불러온 시각. "경매 중"(최근 1시간 안에 낙찰) 판단의 기준
 const collectedAt = ref(null)
 const notReady = ref('') // 503 DATA_NOT_READY: 오늘 수집 전 (오류가 아니라 안내)
 const errorMessage = ref('')
@@ -28,6 +30,7 @@ async function load() {
     const res = await http.get('/prices/realtime', { params: { item_id: props.itemId } })
     if (mySeq !== seq) return
     rows.value = res.data.data
+    loadedAt.value = new Date()
     collectedAt.value = res.data.meta.collected_at
   } catch (e) {
     if (mySeq !== seq) return
@@ -42,12 +45,18 @@ async function load() {
 
 watch(() => props.itemId, load, { immediate: true })
 
+// 경매 중인 시장을 위로 (그 밖의 거래 시장, 거래 없는 시장 순)
+const sortedRows = computed(() => sortRealtime(rows.value, loadedAt.value))
+
 const fmt = (v) => (v == null ? '-' : Math.round(v).toLocaleString('ko-KR'))
 </script>
 
 <template>
   <div class="realtime">
-    <h2>당일 경매가 <span class="badge">확정 전</span> <small>(원/kg)</small></h2>
+    <div class="head">
+      <h2>당일 경매가 <span class="badge">확정 전</span> <small>(원/kg)</small></h2>
+      <BaseButton :loading="loading" :disabled="!itemId" @click="load">새로고침</BaseButton>
+    </div>
     <p class="sub">
       <template v-if="collectedAt">마지막 수집 {{ formatKstDateTime(collectedAt) }} · </template>
       경매 중 약 20분마다 갱신, 다음 날 정산되면 위 차트에 확정 가격으로 반영됩니다.
@@ -68,12 +77,12 @@ const fmt = (v) => (v == null ? '-' : Math.round(v).toLocaleString('ko-KR'))
         </tr>
       </thead>
       <tbody>
-        <tr v-for="r in rows" :key="r.market_id">
+        <tr v-for="r in sortedRows" :key="r.market_id">
           <th scope="row">{{ r.market_name }}</th>
           <td class="num">{{ fmt(r.avg_price) }}</td>
           <td class="num range">{{ r.avg_price == null ? '-' : `${fmt(r.min_price)}~${fmt(r.max_price)}` }}</td>
           <td class="num">{{ fmt(r.volume_kg) }}kg</td>
-          <td class="status" :class="r.status">{{ realtimeStatusText(r.status, collectedAt) }}</td>
+          <td class="status" :class="realtimeState(r, loadedAt)">{{ realtimeStatusText(r, loadedAt) }}</td>
         </tr>
       </tbody>
     </table>
@@ -82,6 +91,12 @@ const fmt = (v) => (v == null ? '-' : Math.round(v).toLocaleString('ko-KR'))
 </template>
 
 <style scoped>
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 h2 {
   font-size: var(--font-size-lg);
   font-weight: 600;
@@ -148,9 +163,20 @@ thead th {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
-.status.live {
+/* 최근 1시간 안에 낙찰이 있는 시장만 강조하고 초록 점을 붙인다 */
+.status.active {
   color: var(--color-primary);
   font-weight: 600;
+}
+.status.active::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
 }
 tbody th,
 .num {

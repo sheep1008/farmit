@@ -17,7 +17,7 @@ import { addDays, formatKstDateTime, mondayOf, todayKst } from '@/utils/dates'
 import { CASE_TYPES, alertTypeLabel, caseTypeLabel, formatPct, regionText } from '@/utils/alerts'
 import { CHAT_MAX_LENGTH, chatPrefillRoute } from '@/utils/chat'
 import { formatWon, summarizeForecast, summarizeRealtime, summarizeMonthly } from '@/utils/dashboard'
-import { realtimeStatusText } from '@/utils/realtime'
+import { realtimeState, realtimeStatusText } from '@/utils/realtime'
 
 // SCR-003 대시보드 (docs/screens.md).
 // ① 관심 품목 오늘 경매가: 첫 관심 품목의 시장별 평균가와 마지막 수집 시각 (K33, REQ-PRC-004, GET /api/prices/realtime)
@@ -367,7 +367,7 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
           <div class="lead">
             <p class="lead-label">
               {{ item.name }} · {{ leadRow.market_name }}
-              <span class="status" :class="leadRow.status">{{ realtimeStatusText(leadRow.status, collectedAt) }}</span>
+              <span class="status" :class="realtimeState(leadRow)">{{ realtimeStatusText(leadRow) }}</span>
             </p>
             <p class="lead-price num">{{ formatWon(leadRow.avg_price) }}<span class="unit">/kg</span></p>
           </div>
@@ -375,7 +375,7 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
             <li v-for="r in otherRows" :key="r.market_id">
               <span class="market">{{ r.market_name }}</span>
               <span class="num price">{{ formatWon(r.avg_price) }}</span>
-              <span class="status" :class="r.status">{{ realtimeStatusText(r.status, collectedAt) }}</span>
+              <span class="status" :class="realtimeState(r)">{{ realtimeStatusText(r) }}</span>
             </li>
           </ul>
           <p class="notice">
@@ -865,11 +865,11 @@ h2 {
   font-size: 0.78rem;
   color: var(--color-text-muted);
 }
-/* 경매 중이면 초록 점 */
-.status.live {
+/* 최근 1시간 안에 낙찰이 있으면(경매 중) 초록 점 */
+.status.active {
   color: var(--color-primary);
 }
-.status.live::before {
+.status.active::before {
   content: '';
   display: inline-block;
   width: 6px;
