@@ -20,6 +20,7 @@ from codes.models import Item
 from farming import diagnose as diag
 from farming import doc_stats, glossary as gl
 from farming import schedule as sch
+from farming import weekly as wk
 from farming.models import FarmSchedule
 from prices.views import _bad, _get_item, _today_kst
 from rag import crops as crop_util
@@ -29,6 +30,8 @@ from rag.store import StoreUnavailable
 logger = logging.getLogger(__name__)
 SOURCE = {'source': '농촌진흥청 농사로 농작업일정', 'license': '이용허락범위 제한 없음'}
 NO_SCHEDULE = '농작업일정 정보가 없는 품목입니다.'
+WEEKLY_SOURCE = {'source': '농촌진흥청 농사로 주간농사정보', 'license': '공공누리 제1유형 (출처표시)'}
+NO_WEEKLY = '아직 수집된 주간농사정보가 없습니다.'
 MAX_SEARCH = 6
 
 
@@ -150,6 +153,24 @@ def search(request):
             break
     return ok(cards, {**SOURCE, 'condition': {'task': cond['task'], 'months': cond['months'],
                                              'category': cond['category']}})
+
+
+@_public
+def weekly(request):
+    """이번 주 농사 정보 (REQ-RAG-008): 주간농사정보 한 호의 분야별 요약. item_id는 선택이고 먼저 보여 줄 분야만 정한다."""
+    focus = None
+    if request.query_params.get('item_id'):
+        item, err = _item_or_error(request)
+        if err:
+            return err
+        focus = wk.focus_section(item.category)
+    issue = wk.current_issue(_today_kst())
+    if issue is None:
+        return ok({'available': False, 'title': None, 'week_start': None, 'week_end': None, 'registered_on': None,
+                   'url': None, 'focus': focus, 'sections': []}, {**WEEKLY_SOURCE, 'message': NO_WEEKLY})
+    return ok({'available': True, 'title': issue.title, 'week_start': issue.week_start, 'week_end': issue.week_end,
+               'registered_on': issue.registered_on, 'url': issue.pdf_url or None, 'focus': focus,
+               'sections': issue.summary}, WEEKLY_SOURCE)
 
 
 @_public

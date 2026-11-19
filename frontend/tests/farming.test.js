@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { candidateSources, diagnoseFollowUp, ganttRows, slotLabel } from '@/utils/farming'
+import {
+  candidateSources,
+  diagnoseFollowUp,
+  ganttRows,
+  orderWeeklySections,
+  slotLabel,
+  splitWeeklyItem,
+  summarizeWeeklyFarm,
+  weeklyPeriodText,
+} from '@/utils/farming'
 
 describe('증상 진단', () => {
   const sources = [
@@ -64,5 +73,42 @@ describe('간트 줄 묶기', () => {
 
   it('막대가 없으면 빈 배열', () => {
     expect(ganttRows(undefined)).toEqual([])
+  })
+})
+
+describe('이번 주 농사 정보 (REQ-RAG-008)', () => {
+  const data = {
+    focus: '과수',
+    sections: [
+      { section: '농업정보', items: ['(기상) 기온은 평년보다 높겠음'] },
+      { section: '채소', items: ['(양파) 이중피복'] },
+      { section: '과수', items: ['(과원 정비) 낙엽 제거', '(과원 관리) 밑거름 (수확 후)', '(저장) 환기', '동해 대비'] },
+    ],
+  }
+
+  it('기간: 같은 달이면 끝 날짜의 달을 줄이고, 없으면 빈 문자열', () => {
+    expect(weeklyPeriodText('2026-11-16', '2026-11-22')).toBe('11월 16일~22일')
+    expect(weeklyPeriodText('2026-09-28', '2026-10-04')).toBe('9월 28일~10월 4일')
+    expect(weeklyPeriodText(null, null)).toBe('')
+  })
+
+  it('항목의 맨 앞 괄호를 주제로 뗀다', () => {
+    expect(splitWeeklyItem('(과원 관리) 밑거름 (수확 후)')).toEqual({ topic: '과원 관리', text: '밑거름 (수확 후)' })
+    expect(splitWeeklyItem('동해 대비')).toEqual({ topic: '', text: '동해 대비' })
+  })
+
+  it('내 품목 분야를 맨 앞에, 나머지는 원문 순서대로', () => {
+    expect(orderWeeklySections(data).map((s) => s.section)).toEqual(['과수', '농업정보', '채소'])
+    expect(orderWeeklySections({ ...data, focus: null }).map((s) => s.section)).toEqual(['농업정보', '채소', '과수'])
+  })
+
+  it('홈 카드: 내 분야 3개까지, 맞는 분야가 없으면 첫 분야, 요약이 없으면 section null', () => {
+    const s = summarizeWeeklyFarm(data)
+    expect(s.section).toBe('과수')
+    expect(s.items.map((i) => i.topic)).toEqual(['과원 정비', '과원 관리', '저장'])
+    expect(s.hidden).toBe(1)
+    expect(summarizeWeeklyFarm({ ...data, focus: '화훼' }).section).toBe('농업정보')
+    expect(summarizeWeeklyFarm({ focus: '과수', sections: [] })).toEqual({ section: null, items: [], hidden: 0 })
+    expect(summarizeWeeklyFarm(undefined).section).toBeNull()
   })
 })

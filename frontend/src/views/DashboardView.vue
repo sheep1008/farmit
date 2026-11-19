@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { fetchAlerts, fetchCases } from '@/api/alerts'
-import { fetchMonthlyTasks } from '@/api/farming'
+import { fetchMonthlyTasks, fetchWeeklyFarmInfo } from '@/api/farming'
 import http from '@/api/http'
 import { fetchForecasts, fetchRealtimePrices } from '@/api/prices'
 import BaseButton from '@/components/common/BaseButton.vue'
@@ -17,6 +17,7 @@ import { addDays, formatKstDateTime, mondayOf, todayKst } from '@/utils/dates'
 import { CASE_TYPES, alertTypeLabel, caseTypeLabel, formatPct, regionText } from '@/utils/alerts'
 import { CHAT_MAX_LENGTH, chatPrefillRoute } from '@/utils/chat'
 import { formatWon, summarizeForecast, summarizeRealtime, summarizeMonthly } from '@/utils/dashboard'
+import { summarizeWeeklyFarm, weeklyPeriodText } from '@/utils/farming'
 import { realtimeState, realtimeStatusText } from '@/utils/realtime'
 
 // SCR-003 대시보드 (docs/screens.md).
@@ -24,6 +25,7 @@ import { realtimeState, realtimeStatusText } from '@/utils/realtime'
 // ② 이번 주 예측: 첫 관심 품목의 이번 주 예측가 상위 3개 시장·80% 구간·명절 주의 (K33, REQ-PRD-001·003, GET /api/forecasts)
 // ③ 안 읽은 알림 3개 (K20, REQ-ALT-003, GET /api/alerts?unread=true&size=3)
 // ④ 이번 달 할 일: 첫 관심 품목의 이번 달 시작·계속 농작업과 주의 시기 (K33, REQ-RAG-002, GET /api/farming/monthly)
+// ④-2 이번 주 농사 정보: 농촌진흥청 주간농사정보에서 첫 관심 품목 분야의 요약 (K48, REQ-RAG-008, GET /api/farming/weekly)
 // ⑤ 특수 상황 과거 사례 요약: 첫 관심 품목의 사건 종류별 건수와 4주 뒤 평균 변화 (K20, REQ-HIS-001·002, GET /api/cases)
 // ⑥ 채팅 입력창: 입력 후 /chat?q=로 이동, 채팅 화면이 질문 칸을 채운다 (K33, REQ-CHT-001)
 // 맨 위 오늘의 한 줄 브리핑: 시세 변화·안 읽은 알림·이번 달 할 일을 한 문장으로 (K45, GET /api/markets, GET /api/prices/daily unit=week)
@@ -137,6 +139,26 @@ async function loadMonthly() {
 
 const monthlySummary = computed(() => summarizeMonthly(monthly.value?.data))
 
+// 이번 주 농사 정보. 품목별 자료가 아니라서 품목이 없어도 보여 준다 (품목이 있으면 그 분야를 먼저)
+const farmWeek = ref(null) // { data, meta }
+const farmWeekLoading = ref(false)
+const farmWeekError = ref(false)
+
+async function loadFarmWeek() {
+  farmWeekLoading.value = true
+  farmWeekError.value = false
+  try {
+    farmWeek.value = await fetchWeeklyFarmInfo(item.value?.item_id)
+  } catch {
+    farmWeekError.value = true
+  } finally {
+    farmWeekLoading.value = false
+  }
+}
+
+const farmWeekSummary = computed(() => summarizeWeeklyFarm(farmWeek.value?.data))
+const farmWeekPeriod = computed(() => weeklyPeriodText(farmWeek.value?.data?.week_start, farmWeek.value?.data?.week_end))
+
 // 채팅 입력창. Enter = 질문하기, Shift+Enter = 줄바꿈 (채팅 화면과 같은 동작)
 const router = useRouter()
 const chatText = ref('')
@@ -230,6 +252,7 @@ function loadItemCards() {
   loadRealtime()
   loadForecast()
   loadMonthly()
+  loadFarmWeek()
   loadCases()
 }
 
@@ -498,6 +521,41 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
             주의: {{ c.task }} ({{ c.period }})
           </p>
           <p class="notice">출처: {{ monthly.meta.source }}</p>
+        </template>
+      </article>
+
+      <!-- ④-2 이번 주 농사 정보 -->
+      <article class="card">
+        <header class="card-head">
+          <h2>이번 주 농사 정보</h2>
+          <RouterLink :to="{ name: 'farming', query: { item_id: item?.item_id, tab: 'weekly' } }" class="more">
+            전체 보기 ›
+          </RouterLink>
+        </header>
+        <LoadingSpinner v-if="farmWeekLoading" size="sm" label="이번 주 농사 정보를 불러오는 중…" />
+        <div v-else-if="farmWeekError" class="state">
+          <p class="error">이번 주 농사 정보를 불러오지 못했습니다.</p>
+          <BaseButton @click="loadFarmWeek">다시 시도</BaseButton>
+        </div>
+        <p v-else-if="farmWeek && !farmWeek.data.available" class="state muted">
+          {{ farmWeek.meta.message || '아직 수집된 주간농사정보가 없습니다.' }}
+        </p>
+        <template v-else-if="farmWeek">
+          <p class="farm-week-head">
+            <span v-if="farmWeekSummary.section" class="tag start">{{ farmWeekSummary.section }}</span>
+            <span class="muted">{{ farmWeekPeriod || farmWeek.data.title }}</span>
+          </p>
+          <p v-if="!farmWeekSummary.section" class="state muted">요약을 읽지 못했습니다. 원문에서 확인해 주세요.</p>
+          <ul v-else class="farm-week">
+            <li v-for="(it, i) in farmWeekSummary.items" :key="i">
+              <strong v-if="it.topic">{{ it.topic }}</strong> {{ it.text }}
+            </li>
+          </ul>
+          <p v-if="farmWeekSummary.hidden" class="more-count muted">외 {{ farmWeekSummary.hidden }}개</p>
+          <p class="notice">
+            출처: {{ farmWeek.meta.source }}
+            <a v-if="farmWeek.data.url" :href="farmWeek.data.url" target="_blank" rel="noopener noreferrer">원문 보기(PDF)</a>
+          </p>
         </template>
       </article>
 
@@ -995,6 +1053,32 @@ h2 {
   grid-column: 2;
   font-size: 0.78rem;
   color: var(--color-text-muted);
+}
+.farm-week-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: var(--font-size-sm);
+}
+.farm-week {
+  list-style: none;
+  padding: 0;
+}
+.farm-week li {
+  padding: 8px 0;
+  line-height: 1.5;
+}
+.farm-week li + li {
+  border-top: 1px solid var(--color-border);
+}
+.farm-week strong {
+  color: var(--color-heading);
+}
+.notice a {
+  margin-left: 6px;
+  color: var(--color-primary);
 }
 .more-count {
   margin-top: 4px;

@@ -87,6 +87,13 @@ export const DATA_SOURCES = [
         url: 'https://www.nongsaro.go.kr',
       },
       {
+        name: '주간농사정보',
+        provider: '농촌진흥청 농사로',
+        use: '이번 주 농사 정보 (요약 쪽만)',
+        terms: '공공누리 제1유형 (출처 표시). 작성자 실명은 저장하지 않음',
+        url: 'https://www.nongsaro.go.kr',
+      },
+      {
         name: '현장기술지원',
         provider: '농촌진흥청 농사로',
         use: '채팅 상담 근거',

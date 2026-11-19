@@ -51,3 +51,15 @@ export async function diagnose(itemId, symptom) {
   const res = await http.post('/farming/diagnose', { item_id: itemId, symptom })
   return res.data
 }
+
+/**
+ * 이번 주 농사 정보 GET /api/farming/weekly (REQ-RAG-008). 농촌진흥청 주간농사정보 한 호의 분야별 요약.
+ * itemId는 선택이고, 넣으면 그 품목 분류에 맞는 분야 이름이 focus로 온다 (사과 → 과수).
+ * 반환: { data: { available, title, week_start, week_end, registered_on, url, focus, sections: [{ section, items }] },
+ *        meta: { source, license, message? } }
+ * 요약을 읽지 못한 호는 sections: [] (제목과 url만 쓴다). 수집된 호가 없으면 200 + available: false + meta.message.
+ */
+export async function fetchWeeklyFarmInfo(itemId) {
+  const res = await http.get('/farming/weekly', { params: { item_id: itemId || undefined } })
+  return res.data
+}

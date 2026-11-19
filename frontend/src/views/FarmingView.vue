@@ -2,20 +2,22 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import http from '@/api/http'
-import { fetchCalendar, fetchGuide, fetchMonthlyTasks, fetchSummary } from '@/api/farming'
+import { fetchCalendar, fetchGuide, fetchMonthlyTasks, fetchSummary, fetchWeeklyFarmInfo } from '@/api/farming'
 import BaseButton from '@/components/common/BaseButton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import FarmingGantt from '@/components/farming/FarmingGantt.vue'
 import { useCurrentItemStore } from '@/stores/currentItem'
 import { todayKst } from '@/utils/dates'
+import { orderWeeklySections, splitWeeklyItem, weeklyPeriodText } from '@/utils/farming'
 
-// SCR-012 재배 정보 (REQ-RAG-002·003·004·006, docs/api.md 2.8). 로그인 없이 본다.
-// 품목 선택 → 탭 ① 이번 달 할 일(기준 월 선택) ② 연간 작업 일정(간트) ③ 품목 요약 ④ 처음 할 일.
+// SCR-012 재배 정보 (REQ-RAG-002·003·004·006·008, docs/api.md 2.8). 로그인 없이 본다.
+// 품목 선택 → 탭 ① 이번 달 할 일(기준 월 선택) ② 이번 주 농사 정보(주간농사정보 요약) ③ 연간 작업 일정(간트) ④ 품목 요약 ⑤ 처음 할 일.
 // 품목·탭은 주소(?item_id=&tab=)에 남겨 대시보드 '이번 달 할 일' 카드에서 바로 들어오고, 새로고침해도 유지된다.
 
 const TABS = [
   { key: 'monthly', label: '이번 달 할 일', fetch: (id, month) => fetchMonthlyTasks(id, month) },
+  { key: 'weekly', label: '이번 주 농사 정보', fetch: (id) => fetchWeeklyFarmInfo(id) },
   { key: 'calendar', label: '연간 작업 일정', fetch: (id) => fetchCalendar(id) },
   { key: 'summary', label: '품목 요약', fetch: (id) => fetchSummary(id) },
   { key: 'guide', label: '처음 할 일', fetch: (id) => fetchGuide(id) },
@@ -146,7 +148,7 @@ onMounted(async () => {
       <p v-else-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
       <EmptyState
         v-else-if="data && !available && tab !== 'summary'"
-        title="이 품목은 작업 일정이 없습니다"
+        :title="tab === 'weekly' ? '이번 주 농사 정보가 없습니다' : '이 품목은 작업 일정이 없습니다'"
         :description="meta.message || '다른 품목을 골라 보세요.'"
       />
 
@@ -169,13 +171,41 @@ onMounted(async () => {
           </p>
         </template>
 
-        <!-- ② 연간 작업 일정 -->
+        <!-- ② 이번 주 농사 정보: 품목별 자료가 아니라 분야 단위다. 내 품목 분야를 맨 앞에 둔다 -->
+        <template v-else-if="tab === 'weekly'">
+          <h2>이번 주 농사 정보</h2>
+          <p class="muted">
+            {{ data.title }}
+            <template v-if="weeklyPeriodText(data.week_start, data.week_end)">
+              · {{ weeklyPeriodText(data.week_start, data.week_end) }}
+            </template>
+          </p>
+          <p v-if="!data.sections.length" class="muted">요약을 읽지 못했습니다. 원문에서 확인해 주세요.</p>
+          <div
+            v-for="s in orderWeeklySections(data)"
+            :key="s.section"
+            class="group"
+            :class="{ 'group-other': s.section !== data.focus }"
+          >
+            <h3>{{ s.section }}{{ s.section === data.focus ? ' (내 품목 분야)' : '' }}</h3>
+            <ul>
+              <li v-for="(it, i) in s.items.map(splitWeeklyItem)" :key="i">
+                <strong v-if="it.topic">{{ it.topic }}</strong> {{ it.text }}
+              </li>
+            </ul>
+          </div>
+          <p v-if="data.url">
+            <a :href="data.url" target="_blank" rel="noopener noreferrer">원문 보기(PDF)</a>
+          </p>
+        </template>
+
+        <!-- ③ 연간 작업 일정 -->
         <template v-else-if="tab === 'calendar'">
           <h2>연간 작업 일정 ({{ data.item.name }})</h2>
           <FarmingGantt :bars="data.bars" :today-index="meta.today_index" :slots="meta.slots" />
         </template>
 
-        <!-- ③ 품목 요약 -->
+        <!-- ④ 품목 요약 -->
         <template v-else-if="tab === 'summary'">
           <h2>{{ data.item.name }} 요약</h2>
           <dl class="summary">
@@ -200,7 +230,7 @@ onMounted(async () => {
           <p v-if="!data.crop_name" class="muted">병해충·현장기술지원 자료가 없는 품목입니다.</p>
         </template>
 
-        <!-- ④ 처음 할 일 -->
+        <!-- ⑤ 처음 할 일 -->
         <template v-else-if="tab === 'guide'">
           <h2>처음 할 일 ({{ data.item.name }})</h2>
           <p class="muted">한 해 농작업을 시작하는 시기 순으로 정리했습니다.</p>
@@ -303,6 +333,9 @@ h3 {
 }
 .group-growth {
   border-left-color: #f9a825;
+}
+.group-other {
+  border-left-color: var(--color-border-hover);
 }
 .group-caution {
   border-left-color: var(--color-danger);

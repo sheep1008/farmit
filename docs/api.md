@@ -918,6 +918,24 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 #### `GET /api/farming/glossary?q=` — 용어 풀이 (REQ-RAG-007)
 농업용어사전(알기쉬운농업용어 우선) → 없으면 한국어 위키백과. **200** `data` = `{term, found, definition, source, url, license}`. 못 찾으면 `found: false`(다른 값 없음). **오류**: `400`(`q` 없음·30자 초과), `429 RATE_LIMITED`(접속 주소별 분당 30회, 로그인 없이 외부 API를 부르므로)
 
+#### `GET /api/farming/weekly?item_id=` — 이번 주 농사 정보 (REQ-RAG-008)
+농촌진흥청 주간농사정보 한 호의 요약. 한국 시간 오늘이 기간(`week_start`~`week_end`)에 드는 호를 주고, 없으면 가장 최근에 등록된 호를 준다. `item_id`는 선택이다. LLM 없음. **200**
+```json
+{ "data": { "available": true, "title": "주간농사정보 제 47호 (2026.11.23~11.29.)",
+    "week_start": "2026-11-23", "week_end": "2026-11-29", "registered_on": "2026-11-19",
+    "url": "https://www.nongsaro.go.kr/portal/contentsFileDownload.do?ep=...",
+    "focus": "과수",
+    "sections": [ {"section": "농업정보", "items": ["(기상) 기온은 평년(4.4~6.0℃)보다 높겠고, ..."]},
+                  {"section": "과수", "items": ["(과원 정비) 낙엽·잡초 등 병해충 월동 생육처 제거, 관수시설 물빼기 등"]} ] },
+  "meta": { "source": "농촌진흥청 농사로 주간농사정보", "license": "공공누리 제1유형 (출처표시)" } }
+```
+- `sections`는 PDF '요약' 쪽을 분야별로 자른 것이다 (농업정보·벼·밭작물·채소·과수·화훼·특작·축산·양봉 중 그 호에 있는 것). 요약을 읽지 못한 호는 `sections: []`이고 제목과 `url`(PDF 원문)만 쓴다.
+- `focus`는 `item_id` 품목의 분류에 맞는 분야 이름이다 (사과 → `과수`). `item_id`가 없거나 맞는 분야가 없으면 `null`. 주간농사정보는 품목별로 나뉘지 않아 품목으로 거르지 않고, 화면이 어느 분야를 먼저 보여 줄지만 알려 준다.
+- `week_start`·`week_end`는 제목에서 읽은 기간이고 못 읽으면 `null`.
+- 수집된 호가 없으면 `200` + `available: false` + `meta.message` (다른 값은 `null`·`[]`).
+
+**오류**: `400 VALIDATION_ERROR`(`item_id` 형식), `404 NOT_FOUND`(없는 품목)
+
 #### `POST /api/farming/diagnose` — 증상 진단 (REQ-RAG-001, 회원)
 본문 `{"item_id": 10, "symptom": "잎에 갈색 둥근 반점이 생겨요"}` (`symptom` 1~300자). 병해충·현장기술지원 자료를 검색해 근거로만 후보를 만든다. **200**
 ```json
@@ -976,6 +994,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | GET | `/api/farming/guide` | 전체 | **(2.8에 상세)** 처음 할 일 요약 (선택) | SCR-012 | REQ-RAG-004 | 4 |
 | GET | `/api/farming/search` | 전체 | **(2.8에 상세)** 조건 탐색 ("봄에 심는 채소") | SCR-012 | REQ-RAG-005 | 4 |
 | GET | `/api/farming/glossary` | 전체 | **(2.8에 상세)** 용어 풀이 (농업용어사전 → 위키백과) | SCR-012, 011 | REQ-RAG-007 | 4 |
+| GET | `/api/farming/weekly` | 전체 | **(2.8에 상세)** 이번 주 농사 정보 (주간농사정보 요약, item_id 선택) | SCR-003, 012 | REQ-RAG-008 | 4 |
 | POST | `/api/farming/diagnose` | 회원 | **(2.8에 상세)** 증상 진단 (채팅 한도에 포함) | SCR-013 | REQ-RAG-001 | 4 |
 | GET | `/api/prices/retail` | 전체 | KAMIS 도·소매 참고 가격 (선택) | SCR-004 | REQ-PRC-006 | 12월 |
 | POST | `/api/sales/ocr` | 회원 | 정산서 사진 → 입력값 추출 (선택) | SCR-007 | REQ-SAL-004 | 12월 |
