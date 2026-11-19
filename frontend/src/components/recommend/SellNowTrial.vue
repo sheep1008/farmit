@@ -34,6 +34,8 @@ async function calculate() {
     const api = e.apiError ?? {}
     if (api.code === 'VALIDATION_ERROR') errorText.value = '물량을 0.1kg 이상으로 넣어 주세요.'
     else if (api.status === 429) errorText.value = '잠시 뒤에 다시 계산해 주세요. 가입하면 횟수 제한 없이 쓸 수 있습니다.'
+    else if (api.status >= 500) errorText.value = '서버에 문제가 생겨 계산하지 못했습니다. 잠시 뒤에도 같으면 관리자에게 알려 주세요.'
+    else if (!api.status) errorText.value = '서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.'
     else errorText.value = '계산하지 못했습니다. 다시 시도해 주세요.'
   } finally {
     if (mySeq === seq) loading.value = false
