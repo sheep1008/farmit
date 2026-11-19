@@ -142,3 +142,26 @@ class Forecast(models.Model):
         # 같은 기준 주를 다시 돌려도 행이 두 번 저장되지 않게 막는다
         constraints = [models.UniqueConstraint(
             fields=['item', 'market', 'base_week', 'horizon'], name='uk_forecast')]
+
+
+# 내 위치(시군구 중심) → 시장 도로 경로. 카카오모빌리티 자동차 길찾기 결과를 저장해 다시 쓴다 (REQ-REC-002)
+#   처음 그 시군구의 회원이 판매 추천을 열 때 채운다 (prices/routes.py). 시장 좌표를 고치면 그 시장 행을 지워 다시 받는다
+class MarketRoute(models.Model):
+    # sido, sigungu: 출발지 (user_profile과 같은 표기). 좌표는 codes/fixtures/sigungu_coords.json의 시군구 중심
+    sido = models.CharField(max_length=20)
+    sigungu = models.CharField(max_length=20)
+    # market: 도착 시장 FK (DB 컬럼은 market_id). 시장을 지우면 경로도 지운다
+    market = models.ForeignKey(Market, on_delete=models.CASCADE)
+    # distance_m: 도로 거리 (m, 카카오 원본 단위)
+    distance_m = models.IntegerField()
+    # toll_won: 통행료 (원, 1종 차량·하이패스 아님)
+    toll_won = models.IntegerField()
+    # duration_s: 소요 시간 (초). 조회 시점의 교통 상황 기준이라 참고용
+    duration_s = models.IntegerField()
+    # fetched_at: 카카오에서 받은 시각 (UTC)
+    fetched_at = models.DateTimeField()
+
+    class Meta:
+        db_table = 'market_route'
+        # 같은 출발지·시장은 한 번만 저장한다
+        constraints = [models.UniqueConstraint(fields=['sido', 'sigungu', 'market'], name='uk_market_route')]

@@ -1,8 +1,8 @@
 """주간 가격 예측 조회와 판매 추천 계산 (REQ-PRD-001~003, REQ-REC-001~003, REQ-REC-005)."""
-import math
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
+from django.conf import settings
 from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.authentication import SessionAuthentication
@@ -13,6 +13,7 @@ from api.responses import error, ok
 from codes.models import Holiday, Item, Market, MarketClosure
 
 from .models import Forecast, SettlePrice
+from .routes import road_routes, trip
 from .views import _aggregate, _bad, _get_item, _kst_iso, _price, _today_kst, market_prices
 
 # 명절 이름. holiday 테이블에는 공휴일 전체가 들어 있어 이름으로 명절만 고른다 (결정 0009)
@@ -21,7 +22,6 @@ HOLIDAY_KEYWORDS = ('설날', '추석')
 HOLIDAY_NOTICE_DAYS = 21
 HOLIDAY_NOTICE = '명절 전후에는 가격이 크게 오를 수 있으나, 이 예측은 명절 급등 폭을 낮게 잡는 경향이 있습니다.'
 NO_FORECAST_NOTICE = '이 품목은 아직 가격 예측을 제공하지 않습니다.'
-EARTH_RADIUS_KM = 6371.0
 # 예측 성적표가 돌려주는 최근 대상 주 수 (api.md 2.5)
 HISTORY_WEEKS = 12
 
@@ -171,27 +171,19 @@ class RecommendationSerializer(serializers.Serializer):
                                                required=False)
 
 
-def _distance_km(lat1, lng1, lat2, lng2):
-    """두 좌표 사이 직선거리 (km, haversine)."""
-    p1, p2 = math.radians(float(lat1)), math.radians(float(lat2))
-    dp, dl = p2 - p1, math.radians(float(lng2) - float(lng1))
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(a))
-
-
 def _won(value):
     """원 단위 반올림 (사사오입)."""
     return int(Decimal(str(value)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
 
 
-def calculate(row, distance_km, volume, loss_rate, per_km, per_week, commission_rate):
+def calculate(row, distance_km, volume, loss_rate, per_km, per_week, commission_rate, toll_won=None):
     """한 시장 × 시점의 손에 남는 돈 (REQ-REC-002).
 
-    예측가격 × (물량 × (1 − 감모율)) − 수수료 − 운송비(거리 × 단가, 한 번) − 보관비(주당 × 보관 주수).
+    예측가격 × (물량 × (1 − 감모율)) − 수수료 − 운송비(거리 × 단가 + 통행료, 편도 한 번) − 보관비(주당 × 보관 주수).
     보관 주수는 이번 주(horizon 1)가 0이고 한 주 늦출 때마다 1주씩 늘어난다.
     """
     sellable = volume * (1 - loss_rate / 100)
-    transport = Decimal(str(distance_km)) * per_km if distance_km is not None else Decimal(0)
+    transport = Decimal(str(distance_km)) * per_km + (toll_won or 0) if distance_km is not None else Decimal(0)
     storage = per_week * (row.horizon - 1)
 
     def net(price):
@@ -261,11 +253,17 @@ def compute_recommendation(user, item, v):
         return default if value is None else value
 
     loss_rate = Decimal(pick('loss_rate', 0))
-    per_km = Decimal(pick('transport_cost_per_km', 0))
+    # 단가를 넣지 않았으면 1톤 트럭(포터) 기준 기본 단가를 쓴다
+    per_km = Decimal(pick('transport_cost_per_km', settings.TRANSPORT_DEFAULT_COST_PER_KM))
+    per_km_is_default = 'transport_cost_per_km' not in v and getattr(profile, 'transport_cost_per_km', None) is None
     per_week = Decimal(pick('storage_cost_per_week', 0))
     commission_rate = Decimal(v.get('commission_rate', 0))
     volume = Decimal(v['volume_kg'])
     has_location = use_profile and profile.lat is not None and profile.lng is not None
+
+    # 도로 거리·통행료 (시군구 → 시장). 저장된 값이 없으면 여기서 카카오에 물어 저장한다
+    routes = road_routes(profile.sido, profile.sigungu, {r.market_id: r.market for r in rows}.values()) \
+        if has_location else {}
 
     weeks = {r.target_week for r in rows}
     holidays = _holiday_dates(weeks)
@@ -278,8 +276,8 @@ def compute_recommendation(user, item, v):
 
     results = []
     for r in rows:
-        distance = _distance_km(profile.lat, profile.lng, r.market.lat, r.market.lng) if has_location else None
-        calc = calculate(r, distance, volume, loss_rate, per_km, per_week, commission_rate)
+        distance, toll, distance_type = trip(profile, r.market, routes) if has_location else (None, None, None)
+        calc = calculate(r, distance, volume, loss_rate, per_km, per_week, commission_rate, toll)
         week_end = r.target_week + timedelta(days=6)
         closed = sorted(d for d in closures.get(r.market_id, []) if r.target_week <= d <= week_end)
         results.append({
@@ -289,6 +287,7 @@ def compute_recommendation(user, item, v):
             'pred_price': _price(r.pred_price), 'lower80': _price(r.lower80), 'upper80': _price(r.upper80),
             'last_week_price': _price(r.last_week_price),
             'distance_km': round(distance, 1) if distance is not None else None,
+            'distance_type': distance_type, 'toll_won': toll,
             **calc,
             'is_closed': bool(closed), 'closed_dates': [d.isoformat() for d in closed],
             'holiday_notice': HOLIDAY_NOTICE if _holiday_near(r.target_week, holidays) else None,
@@ -302,6 +301,7 @@ def compute_recommendation(user, item, v):
             'model_version': first.model_version, 'created_at': _kst_iso(first.created_at),
             'price_unit': '원/kg',
             'costs': {'loss_rate': float(loss_rate), 'transport_cost_per_km': int(per_km),
+                      'transport_cost_is_default': per_km_is_default,
                       'storage_cost_per_week': int(per_week), 'commission_rate': float(commission_rate),
                       'transport_applied': has_location}}
     return 200, {'forecast_available': True, 'results': results}, meta

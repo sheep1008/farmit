@@ -158,7 +158,7 @@ async function withdraw() {
             step="1"
             inputmode="numeric"
             :error="first('transport_cost_per_km')"
-            hint="판매 추천의 운송비 계산에 씁니다"
+            hint="판매 추천의 운송비 계산에 씁니다. 비우면 1톤 트럭 연료비 기준 단가로 계산합니다"
           />
           <BaseInput
             v-model="form.storage_cost_per_week"

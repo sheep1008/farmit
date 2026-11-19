@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -181,3 +182,13 @@ SELL_NOW_MIN_TRADE_DAYS = 5          # 최근 14일 거래일 수가 이보다 �
 SELL_NOW_MIN_VOLUME_KG = 1000        # 최근 14일 총 물량이 이보다 적으면 "거래 적음"
 SELL_NOW_VOLUME_WARN_MULTIPLE = 1    # 내 물량이 최근 14일 일평균 물량의 이 배수를 넘으면 물량 경고
 SELL_NOW_STALE_DAYS = 3              # 기준일이 오늘보다 이 일수 넘게 오래되면 "오래된 데이터" 경고
+
+# ── 운송비 (REQ-REC-002) ──────────────────────────
+# 카카오모빌리티 자동차 길찾기 REST 키. 내 위치 → 시장 도로 거리·통행료를 받는다 (prices/routes.py).
+# 비우면 직선거리로 계산한다. 테스트는 외부 API를 부르지 않게 키를 끈다
+KAKAO_NAVI_KEY = None if sys.argv[1:2] == ['test'] else (os.environ.get('KAKAO_NAVI_KEY') or None)
+KAKAO_NAVI_TIMEOUT_SECONDS = float(os.environ.get('KAKAO_NAVI_TIMEOUT_SECONDS', '5'))
+# 회원이 km당 운송비를 넣지 않았을 때 쓰는 기본 단가 (원/km). 1톤 트럭(현대 포터2) 연료비 기준:
+# 경유 복합연비 약 9.3km/L(8.6~9.9), 경유 약 1,600원/L로 잡으면 약 170원/km. 연료비만이고 인건비·감가는 뺐다.
+# 유가가 크게 바뀌면 .env의 TRANSPORT_DEFAULT_COST_PER_KM으로 고친다
+TRANSPORT_DEFAULT_COST_PER_KM = int(os.environ.get('TRANSPORT_DEFAULT_COST_PER_KM', '170'))

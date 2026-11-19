@@ -672,11 +672,11 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | `volume_kg` | O | 물량 (kg, 0.1 이상) |
 | `desired_week` | X | 희망 시기. 그 날짜가 든 시점 행에 `is_desired: true` (순위는 바꾸지 않음) |
 | `loss_rate` | X | 감모율 % (0~100). 없으면 내 정보 값, 그것도 없으면 0 |
-| `transport_cost_per_km` | X | 운송비 원/km. 없으면 내 정보 값, 없으면 0 |
+| `transport_cost_per_km` | X | 운송비 원/km. 없으면 내 정보 값, 그것도 없으면 1톤 트럭(포터) 기준 기본 단가 (설정값 `TRANSPORT_DEFAULT_COST_PER_KM`, 기본 170) |
 | `storage_cost_per_week` | X | 보관비 원/주. 없으면 내 정보 값, 없으면 0 |
 | `commission_rate` | X | 수수료율 % (0~100). 기본 0 |
 
-계산: `예측가 × (물량 × (1 − 감모율)) − 수수료 − 운송비 − 보관비`. 운송비는 내 위치(시군 중심)에서 시장까지 직선거리(km) × 단가를 한 번 곱한다. 보관비는 `주당 보관비 × (horizon − 1)`. `net_low_won`·`net_high_won`은 같은 식에 80% 구간 하한·상한을 넣은 값. 금액은 원 단위 사사오입.
+계산: `예측가 × (물량 × (1 − 감모율)) − 수수료 − 운송비 − 보관비`. 운송비 = `거리(km) × 단가 + 통행료` (편도 한 번). 거리와 통행료는 내 위치(시군구 중심)에서 시장까지 카카오모빌리티 자동차 길찾기의 도로 거리·통행료(1종 차량, 하이패스 아님)다. 한 번 조회한 값은 `market_route`에 저장해 다시 쓴다. 길찾기를 쓸 수 없으면(키 없음·조회 실패) 직선거리 × 단가로 계산하고 통행료는 넣지 않는다. 보관비는 `주당 보관비 × (horizon − 1)`. `net_low_won`·`net_high_won`은 같은 식에 80% 구간 하한·상한을 넣은 값. 금액은 원 단위 사사오입.
 
 **200**
 ```json
@@ -686,20 +686,23 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
     "results": [
       { "rank": 1, "market_id": "340101", "market_name": "천안", "horizon": 4, "target_week": "2026-11-30",
         "is_desired": false, "pred_price": 3900.0, "lower80": 3600.0, "upper80": 4200.0, "last_week_price": 3500.0,
-        "distance_km": 111.2, "sellable_kg": 100.0, "revenue_won": 390000, "commission_won": 0,
-        "transport_won": 0, "storage_won": 0, "net_won": 390000, "net_low_won": 360000, "net_high_won": 420000,
+        "distance_km": 113.9, "distance_type": "road", "toll_won": 5300,
+        "sellable_kg": 100.0, "revenue_won": 390000, "commission_won": 0,
+        "transport_won": 24663, "storage_won": 0, "net_won": 365337, "net_low_won": 335337, "net_high_won": 395337,
         "is_closed": false, "closed_dates": [], "holiday_notice": null }
     ]
   },
   "meta": { "item_id": 1, "volume_kg": 100.0, "base_week": "2026-11-09", "model_version": "v3",
             "created_at": "2026-11-09T10:00:00+09:00", "price_unit": "원/kg",
-            "costs": { "loss_rate": 0.0, "transport_cost_per_km": 0, "storage_cost_per_week": 0,
-                       "commission_rate": 0.0, "transport_applied": true } }
+            "costs": { "loss_rate": 0.0, "transport_cost_per_km": 170, "transport_cost_is_default": true,
+                       "storage_cost_per_week": 0, "commission_rate": 0.0, "transport_applied": true } }
 }
 ```
 - `results`는 `net_won` 큰 순서. 같으면 시장 코드·`horizon` 순.
 - `is_closed`: 그 시장의 휴장일(`market_closure`)이 대상 주(월~일)에 들어 있음 (REQ-REC-005). 순위에서 빼지 않고 표시만 한다.
 - `distance_km`: 내 정보에 위치(`lat`·`lng`)가 없으면 `null`, 운송비는 0, `meta.costs.transport_applied: false`.
+- `distance_type`: `road`(도로 거리) 또는 `straight`(직선거리, 길찾기를 쓰지 못했을 때). 거리가 없으면 `null`. `toll_won`: 통행료(원). 도로 거리가 아니면 `null`. `transport_won`에 이미 들어 있다.
+- `meta.costs.transport_cost_is_default`: 요청과 내 정보에 단가가 없어 기본 단가를 썼으면 `true`.
 - 이미 지난 주(`target_week`+6일 < 오늘)는 결과에서 뺀다. 남는 행이 없으면 `503 DATA_NOT_READY`.
 - 예측 대상이 아닌 품목: `meta`는 `item_id`·`date`(정산일)·`price_unit`만. `200`, `data.forecast_available: false`, `data.message`, `data.results: []`, `data.market_comparison`(`/api/prices/compare`와 같은 행, 가장 최근 정산일).
 - 수확 시기(REQ-REC-006)·근거의 특수 상황(REQ-REC-004)은 이 응답에 아직 없다 (결정 0009).
@@ -720,7 +723,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | `item_id` | O | 품목 |
 | `volume_kg` | O | 물량 (kg, 0.1 이상) |
 | `grade` | X | 등급. 기본 `ALL` (`/api/prices/compare`와 같은 값) |
-| `loss_rate`·`transport_cost_per_km`·`commission_rate` | X | `/api/recommendations`와 같다 (없으면 내 정보 값 → 0). 보관비는 없다(지금 판매) |
+| `loss_rate`·`transport_cost_per_km`·`commission_rate` | X | `/api/recommendations`와 같다 (없으면 내 정보 값 → 기본값. 운송비 단가 기본값은 포터 기준 단가). 보관비는 없다(지금 판매) |
 
 계산: 가격 = 기준일 포함 최근 7일(기준일−6일~기준일) 정산의 **물량 가중 평균** `Σ(평균가×물량)/Σ물량`. 기준일 = 그 품목·등급의 전체 시장 중 가장 최근 정산일. 실수령액 = `가격 × 물량 × (1−감모율) − 수수료 − 운송비`(`/api/recommendations`와 같은 식, 보관비 0). `net_low_won`·`net_high_won`은 최근 14일 최저·최고 평균가로 같은 식을 계산한 값.
 
@@ -731,20 +734,22 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
     "results": [
       { "rank": 1, "market_id": "250001", "market_name": "대전오정", "price": 3120.5,
         "recent_min_price": 2900.0, "recent_max_price": 3400.0, "recent_volume_kg": 52000.0, "trade_days": 11,
-        "distance_km": 12.3, "sellable_kg": 100.0, "revenue_won": 312050, "commission_won": 0,
+        "distance_km": 12.3, "distance_type": null, "toll_won": null,
+        "sellable_kg": 100.0, "revenue_won": 312050, "commission_won": 0,
         "transport_won": 0, "net_won": 312050, "net_low_won": 290000, "net_high_won": 340000,
         "low_trade": false, "volume_warning": false }
     ]
   },
   "meta": { "item_id": 1, "grade": "ALL", "volume_kg": 100.0, "base_date": "2026-11-15", "is_stale": false,
             "price_unit": "원/kg", "price_window_days": 7, "forecast_available": true,
-            "costs": { "loss_rate": 0.0, "transport_cost_per_km": 0, "commission_rate": 0.0, "transport_applied": false },
-            "warnings": ["내 위치 또는 운송비 단가가 없어 운송비를 반영하지 않았습니다."] }
+            "costs": { "loss_rate": 0.0, "transport_cost_per_km": 170, "transport_cost_is_default": true,
+                       "commission_rate": 0.0, "transport_applied": false },
+            "warnings": ["내 위치가 없거나 운송비 단가가 0이어서 운송비를 반영하지 않았습니다."] }
 }
 ```
 - `results`는 `net_won` 큰 순서(같으면 시장 코드). 최근 7일 거래가 없는 시장은 `results`에 넣지 않는다.
 - `trade_days`·`recent_volume_kg`: 최근 14일 거래일 수·총 물량. `low_trade`: 거래일 수·총 물량이 `settings`의 `SELL_NOW_MIN_TRADE_DAYS`·`SELL_NOW_MIN_VOLUME_KG` 미만. `volume_warning`: 내 물량이 최근 14일 일평균 물량의 `SELL_NOW_VOLUME_WARN_MULTIPLE`배를 넘음. 기준값은 8주치 데이터를 보고 조정한다(잠정).
-- `distance_km`: 내 위치가 없거나 시장 좌표가 비어 있으면(0·NULL) `null`, 그 시장 운송비는 0. `meta.costs.transport_applied`는 내 위치가 있고 단가가 0보다 클 때만 `true`, 아니면 `false`이고 `meta.warnings`에 안내가 들어간다.
+- `distance_km`·`distance_type`·`toll_won`: `/api/recommendations`와 같다(도로 거리·통행료, 못 쓰면 직선거리). 내 위치가 없거나 시장 좌표가 비어 있으면(0·NULL) `null`, 그 시장 운송비는 0. `meta.costs.transport_applied`는 내 위치가 있고 단가가 0보다 클 때만 `true`, 아니면 `false`이고 `meta.warnings`에 안내가 들어간다.
 - `meta.is_stale`: 기준일이 오늘(KST)보다 `SELL_NOW_STALE_DAYS`일 넘게 오래됨. 이때도 `meta.warnings`에 안내.
 - `meta.forecast_available`: 품목의 가격 예측 제공 여부. 예측 대상이 아니면 `false`이고 `meta.message`에 "이 품목은 아직 가격 예측을 제공하지 않습니다."가 들어간다 (REQ-REC-003). 순위 계산은 같다.
 - `recent_min_price`·`recent_max_price`: 최근 14일 **하루 평균가** 중 최저·최고 (경매 한 건 값이 아님).

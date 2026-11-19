@@ -597,7 +597,7 @@ class RecommendationApiTest(TestCase):
         return self.client.post(RECOMMEND_URL, body, content_type='application/json')
 
     def test_사과_100kg이면_시장_x_시점_8개가_수령액_순(self):
-        res = self.post()
+        res = self.post(transport_cost_per_km=0)      # 단가를 안 보내면 기본 단가(포터 기준)가 들어간다
         self.assertEqual(res.status_code, 200)
         results = res.json()['data']['results']
         self.assertEqual(len(results), 8)
@@ -825,7 +825,7 @@ class SellNowApiTest(TestCase):
         self.assertNotIn('message', meta)
 
     def test_쿼리_수(self):
-        with self.assertNumQueries(7):
+        with self.assertNumQueries(8):      # 세션·회원·품목·프로필·시장·저장된 경로·기준일·정산
             self.post()
 
     def test_비용_수식과_운송비(self):
@@ -852,10 +852,10 @@ class SellNowApiTest(TestCase):
         self.assertTrue(any('위치 정보가 없는 시장' in w for w in body['meta']['warnings']))
 
     def test_내_위치나_운송비_단가가_없으면_운송비_미반영_경고(self):
-        res = self.post()      # 단가 0
+        res = self.post(transport_cost_per_km=0)
         meta = res.json()['meta']
         self.assertFalse(meta['costs']['transport_applied'])
-        self.assertIn('내 위치 또는 운송비 단가가 없어 운송비를 반영하지 않았습니다.', meta['warnings'])
+        self.assertIn(NO_TRANSPORT_NOTICE, meta['warnings'])
         self.profile.lat = None
         self.profile.lng = None
         self.profile.save()
@@ -1066,3 +1066,120 @@ class ForecastHistoryApiTest(TestCase):
 
     def test_로그인_없이_조회(self):
         self.assertEqual(Client().get(HISTORY_URL, {'item_id': self.apple.pk, 'market_id': '250001'}).status_code, 200)
+
+
+# ── 도로 거리·통행료·기본 단가 (REQ-REC-002) ─────────────────────────────────────────────
+from django.test import override_settings  # noqa: E402
+
+from . import routes  # noqa: E402
+from .models import MarketRoute  # noqa: E402
+
+
+class RoadTransportTest(TestCase):
+    """운송비 = 도로 거리 × 단가 + 통행료. 길찾기를 못 쓰면 직선거리. 단가가 없으면 기본 단가."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.market = Market.objects.create(market_id='250001', name='시장', sido='대전광역시', lat=36.36, lng=127.41,
+                                           is_collect=True)
+        cls.other = Market.objects.create(market_id='340101', name='다른시장', sido='충청남도', lat=36.81, lng=127.15,
+                                          is_collect=True)
+        cls.apple = Item.objects.create(at_code='0601', name='사과', category='과일', is_forecast=True)
+        make_forecasts(cls.apple, [cls.market, cls.other])
+        for m in (cls.market, cls.other):
+            for i in range(10):
+                settle(cls.apple, m, NOW - timedelta(days=1 + i), 3000, 1000)
+        cls.user = get_user_model().objects.create_user('farmer', password='pw12345678')
+        # 대전광역시 서구는 좌표 목록(sigungu_coords.json)에 있는 이름이다
+        cls.profile = UserProfile.objects.create(user=cls.user, sido='대전광역시', sigungu='서구',
+                                                 lat=36.3552, lng=127.3838)
+
+    def setUp(self):
+        cache.clear()
+        self.client = Client(enforce_csrf_checks=False)
+        self.client.force_login(self.user)
+        for target in ('prices.forecast_views._today_kst', 'prices.sell_now._today_kst'):
+            patcher = mock.patch(target, return_value=date(2026, 11, 10) if 'forecast' in target else NOW)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def recommend(self, **body):
+        body = {'item_id': self.apple.pk, 'volume_kg': 100, **body}
+        res = self.client.post(RECOMMEND_URL, body, content_type='application/json').json()
+        return {(r['market_id'], r['horizon']): r for r in res['data']['results']}, res['meta']
+
+    def save_route(self, market=None, distance_m=50000, toll_won=2900):
+        return MarketRoute.objects.create(sido='대전광역시', sigungu='서구', market=market or self.market,
+                                          distance_m=distance_m, toll_won=toll_won, duration_s=3000,
+                                          fetched_at=utc(2026, 11, 19))
+
+    def test_저장된_경로가_있으면_도로_거리와_통행료로_계산한다(self):
+        self.save_route()
+        rows, _ = self.recommend(transport_cost_per_km=100)
+        r = rows[('250001', 1)]
+        self.assertEqual((r['distance_km'], r['distance_type'], r['toll_won']), (50.0, 'road', 2900))
+        self.assertEqual(r['transport_won'], 50 * 100 + 2900)       # 거리 × 단가 + 통행료
+        self.assertEqual(r['net_won'], r['revenue_won'] - r['transport_won'])
+        # 경로가 없는 시장은 직선거리, 통행료 없음
+        other = rows[('340101', 1)]
+        self.assertEqual((other['distance_type'], other['toll_won']), ('straight', None))
+        self.assertAlmostEqual(other['transport_won'], other['distance_km'] * 100, delta=10)
+
+    def test_지금_팔면도_같은_경로를_쓴다(self):
+        self.save_route()
+        res = self.client.post(SELL_NOW_URL, {'item_id': self.apple.pk, 'volume_kg': 100, 'transport_cost_per_km': 100},
+                               content_type='application/json').json()
+        r = {x['market_id']: x for x in res['data']['results']}['250001']
+        self.assertEqual((r['distance_km'], r['distance_type'], r['toll_won'], r['transport_won']),
+                         (50.0, 'road', 2900, 7900))
+
+    @override_settings(TRANSPORT_DEFAULT_COST_PER_KM=170)
+    def test_단가가_없으면_기본_단가를_쓰고_알린다(self):
+        self.save_route()
+        rows, meta = self.recommend()
+        self.assertEqual((meta['costs']['transport_cost_per_km'], meta['costs']['transport_cost_is_default']), (170, True))
+        self.assertEqual(rows[('250001', 1)]['transport_won'], 50 * 170 + 2900)
+        # 내 정보에 단가가 있으면 그 값을 쓴다
+        self.profile.transport_cost_per_km = 300
+        self.profile.save()
+        _, meta = self.recommend()
+        self.assertEqual((meta['costs']['transport_cost_per_km'], meta['costs']['transport_cost_is_default']), (300, False))
+
+    def test_키가_없으면_길찾기를_부르지_않는다(self):
+        with mock.patch.object(routes, '_fetch') as fetch:
+            rows, _ = self.recommend()
+        fetch.assert_not_called()
+        self.assertEqual(rows[('250001', 1)]['distance_type'], 'straight')
+
+    @override_settings(KAKAO_NAVI_KEY='test-key')
+    def test_처음_조회한_경로를_저장하고_다음에는_다시_부르지_않는다(self):
+        with mock.patch.object(routes, '_fetch', return_value=(46686, 2900, 3439)) as fetch:
+            rows, _ = self.recommend()
+            self.assertEqual(fetch.call_count, 2)           # 시장 2곳
+            self.recommend()
+            self.assertEqual(fetch.call_count, 2)           # 저장된 값을 쓴다
+        self.assertEqual(MarketRoute.objects.count(), 2)
+        self.assertEqual((rows[('250001', 1)]['distance_km'], rows[('250001', 1)]['toll_won']), (46.7, 2900))
+
+    @override_settings(KAKAO_NAVI_KEY='test-key')
+    def test_길찾기가_실패하면_직선거리로_계산하고_잠시_다시_부르지_않는다(self):
+        with mock.patch.object(routes, '_fetch', return_value=None) as fetch:
+            rows, _ = self.recommend()
+            self.recommend()
+            self.assertEqual(fetch.call_count, 2)           # 첫 요청의 시장 2곳만. 두 번째 요청은 기다리지 않는다
+        self.assertEqual(MarketRoute.objects.count(), 0)
+        self.assertEqual(rows[('250001', 1)]['distance_type'], 'straight')
+
+    @override_settings(KAKAO_NAVI_KEY='test-key')
+    def test_카카오_응답에서_거리와_통행료를_읽는다(self):
+        body = {'routes': [{'result_code': 0, 'summary': {'distance': 46686, 'duration': 3439,
+                                                          'fare': {'taxi': 50900, 'toll': 2900}}}]}
+        response = mock.Mock(json=mock.Mock(return_value=body), raise_for_status=mock.Mock())
+        with mock.patch.object(routes.httpx, 'get', return_value=response) as get:
+            self.assertEqual(routes._fetch((36.3552, 127.3838), self.market), (46686, 2900, 3439))
+        params = get.call_args.kwargs['params']
+        self.assertEqual((params['origin'], params['car_type']), ('127.3838,36.3552', 1))    # 경도,위도 순
+        # 경로를 찾지 못한 응답(result_code가 0이 아님)은 실패로 본다
+        body['routes'][0] = {'result_code': 104, 'result_msg': '출발지와 도착지가 5m 이내'}
+        with mock.patch.object(routes.httpx, 'get', return_value=response):
+            self.assertIsNone(routes._fetch((36.3552, 127.3838), self.market))
