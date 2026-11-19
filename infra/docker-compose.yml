@@ -328,6 +328,23 @@ services:
       backend:
         condition: service_started
 
+  # 주간농사정보 자동 수집: 하루 한 번 최근 호를 받아 weekly_farm_info에 넣는다 (REQ-RAG-008, REQ-COL-006)
+  # 농사로가 매주 수~목요일에 다음 주 호를 올린다. 새 호가 없는 날은 목록 1번만 호출하고 끝난다 (같은 호는 덮어씀)
+  # Airflow에는 backend 코드(Django)가 없어 alert-consumer처럼 backend 이미지를 그대로 쓴다. 기록은 collect_log(source=weekfarm)
+  # 성공하면 24시간, 실패하면(키 없음·테이블 아직 없음·농사로 장애) 1시간 뒤에 다시 한다
+  weekly-farm-collector:
+    image: farmit-backend
+    env_file: ../.env              # NONGSARO_WEEKFARM_KEY, MYSQL_*
+    command: sh -c "while true; do python manage.py collect_weekly_farm_info && sleep 86400 || sleep 3600; done"
+    volumes:
+      - ../backend:/app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      backend:
+        condition: service_started   # 테이블은 backend가 시작할 때 migrate로 만든다
+
 volumes:
   mysql-data:
   frontend-node-modules:
