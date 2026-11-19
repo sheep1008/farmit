@@ -10,5 +10,6 @@ urlpatterns = [
     path('auth/logout', views.logout_view, name='logout'),
     path('users/me', views.me, name='me'),
     path('sales', sales_views.sales, name='sales'),
+    path('sales/summary', sales_views.sales_summary, name='sales-summary'),
     path('sales/<int:sale_id>', sales_views.sale_detail, name='sale-detail'),
 ]

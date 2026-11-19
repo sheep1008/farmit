@@ -8,7 +8,16 @@ import SaleForm from '@/components/sales/SaleForm.vue'
 import { GRADES } from '@/constants/grades'
 import { useAuthStore } from '@/stores/auth'
 import { todayKst } from '@/utils/dates'
-import { SALE_RANGES, compareSentence, formatVsAvg, saleRange } from '@/utils/sales'
+import InfoTip from '@/components/common/InfoTip.vue'
+import {
+  REPORT_MIN_RECORDS,
+  SALE_RANGES,
+  compareSentence,
+  formatVsAvg,
+  monthBars,
+  overallSentence,
+  saleRange,
+} from '@/utils/sales'
 
 // SCR-006 판매 기록 목록 (REQ-SAL-001·002, docs/api.md 2.6 GET /api/sales).
 // 기간 필터 → 기록 표(날짜·시장·품목·등급·물량·받은 금액·평균 대비 %) + 기간 전체 합계(meta).
@@ -48,9 +57,29 @@ async function load() {
   }
 }
 
+// ── 판매 성적 리포트 (REQ-SAL-005, api.md 2.6 GET /api/sales/summary) ──
+// 목록과 같은 기간을 쓰지만 페이지와 무관하게 기간 전체를 서버가 집계해 준다.
+const report = ref(null)
+const reportError = ref(false)
+let reportSeq = 0
+async function loadReport() {
+  const mySeq = ++reportSeq
+  reportError.value = false
+  try {
+    const res = await http.get('/sales/summary', { params: saleRange(rangeValue.value, todayKst()) })
+    if (mySeq === reportSeq) report.value = res.data.data
+  } catch {
+    if (mySeq !== reportSeq) return
+    report.value = null
+    reportError.value = true
+  }
+}
+const bars = computed(() => monthBars(report.value?.by_month ?? []))
+
 // 기간을 바꾸면 1페이지부터. 이미 1페이지면 page watch가 돌지 않으므로 직접 부른다
 watch(rangeValue, () => (page.value === 1 ? load() : (page.value = 1)))
 watch(page, load, { immediate: true })
+watch(rangeValue, loadReport, { immediate: true })
 
 const totalPages = computed(() => (meta.value ? Math.max(1, Math.ceil(meta.value.total / SIZE)) : 1))
 const rangeText = computed(() => {
@@ -86,11 +115,13 @@ function onSaved(record) {
   editing.value = null
   result.value = { kind: 'saved', text: compareSentence(record) }
   load()
+  loadReport()
 }
 function onDeleted() {
   editing.value = null
   result.value = { kind: 'deleted', text: '판매 기록을 삭제했습니다.' }
   load()
+  loadReport()
 }
 
 const gradeLabel = (g) => GRADES.find((x) => x.value === g)?.label ?? g
@@ -156,6 +187,71 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
         <dd>{{ fmt(meta.total_amount_won) }}원</dd>
       </div>
     </dl>
+
+    <!-- 판매 성적 리포트 (REQ-SAL-005): 기간 전체를 월별·시장별로, 물량 가중 평균 -->
+    <section v-if="report || reportError" class="card report" aria-labelledby="report-title">
+      <h2 id="report-title">내 판매 성적<InfoTip term="payRatio" /></h2>
+      <p v-if="reportError" class="error" role="alert">판매 성적을 불러오지 못했습니다.</p>
+      <p v-else-if="report.total < REPORT_MIN_RECORDS" class="hint">
+        이 기간에 기록을 {{ REPORT_MIN_RECORDS }}건 이상 넣으면 시장 평균 대비 받은 가격을 월별·시장별로 보여 드려요.
+      </p>
+      <p v-else-if="!report.overall" class="hint">
+        아직 비교할 시장 평균이 없습니다. 정산 가격은 판매 다음 날 반영됩니다. (비교 대기 {{ report.pending }}건)
+      </p>
+      <template v-else>
+        <p class="overall">
+          이 기간에는 <strong :class="`vs ${formatVsAvg(report.overall.vs_avg_pct).tone}`">{{
+            overallSentence(report.overall.vs_avg_pct)
+          }}</strong>
+        </p>
+        <p class="hint">
+          같은 날 같은 시장 평균 가격과 비교해 물량이 많은 거래일수록 더 반영했습니다. 비교한 기록
+          {{ report.compared }}건<template v-if="report.pending"
+            >, 비교 대기 {{ report.pending }}건(시장 평균이 아직 없어 뺐습니다)</template
+          >.
+        </p>
+
+        <h3>월별</h3>
+        <ul class="bars">
+          <li v-for="b in bars" :key="b.month">
+            <span class="month">{{ b.label }}</span>
+            <span class="track" aria-hidden="true">
+              <span class="half left"
+                ><span v-if="b.tone === 'down'" class="bar down" :style="{ width: `${b.width}%` }"></span
+              ></span>
+              <span class="half"
+                ><span v-if="b.tone === 'up'" class="bar up" :style="{ width: `${b.width}%` }"></span
+              ></span>
+            </span>
+            <span class="value" :class="`vs ${b.tone}`">{{ b.text }}</span>
+          </li>
+        </ul>
+
+        <h3>시장별</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">시장</th>
+                <th scope="col" class="num">건수</th>
+                <th scope="col" class="num">물량</th>
+                <th scope="col" class="num">평균 대비</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="m in report.by_market" :key="m.market_id">
+                <td>{{ m.market_name }}</td>
+                <td class="num">{{ fmt(m.count) }}건</td>
+                <td class="num">{{ fmt(m.volume_kg, 1) }}kg</td>
+                <td class="num" :class="`vs ${formatVsAvg(m.vs_avg_pct).tone}`">
+                  {{ formatVsAvg(m.vs_avg_pct).text }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </section>
 
     <div class="card">
       <LoadingSpinner v-if="loading && !rows.length" label="판매 기록을 불러오는 중…" />
@@ -296,6 +392,67 @@ h1 {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-background);
+}
+.report {
+  margin-bottom: 16px;
+}
+.report h2 {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+.report h3 {
+  margin: 16px 0 4px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.overall {
+  margin-top: 8px;
+}
+.hint {
+  margin-top: 4px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.bars {
+  list-style: none;
+  padding: 0;
+}
+.bars li {
+  display: grid;
+  grid-template-columns: 4.5em minmax(0, 1fr) 5.5em; /* 달 · 막대 · 값. 막대 칸만 줄어든다 */
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.bars .month,
+.bars .value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.bars .value {
+  text-align: right;
+}
+.track {
+  display: flex;
+  height: 14px;
+}
+.half {
+  flex: 1;
+  display: flex;
+}
+.half.left {
+  justify-content: flex-end;
+  border-right: 1px solid var(--color-border-hover); /* 가운데 선 = 시장 평균 */
+}
+.bar {
+  border-radius: 2px;
+}
+.bar.up {
+  background: var(--color-primary);
+}
+.bar.down {
+  background: var(--color-danger);
 }
 .table-wrap {
   position: relative; /* 안쪽 .sr-only(절대 위치)가 스크롤 상자 밖으로 빠져 페이지가 가로로 넓어지지 않게 (K24) */
