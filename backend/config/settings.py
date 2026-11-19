@@ -141,10 +141,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'api.exceptions.custom_exception_handler',
-    # 로그인 없이 외부 API를 부르는 용어 풀이만 제한한다 (ScopedRateThrottle, 접속 주소별)
+    # 로그인 없이 부르는 용어 풀이(외부 API 호출)와 비회원 "지금 팔면"만 접속 주소별로 제한한다
     # 앞단 프록시 수. 0이면 X-Forwarded-For 헤더를 믿지 않고 접속 주소만 쓴다 (헤더로 제한을 피하지 못하게). Nginx를 앞에 두면 1
     'NUM_PROXIES': int(os.environ.get('NUM_PROXIES', '0')),
-    'DEFAULT_THROTTLE_RATES': {'glossary': os.environ.get('GLOSSARY_RATE', '30/min')},
+    'DEFAULT_THROTTLE_RATES': {'glossary': os.environ.get('GLOSSARY_RATE', '30/min'),
+                               'sell_now_guest': os.environ.get('SELL_NOW_GUEST_RATE', '20/min')},
 }
 
 

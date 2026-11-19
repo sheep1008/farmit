@@ -666,9 +666,11 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 #### `POST /api/recommendations/now` — 전국 시장 "지금 팔면" 실수령액
 | 인증 | 화면 | REQ |
 |---|---|---|
-| 회원 (CSRF 필요) | SCR-005 | REQ-REC-007, REC-002, REC-003 |
+| 전체 (회원은 CSRF 필요) | SCR-003, SCR-005 | REQ-REC-007, REC-002, REC-003 |
 
 예측 없이 **최근 정산 가격**으로 수집 대상 시장(`is_collect` true, 가락 포함 전국 32곳) 전체의 실수령액을 비교한다. 예측 대상이 아닌 품목도 쓸 수 있다.
+
+**비회원**도 부를 수 있다(가입 전 체험). 내 정보가 없으므로 운송비는 반영되지 않고 `meta.warnings`에 "운송비 미반영" 경고가 들어간다. 비회원은 접속 주소(IP)별 **분당 20회**로 제한한다(설정값 `SELL_NOW_GUEST_RATE`). 회원은 제한하지 않는다.
 
 | 본문 | 필수 | 설명 |
 |---|---|---|
@@ -705,7 +707,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 - `recent_min_price`·`recent_max_price`: 최근 14일 **하루 평균가** 중 최저·최고 (경매 한 건 값이 아님).
 - 이 품목·등급의 정산 데이터가 전혀 없으면 `200`, `results: []`, `base_date: null`.
 
-**오류**: `400 VALIDATION_ERROR`, `401 NOT_AUTHENTICATED`, `403 CSRF_FAILED`, `404 NOT_FOUND`(없는 품목)
+**오류**: `400 VALIDATION_ERROR`, `403 CSRF_FAILED`(회원이 토큰 없이 호출), `404 NOT_FOUND`(없는 품목), `429 RATE_LIMITED`(비회원 분당 20회 초과, `details.retry_after_seconds`)
 
 ---
 
@@ -900,7 +902,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | DELETE | `/api/sales/{id}` | 회원 | **(2.6에 상세)** 판매 기록 삭제 | SCR-007 | REQ-SAL-001 | 2 |
 | GET | `/api/forecasts` | 전체 | **(2.5에 상세)** 주간 예측 (item_id, market_id) — 예측값·80% 구간·명절 주의 | SCR-003, 005 | REQ-PRD-001~003 | 2 |
 | POST | `/api/recommendations` | 회원 | **(2.5에 상세)** 판매 추천 계산 (품목·물량·시기·비용) | SCR-005 | REQ-REC-001~006 | 2 |
-| POST | `/api/recommendations/now` | 회원 | **(2.5에 상세)** 전국 시장 "지금 팔면" 실수령액 | SCR-005 | REQ-REC-007 | 2 |
+| POST | `/api/recommendations/now` | 전체 | **(2.5에 상세)** 전국 시장 "지금 팔면" 실수령액 (비회원은 분당 20회) | SCR-003, SCR-005 | REQ-REC-007 | 2 |
 | GET | `/api/alerts` | 회원 | 알림 목록 (`unread=true` 필터) | SCR-003, 008 | REQ-ALT-003 | 3 |
 | GET | `/api/alerts/{id}` | 회원 | 알림 상세 + 대응 체크리스트 | SCR-009 | REQ-ALT-002 | 3 |
 | PATCH | `/api/alerts/{id}/read` | 회원 | 읽음 처리 | SCR-009 | REQ-ALT-003 | 3 |

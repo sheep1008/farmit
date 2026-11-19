@@ -11,8 +11,8 @@ from django.conf import settings
 from django.db.models import Max
 from rest_framework import serializers
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
+from rest_framework.throttling import SimpleRateThrottle
 
 from api.responses import error, ok
 from codes.models import Item, Market
@@ -130,11 +130,22 @@ def compute_sell_now(user, item, v):
     return {'results': results}, meta
 
 
+class SellNowGuestThrottle(SimpleRateThrottle):
+    """비회원만 접속 주소별로 제한한다 (settings SELL_NOW_GUEST_RATE, 기본 20/min). 회원은 제한하지 않는다."""
+    scope = 'sell_now_guest'
+
+    def get_cache_key(self, request, view):
+        if request.user.is_authenticated:
+            return None     # None이면 DRF가 제한을 건너뛴다
+        return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
+
+
 @api_view(['POST'])
-@authentication_classes([SessionAuthentication])
-@permission_classes([IsAuthenticated])
+@authentication_classes([SessionAuthentication])   # 회원은 세션으로 식별(CSRF 검사), 비회원은 그대로 통과
+@permission_classes([])
+@throttle_classes([SellNowGuestThrottle])
 def sell_now(request):
-    """전국 시장 "지금 팔면" 실수령액 순위 (REQ-REC-007)."""
+    """전국 시장 "지금 팔면" 실수령액 순위 (REQ-REC-007). 비회원은 프로필이 없어 운송비 미반영으로 계산된다."""
     serializer = SellNowSerializer(data=request.data)
     if not serializer.is_valid():
         return error(400, 'VALIDATION_ERROR', '입력값을 확인해 주세요.', serializer.errors)
