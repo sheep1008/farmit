@@ -428,7 +428,7 @@ erDiagram
 
 | 인덱스 | 내용 | 관련 REQ |
 |---|---|---|
-| `press_release` | news_id(정책브리핑 newsId, ES `_id`), title·summary(nori 분석, 요약은 목록의 앞 200자), published_date(보도 날짜, 한국 날짜 그대로), source(농림축산식품부·농촌진흥청), url, license, collected_at(UTC). 본문·첨부는 저장하지 않는다. 벡터 없이 키워드 검색만. **구현됨** (Y10, `manage.py press_collect`) | REQ-SRC-002, REQ-COL-007, REQ-ALT-006 |
+| `press_release` | news_id(정책브리핑 newsId, ES `_id`), title·summary(nori 분석, 요약은 목록의 앞 200자. K55: 낱말 일부 검색용 서브필드 `title.ngram`·`summary.ngram`은 글자 2개씩 자른 조각 — 매핑이 바뀌어 기존 인덱스는 `press_collect --recreate --since 날짜`로 한 번 다시 만든다), published_date(보도 날짜, 한국 날짜 그대로), source(농림축산식품부·농촌진흥청), url, license, collected_at(UTC). 본문·첨부는 저장하지 않는다. 벡터 없이 키워드 검색만. **구현됨** (Y10, `manage.py press_collect`) | REQ-SRC-002, REQ-COL-007, REQ-ALT-006 |
 | `rag_docs` | 문서 조각 1개 = 1문서. chunk_id(`{doc_id}:{순번}`, ES `_id`), doc_id, chunk_no, source_type(`ncpms_pest`·`fieldtech`·`fieldqna`·`disaster`), source_label, title·text(nori 분석), crop_names(keyword, 작물 필터), pest_name, url, license, vector(dense_vector 384, cosine). **구현됨** (Y12: NCPMS 병해충·현장기술지원, Y11: 농작물재해예방정보 최근 24개월 정기 호. `disaster` 문서는 여러 작물을 함께 다뤄 `crop_names`가 비어 있고(공통 문서), 작물 필터는 고른 작물 + 공통 문서를 모두 찾는다. 농업기술길잡이 목차는 색인하지 않고 `data/rag/docs/guide.jsonl`에 두어 원문 링크에만 쓴다 — 공공누리 제4유형. K49: `fieldqna`는 농사로 현장애로기술사례(농가 질문 + 전문가 답변)로, 품목 분류가 없어 제목에서 찾은 작물 이름을 `crop_names`에 넣고 제목에 작물이 없는 글은 색인하지 않는다) | REQ-CHT-001~007, REQ-RAG-001 |
 | `collect_log` | MySQL `collect_log`를 옮겨 Kibana에서 시각화. 컬럼은 MySQL과 같고 id(ES `_id`)·source·status는 keyword, target_date·started_at·finished_at(UTC)은 date, error_msg는 text. 이미 옮긴 최대 id 다음 행만 10분마다 옮긴다 (행이 바뀌지 않으므로). **구현됨** (K23, Airflow `collect_log_to_es`, 대시보드 `infra/kibana/collect_status.ndjson`) | REQ-COL-008 |
 

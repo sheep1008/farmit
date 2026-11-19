@@ -954,7 +954,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 ### 2.9 통합 검색 (보도자료) — Y10
 
 #### `GET /api/search?q=&type=&page=&size=` — 검색 (REQ-SRC-001, REQ-SRC-002, 로그인 없음)
-`type`: `press`(기본, 보도자료 제목·요약, ES 한국어 형태소 검색, 점수 같으면 최신순) · `item`(품목 이름 일부) · `market`(시장 이름 일부). `page`는 1부터(page×size ≤ 10,000), `size` 기본 20·최대 100(1.3절). `market`은 `/api/markets?q`와 같은 범위(수집 대상·참고 시장). **200**
+`type`: `press`(기본, 보도자료 제목·요약, ES 한국어 형태소 검색 + 낱말 일부 일치(2글자 이상, 예: `인플루`), 띄어 쓴 낱말은 모두 맞아야 함, 점수 같으면 최신순) · `item`(품목 이름 일부) · `market`(시장 이름 일부). `page`는 1부터(page×size ≤ 10,000), `size` 기본 20·최대 100(1.3절). `market`은 `/api/markets?q`와 같은 범위(수집 대상·참고 시장). **200**
 ```json
 { "data": [ {"title": "...", "summary": "앞 200자", "published_date": "2026-11-16", "source": "농림축산식품부", "url": "https://www.korea.kr/briefing/pressReleaseView.do?newsId=..."} ],
   "meta": { "type": "press", "q": "조류인플루엔자", "total": 7, "page": 1, "size": 10, "license": "공공누리 제1유형(출처표시) — 정책브리핑 보도자료" } }
