@@ -47,6 +47,12 @@ async function show() {
     >
       <strong>{{ entry.title }}</strong>
       {{ entry.text }}
+      <span v-if="entry.rows" class="rows">
+        <template v-for="[name, meaning] in entry.rows" :key="name">
+          <b>{{ name }}</b>
+          <span>{{ meaning }}</span>
+        </template>
+      </span>
     </span>
   </span>
 </template>
@@ -106,5 +112,17 @@ async function show() {
   display: block;
   margin-bottom: 2px;
   font-weight: 700;
+}
+.rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+}
+.rows b {
+  font-weight: 700;
+  white-space: nowrap;
 }
 </style>
