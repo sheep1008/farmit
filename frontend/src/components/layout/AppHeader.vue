@@ -123,7 +123,7 @@ watch(
   color: var(--color-heading);
   background: var(--color-background-mute);
 }
-/* 지금 있는 메뉴: 하위 화면(예: 과거 사례)에 있어도 '시세'가 켜진다 */
+/* 지금 있는 메뉴: 하위 화면(예: 과거 사례)에 있어도 '가격 통계'가 켜진다 */
 .menu-link.active {
   color: var(--color-heading);
 }
