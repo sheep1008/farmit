@@ -157,6 +157,8 @@ docker compose -f infra/docker-compose.yml exec airflow-scheduler airflow dags t
 
 `compose up` 하면 수집기(`weather-warning-producer`)와 알림 컨슈머(`alert-consumer`)는 자동으로 뜬다. **Flink 작업만 한 번 제출한다.**
 
+주간농사정보 수집기(`weekly-farm-collector`)도 자동으로 뜬다. 하루 한 번 농사로에서 최근 호를 받아 "이번 주 농사 정보"를 채운다 (`.env`의 `NONGSARO_WEEKFARM_KEY` 필요. 없으면 `collect_log`에 실패로 남고 1시간마다 다시 시도한다).
+
 ```bash
 # Flink SQL 작업 제출 (compose up 뒤 한 번. 이미 돌고 있으면 건너뛴다)
 bash streaming/flink/submit.sh weather_warning
