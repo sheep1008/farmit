@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import http from '@/api/http'
 import { fieldErrors } from '@/api/interceptors'
 import BaseButton from '@/components/common/BaseButton.vue'
+import InfoTip from '@/components/common/InfoTip.vue'
 import ItemSelect from '@/components/common/ItemSelect.vue'
 import MarketSelect from '@/components/common/MarketSelect.vue'
 import BaseInput from '@/components/common/BaseInput.vue'
@@ -113,7 +114,7 @@ async function remove() {
         <p v-if="first('item_id')" class="msg error">{{ first('item_id') }}</p>
       </div>
       <div class="field">
-        <label for="sale-grade">등급</label>
+        <span><label for="sale-grade">등급</label><InfoTip term="grade" /></span>
         <select id="sale-grade" v-model="form.grade" :class="{ invalid: first('grade') }">
           <option v-for="g in gradeOptions" :key="g.value" :value="g.value">{{ g.label }}</option>
         </select>

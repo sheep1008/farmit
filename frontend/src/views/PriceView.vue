@@ -156,12 +156,13 @@ const lastUpdated = computed(() => formatKstDateTime(meta.value?.last_updated))
         <span>시장</span>
         <MarketSelect v-model="filters.marketId" :markets="markets" />
       </label>
-      <label>
-        <span>등급</span>
-        <select v-model="filters.grade">
+      <!-- ⓘ 버튼이 label 안에 있으면 label이 선택 상자 대신 버튼에 연결되므로 for로 잇는다 -->
+      <div class="group">
+        <span><label for="price-grade">등급</label><InfoTip term="grade" /></span>
+        <select id="price-grade" v-model="filters.grade">
           <option v-for="g in GRADES" :key="g.value" :value="g.value">{{ g.label }}</option>
         </select>
-      </label>
+      </div>
 
       <div class="group" role="radiogroup" aria-label="단위">
         <span>단위</span>

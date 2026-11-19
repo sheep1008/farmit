@@ -8,6 +8,7 @@ import { fetchForecastHistory, fetchForecasts } from '@/api/prices'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
 import ItemSelect from '@/components/common/ItemSelect.vue'
+import MarketSelect from '@/components/common/MarketSelect.vue'
 import InfoTip from '@/components/common/InfoTip.vue'
 import BaseInput from '@/components/common/BaseInput.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -77,6 +78,10 @@ onMounted(async () => {
   form.value = { ...recommendForm(auth.user, currentItem.initial(items.value, route.query.item_id)), volume_kg: DEFAULT_VOLUME_KG }
   calculate()
   loadAlerts()
+  http
+    .get('/markets', { params: { collect: false } })
+    .then((res) => (marketSido.value = Object.fromEntries(res.data.data.map((m) => [m.market_id, m.sido]))))
+    .catch(() => {}) // 차트 시장 묶음용 보조 정보라 실패해도 화면은 그대로
 })
 
 const selectedItem = computed(() => items.value.find((it) => it.item_id === form.value?.item_id) ?? null)
@@ -246,6 +251,12 @@ const forecastMarkets = computed(() => {
   for (const r of forecast.value?.rows ?? []) if (!seen.has(r.market_id)) seen.set(r.market_id, r.market_name)
   return [...seen].map(([id, name]) => ({ id, name }))
 })
+// 차트 시장 선택 상자(MarketSelect)에 넘길 모양. 예측 응답에는 시도가 없어 시장 목록(GET /api/markets)에서 붙인다.
+// 시장 목록을 못 불러오면 시도 묶음 없이 이름만 보여 준다.
+const marketSido = ref({}) // market_id → 시도
+const chartMarkets = computed(() =>
+  forecastMarkets.value.map((m) => ({ market_id: m.id, name: m.name, sido: marketSido.value[m.id] })),
+)
 // 사용자가 고르지 않았으면 추천 1위 시장 → 예측 첫 시장
 watch([() => rows.value[0]?.market_id, forecastMarkets], ([topId]) => {
   if (marketChosen.value) return
@@ -406,14 +417,12 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
           <div class="card">
             <div class="card-head">
               <h2>가격 추이와 4주 예측</h2>
-              <select
+              <MarketSelect
                 v-if="forecastMarkets.length"
-                :value="chartMarketId"
-                aria-label="차트 시장"
-                @change="chooseMarket($event.target.value)"
-              >
-                <option v-for="m in forecastMarkets" :key="m.id" :value="m.id">{{ m.name }}</option>
-              </select>
+                :model-value="chartMarketId"
+                :markets="chartMarkets"
+                @update:model-value="chooseMarket"
+              />
             </div>
             <p v-if="forecastError" class="error">{{ forecastError }}</p>
             <ForecastChart v-else-if="chartSeries" :series="chartSeries" />
