@@ -33,6 +33,7 @@ ml/outputs/
 # 사진 진단(ml/vision): 학습 산출물·모델 가중치. 데이터는 위 data/ 규칙으로 이미 제외
 ml/vision/runs/
 *.onnx
+!ml/vision/model/vision.onnx
 *.pt
 *.pth
 

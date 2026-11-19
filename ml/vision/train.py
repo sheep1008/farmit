@@ -213,6 +213,7 @@ def main():
     ap.add_argument('--workers', type=int, default=12); ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--patience', type=int, default=4, help='검증 macro F1이 이 epoch 수만큼 연속으로 best를 넘지 못하면 중단 (0이면 끔)')
     ap.add_argument('--min-delta', type=float, default=0.002)
+    ap.add_argument('--resume', action='store_true', help='out 폴더의 last.pt(epoch마다 저장)에서 이어서 학습. --epochs는 처음과 같아야 한다')
     ap.add_argument('--smoke', action='store_true', help='작은 표본(분할·클래스당 40장)으로 2 epoch만')
     a = ap.parse_args()
     if a.smoke: a.epochs = 2
@@ -231,7 +232,17 @@ def main():
     opt = torch.optim.AdamW(model.parameters(), a.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, a.lr, total_steps=a.epochs * len(loader), pct_start=0.15)
     scaler = torch.amp.GradScaler(); best, history, t0, bad = -1, [], time.time(), 0
-    for ep in range(1, a.epochs + 1):
+    start, ck = 1, f'{a.out}/last.pt'
+    if a.resume and os.path.exists(ck):            # 이어서 학습: 마지막으로 끝낸 epoch 다음부터 (학습률 스케줄·조기 종료 카운터까지 이어진다)
+        st = torch.load(ck, map_location='cuda', weights_only=False)   # 직접 저장한 파일
+        if st['epochs'] != a.epochs: raise SystemExit(f'--epochs가 저장된 값({st["epochs"]})과 다르다. 학습률 스케줄이 달라지므로 같은 값으로 이어야 한다')
+        model.load_state_dict(st['model']); opt.load_state_dict(st['opt']); sched.load_state_dict(st['sched']); scaler.load_state_dict(st['scaler'])
+        best, bad, history, start = st['best'], st['bad'], st['history'], st['epoch'] + 1
+        t0 = time.time() - st['elapsed'] * 60
+        if a.patience and bad >= a.patience: start = a.epochs + 1           # 이미 조기 종료 조건에 도달한 뒤였다
+        print(f'이어서 학습: epoch {st["epoch"]}까지 끝남 (best 검증 macro F1 {best:.3f}, 개선 없음 {bad}회) → epoch {start}부터', flush=True)
+    elif a.resume: print(f'{ck}가 없어 처음부터 학습한다', flush=True)
+    for ep in range(start, a.epochs + 1):
         model.train(); tl, tn, te = 0.0, 0, time.time()
         for x, y in loader:
             x = x.cuda(non_blocking=True).contiguous(); y = y.cuda(non_blocking=True)
@@ -246,6 +257,10 @@ def main():
         if score > best + a.min_delta: bad = 0
         else: bad += 1
         if score > best: best = score; torch.save(model.state_dict(), f'{a.out}/best.pt')
+        torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), sched=sched.state_dict(), scaler=scaler.state_dict(), epoch=ep, best=best, bad=bad,
+                        history=history, epochs=a.epochs, elapsed=(time.time() - t0) / 60), ck + '.tmp'); os.replace(ck + '.tmp', ck)     # 끊겨도 반쯤 쓴 파일이 남지 않게
+        if os.path.exists(f'{a.out}/STOP'):
+            print(f'STOP 파일이 있어 epoch {ep}까지 하고 멈춘다 (시험은 하지 않음). 이어서: --resume 로 같은 명령을 다시 실행하고 {a.out}/STOP 을 지운다', flush=True); return
         if a.patience and bad >= a.patience:
             print(f'조기 종료: 검증 macro F1이 {a.patience} epoch 연속 개선되지 않음 (best {best:.3f}). best 가중치로 시험한다', flush=True); break
     # 시험: 검증 macro F1이 가장 좋았던 가중치로
