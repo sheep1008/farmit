@@ -152,6 +152,9 @@ const pick = computed(() => bestPick(rows.value))
 const notices = computed(() => holidayNotices(rows.value))
 const shownRows = computed(() => (showAll.value ? rows.value : rows.value.slice(0, TOP)))
 const costs = computed(() => result.value?.meta.costs)
+// 운송비를 어떻게 계산했는지 한 줄 (편도 한 번, 단가를 넣지 않았으면 1톤 트럭 기준 기본 단가)
+const transportNote = (c) =>
+  `운송비 = 시장까지 도로 거리 × ${fmt(c.transport_cost_per_km)}원/km${c.transport_cost_is_default ? '(1톤 트럭 연료비 기준 기본값)' : ''} + 통행료, 편도 한 번 기준입니다.`
 const nowRows = computed(() => nowResult.value?.data.results ?? [])
 const shownNowRows = computed(() => (showAll.value ? nowRows.value : nowRows.value.slice(0, TOP)))
 
@@ -547,7 +550,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                   type="number"
                   min="0"
                   :error="first('transport_cost_per_km')"
-                  hint="내 위치에서 시장까지 직선거리 × 단가"
+                  hint="시장까지 도로 거리 × 단가 + 통행료. 비우면 1톤 트럭 연료비 기준"
                 />
                 <BaseInput
                   v-model="form.storage_cost_per_week"
@@ -605,7 +608,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                 <!-- 명절 주의 (REQ-PRD-003): 대상 주가 명절 21일 이내인 행이 있으면 문구를 표 위에 한 번, 행에는 표시만 -->
                 <p v-for="n in notices" :key="n" class="notice warn" role="note">⚠ {{ n }}</p>
                 <p v-if="costs && !costs.transport_applied" class="notice">
-                  내 정보에 위치가 없어 운송비를 반영하지 않았습니다. 내 정보에서 위치를 넣으면 시장까지 거리로 계산합니다.
+                  내 정보에 위치가 없어 운송비를 반영하지 않았습니다. 내 정보에서 위치를 넣으면 시장까지 도로 거리와 통행료로 계산합니다.
                 </p>
                 <div class="table-wrap">
                   <table class="stack-on-mobile">
@@ -628,7 +631,9 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                         <td class="num" data-label="순위">{{ r.rank }}</td>
                         <td data-label="시장">
                           {{ r.market_name }}
-                          <span v-if="r.distance_km != null" class="sub">{{ fmt(r.distance_km, 1) }}km</span>
+                          <span v-if="r.distance_km != null" class="sub">
+                            {{ fmt(r.distance_km, 1) }}km<template v-if="r.distance_type === 'straight'"> (직선)</template>
+                          </span>
                           <!-- 휴장 (REQ-REC-005): 순위에서 빼지 않고 표시만 -->
                           <span v-if="r.is_closed" class="badge closed">{{ closedText(r.closed_dates) }}</span>
                         </td>
@@ -655,7 +660,10 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                           <span class="strong">{{ fmt(r.net_won) }}원</span>
                           <span class="line">{{ fmt(r.net_low_won) }}~{{ fmt(r.net_high_won) }}</span>
                         </td>
-                        <td class="num" data-label="운송비">{{ fmt(r.transport_won) }}원</td>
+                        <td class="num" data-label="운송비">
+                          {{ fmt(r.transport_won) }}원
+                          <span v-if="r.toll_won" class="line">통행료 {{ fmt(r.toll_won) }}원 포함</span>
+                        </td>
                         <td class="num" data-label="보관비">{{ fmt(r.storage_won) }}원</td>
                       </tr>
                     </tbody>
@@ -668,6 +676,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                 </div>
                 <p class="hint">
                   예상 수령액 = 예측가 × 물량 × (1 − 감모율) − 운송비 − 보관비. 예측은 참고 정보이며 실제 경매가와 다를 수 있습니다.
+                  <template v-if="costs?.transport_applied">{{ transportNote(costs) }}</template>
                 </p>
               </template>
             </template>
@@ -711,7 +720,9 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                         <td class="num" data-label="순위">{{ r.rank }}</td>
                         <td data-label="시장">
                           {{ r.market_name }}
-                          <span v-if="r.distance_km != null" class="sub">{{ fmt(r.distance_km, 1) }}km</span>
+                          <span v-if="r.distance_km != null" class="sub">
+                            {{ fmt(r.distance_km, 1) }}km<template v-if="r.distance_type === 'straight'"> (직선)</template>
+                          </span>
                           <span v-if="r.low_trade" class="badge closed" title="최근 거래일·물량이 적어 가격이 흔들릴 수 있습니다">
                             거래 적음
                           </span>
@@ -735,7 +746,10 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                           <span class="strong">{{ fmt(r.net_won) }}원</span>
                           <span class="line">{{ fmt(r.net_low_won) }}~{{ fmt(r.net_high_won) }}</span>
                         </td>
-                        <td class="num" data-label="운송비">{{ fmt(r.transport_won) }}원</td>
+                        <td class="num" data-label="운송비">
+                          {{ fmt(r.transport_won) }}원
+                          <span v-if="r.toll_won" class="line">통행료 {{ fmt(r.toll_won) }}원 포함</span>
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -747,6 +761,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
                 </div>
                 <p class="hint">
                   실수령액 = 최근 7일 물량 가중 평균가 × 물량 × (1 − 감모율) − 운송비. 보관비는 없습니다(지금 판매).
+                  <template v-if="nowResult.meta.costs.transport_applied">{{ transportNote(nowResult.meta.costs) }}</template>
                 </p>
               </template>
             </template>

@@ -17,13 +17,14 @@ from rest_framework.throttling import SimpleRateThrottle
 from api.responses import error, ok
 from codes.models import Item, Market
 
-from .forecast_views import NO_FORECAST_NOTICE, _distance_km, calculate
+from .forecast_views import NO_FORECAST_NOTICE, calculate
 from .models import SettlePrice
+from .routes import has_coords, road_routes, trip
 from .views import _price, _today_kst
 
 PRICE_WINDOW_DAYS = 7       # 가격: 기준일 포함 최근 7일 물량가중평균
 ACTIVITY_WINDOW_DAYS = 14   # 거래 활동·최저/최고가: 최근 14일
-NO_TRANSPORT_NOTICE = '내 위치 또는 운송비 단가가 없어 운송비를 반영하지 않았습니다.'
+NO_TRANSPORT_NOTICE = '내 위치가 없거나 운송비 단가가 0이어서 운송비를 반영하지 않았습니다.'
 NO_COORD_NOTICE = '위치 정보가 없는 시장은 운송비를 반영하지 않았습니다 (순위가 높게 나올 수 있음).'
 STALE_NOTICE = '가장 최근 정산일이 오래되어 지금 시세와 다를 수 있습니다.'
 
@@ -39,11 +40,6 @@ class SellNowSerializer(serializers.Serializer):
                                                required=False)
 
 
-def _has_coords(lat, lng):
-    """새 시장 좌표가 0(미입력)이면 거리가 약 1만 km로 계산되므로 좌표 없음으로 본다."""
-    return lat is not None and lng is not None and float(lat) != 0 and float(lng) != 0
-
-
 def compute_sell_now(user, item, v):
     """반환: (data, meta). v: 검증된 입력 dict (volume_kg 필수)."""
     grade = v.get('grade', 'ALL')
@@ -56,13 +52,17 @@ def compute_sell_now(user, item, v):
         return default if value is None else value
 
     loss_rate = Decimal(pick('loss_rate', 0))
-    per_km = Decimal(pick('transport_cost_per_km', 0))
+    # 단가를 넣지 않았으면 1톤 트럭(포터) 기준 기본 단가를 쓴다
+    per_km = Decimal(pick('transport_cost_per_km', settings.TRANSPORT_DEFAULT_COST_PER_KM))
+    per_km_is_default = 'transport_cost_per_km' not in v and getattr(profile, 'transport_cost_per_km', None) is None
     commission_rate = Decimal(v.get('commission_rate', 0))
     volume = Decimal(v['volume_kg'])
     has_location = profile is not None and profile.lat is not None and profile.lng is not None
     transport_applied = has_location and per_km > 0
 
     markets = list(Market.objects.filter(is_collect=True).order_by('market_id'))
+    # 도로 거리·통행료 (시군구 → 시장). 저장된 값이 없으면 여기서 카카오에 물어 저장한다
+    routes = road_routes(profile.sido, profile.sigungu, markets) if has_location else {}
     base = SettlePrice.objects.filter(item=item, grade=grade, market__in=markets)
     base_date = base.aggregate(latest=Max('trade_date'))['latest']
 
@@ -95,19 +95,20 @@ def compute_sell_now(user, item, v):
         # 하루 평균가 중 최저·최고 (경매 한 건 단위 값이 아니다)
         low, high = min(r.avg_price for r in rows), max(r.avg_price for r in rows)
 
-        distance = None
-        if has_location and _has_coords(market.lat, market.lng):
-            distance = _distance_km(profile.lat, profile.lng, market.lat, market.lng)
+        distance = toll = distance_type = None
+        if has_location and has_coords(market.lat, market.lng):
+            distance, toll, distance_type = trip(profile, market, routes)
         # calculate()는 예측 행(horizon·pred_price·lower80·upper80)을 받는다 → horizon 1 어댑터
         calc = calculate(SimpleNamespace(horizon=1, pred_price=price, lower80=low, upper80=high),
                          distance if transport_applied else None, volume, loss_rate, per_km, Decimal(0),
-                         commission_rate)
+                         commission_rate, toll)
         calc.pop('storage_won')
         results.append({
             'market_id': market.market_id, 'market_name': market.name, 'price': _price(price),
             'recent_min_price': _price(low), 'recent_max_price': _price(high),
             'recent_volume_kg': _price(total14), 'trade_days': days14,
             'distance_km': round(distance, 1) if distance is not None else None,
+            'distance_type': distance_type, 'toll_won': toll,
             **calc,
             'low_trade': days14 < settings.SELL_NOW_MIN_TRADE_DAYS or total14 < settings.SELL_NOW_MIN_VOLUME_KG,
             'volume_warning': volume > total14 / ACTIVITY_WINDOW_DAYS * Decimal(str(settings.SELL_NOW_VOLUME_WARN_MULTIPLE)),
@@ -123,6 +124,7 @@ def compute_sell_now(user, item, v):
             'price_unit': '원/kg', 'price_window_days': PRICE_WINDOW_DAYS,
             'forecast_available': item.is_forecast,
             'costs': {'loss_rate': float(loss_rate), 'transport_cost_per_km': int(per_km),
+                      'transport_cost_is_default': per_km_is_default,
                       'commission_rate': float(commission_rate), 'transport_applied': transport_applied},
             'warnings': warnings}
     if not item.is_forecast:

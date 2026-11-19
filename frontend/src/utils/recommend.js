@@ -3,7 +3,7 @@ import { addDays, mondayOf } from './dates'
 
 const COST_FIELDS = ['transport_cost_per_km', 'storage_cost_per_week', 'loss_rate']
 
-// 처음 폼 값. 비용 칸은 내 정보(SCR-015) 값으로 채우고, 없으면 빈 칸(= 서버가 내 정보 값 → 0을 쓴다)
+// 처음 폼 값. 비용 칸은 내 정보(SCR-015) 값으로 채우고, 없으면 빈 칸(= 서버가 내 정보 값 → 기본값을 쓴다)
 export function recommendForm(user, itemId) {
   const form = { item_id: itemId, volume_kg: '', desired_week: '' }
   for (const key of COST_FIELDS) form[key] = user?.[key] ?? ''
