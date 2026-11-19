@@ -279,6 +279,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
     "sido": "충청북도",
     "sigungu": "충주시",
     "interest_items": [{ "item_id": 1, "name": "사과" }],
+    "interest_markets": [{ "market_id": "110001", "name": "서울가락" }],
     "transport_cost_per_km": 1500,
     "storage_cost_per_week": 3000,
     "loss_rate": 0.0,
@@ -287,6 +288,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 }
 ```
 - 앱 시작 시 호출해서 `200`이면 로그인 상태, `401`이면 비로그인으로 판단한다.
+- `interest_markets`: 관심 시장. 시장 선택 상자에서 ★로 넣고 빼며 목록 맨 위에 보여 준다 (`docs/screens.md` 1절). 가입 응답(`POST /api/auth/signup`)에는 없다.
 - `chat_remaining_today`: 오늘(한국 시간) 남은 채팅 질문 수 = 하루 한도(20) − 오늘 보낸 질문 수 (REQ-NFR-008). 관리자(Django `is_staff`, 테스트·시연용)는 한도가 없어 `null`이고, 채팅 SSE의 `remaining_today`·증상 진단의 `meta.remaining_today`도 `null`이다.
 
 ---
@@ -301,6 +303,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 {
   "sigungu": "청주시",
   "interest_item_ids": [1],
+  "interest_market_ids": ["110001"],
   "transport_cost_per_km": 1800,
   "loss_rate": 2.5
 }
@@ -308,6 +311,8 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 
 | 필드 | 규칙 |
 |---|---|
+| `interest_item_ids` | 품목 ID 목록 (최대 5개). 보낸 목록으로 통째로 바꾼다 (빈 목록 = 모두 해제) |
+| `interest_market_ids` | 시장 ID 목록 (최대 5개). 보낸 목록으로 통째로 바꾼다 (빈 목록 = 모두 해제). 없는 시장이 있으면 400 |
 | `transport_cost_per_km`, `storage_cost_per_week` | 0 이상 정수 |
 | `loss_rate` | 0 이상 100 미만 (%) |
 
@@ -327,7 +332,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 { "password": "apple2026!" }
 ```
 
-**204** — 계정과 개인 데이터(프로필, 관심 품목, 판매 기록, 알림, 채팅)를 모두 삭제하고 세션 종료
+**204** — 계정과 개인 데이터(프로필, 관심 품목, 관심 시장, 판매 기록, 알림, 채팅)를 모두 삭제하고 세션 종료
 
 **오류**: `401 INVALID_CREDENTIALS`(비밀번호 불일치)
 

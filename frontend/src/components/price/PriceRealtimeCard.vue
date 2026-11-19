@@ -2,13 +2,16 @@
 import { computed, ref, watch } from 'vue'
 import http from '@/api/http'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import SortTh from '@/components/common/SortTh.vue'
 import { formatKstDateTime } from '@/utils/dates'
 import { realtimeState, realtimeStatusText, sortRealtime } from '@/utils/realtime'
+import { nextSort, sortRows } from '@/utils/tableSort'
 
 // 당일 경매 가격 (SCR-004, REQ-PRC-004, docs/api.md 2.3 GET /api/prices/realtime).
 // 정산 전 값이라 "확정 전"으로 표시한다. 다음 날 정산되면 확정 가격은 위 추이 차트(/prices/daily)에서 본다.
 const props = defineProps({
   itemId: { type: Number, default: null },
+  selectedMarketId: { type: String, default: '' }, // 위 차트에서 고른 시장은 표에서 표시 (시장 비교 표와 같다)
 })
 
 const rows = ref([])
@@ -44,8 +47,12 @@ async function load() {
 
 watch(() => props.itemId, load, { immediate: true })
 
-// 경매 중인 시장을 위로 (그 밖의 거래 시장, 거래 없는 시장 순)
-const sortedRows = computed(() => sortRealtime(rows.value, loadedAt.value))
+// 열 제목을 누르면 그 열로 정렬한다 (한 번 더 누르면 반대 방향, 또 누르면 기본 순서)
+const sort = ref(null)
+const dirOf = (key) => (sort.value?.key === key ? sort.value.dir : null)
+const toggleSort = (key, firstDir) => (sort.value = nextSort(sort.value, key, firstDir))
+// 기본 순서: 경매 중인 시장을 위로 (그 밖의 거래 시장, 거래 없는 시장 순). 상태 열은 마지막 낙찰 시각으로 정렬한다
+const sortedRows = computed(() => sortRows(sortRealtime(rows.value, loadedAt.value), sort.value))
 
 const fmt = (v) => (v == null ? '-' : Math.round(v).toLocaleString('ko-KR'))
 </script>
@@ -81,15 +88,15 @@ const fmt = (v) => (v == null ? '-' : Math.round(v).toLocaleString('ko-KR'))
     <table>
       <thead>
         <tr>
-          <th scope="col">시장</th>
-          <th scope="col" class="num">평균가</th>
+          <SortTh label="시장" :dir="dirOf('market_name')" @toggle="toggleSort('market_name', 'asc')" />
+          <SortTh label="평균가" class="num" :dir="dirOf('avg_price')" @toggle="toggleSort('avg_price')" />
           <th scope="col" class="num range">최저~최고</th>
-          <th scope="col" class="num">물량</th>
-          <th scope="col">상태</th>
+          <SortTh label="물량" class="num" :dir="dirOf('volume_kg')" @toggle="toggleSort('volume_kg')" />
+          <SortTh label="상태" :dir="dirOf('last_auction_at')" @toggle="toggleSort('last_auction_at')" />
         </tr>
       </thead>
       <tbody>
-        <tr v-for="r in sortedRows" :key="r.market_id">
+        <tr v-for="r in sortedRows" :key="r.market_id" :class="{ selected: r.market_id === selectedMarketId }">
           <th scope="row">{{ r.market_name }}</th>
           <td class="num">{{ fmt(r.avg_price) }}</td>
           <td class="num range">{{ r.avg_price == null ? '-' : `${fmt(r.min_price)}~${fmt(r.max_price)}` }}</td>
@@ -236,6 +243,9 @@ thead th {
 tbody th,
 .num {
   white-space: nowrap;
+}
+tr.selected {
+  background: var(--color-background-soft);
 }
 /* 칸이 좁으면(2분할·휴대폰) 최저~최고 칸을 빼 표가 넘치지 않게 한다. 화면 폭이 아니라 이 카드 폭 기준 */
 .realtime {

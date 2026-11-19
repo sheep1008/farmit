@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import http from '@/api/http'
 import { fetchCalendar, fetchGuide, fetchMonthlyTasks, fetchSummary, fetchWeeklyFarmInfo } from '@/api/farming'
 import BaseButton from '@/components/common/BaseButton.vue'
+import ItemSelect from '@/components/common/ItemSelect.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import FarmingGantt from '@/components/farming/FarmingGantt.vue'
@@ -44,14 +45,6 @@ const res = ref(null) // 지금 탭의 응답 { data, meta }
 const loading = ref(false)
 const errorMessage = ref('')
 
-const itemGroups = computed(() => {
-  const groups = new Map()
-  for (const it of items.value) {
-    if (!groups.has(it.category)) groups.set(it.category, [])
-    groups.get(it.category).push(it)
-  }
-  return [...groups.entries()]
-})
 const data = computed(() => res.value?.data ?? null)
 const meta = computed(() => res.value?.meta ?? {})
 // 일정이 없는 품목은 200 + available: false + meta.message (요약은 schedule.available)
@@ -115,11 +108,7 @@ onMounted(async () => {
     <form class="filters" @submit.prevent>
       <label>
         <span>품목</span>
-        <select v-model="itemId">
-          <optgroup v-for="[category, list] in itemGroups" :key="category" :label="category">
-            <option v-for="it in list" :key="it.item_id" :value="it.item_id">{{ it.name }}</option>
-          </optgroup>
-        </select>
+        <ItemSelect v-model="itemId" :items="items" />
       </label>
       <label v-if="tab === 'monthly'">
         <span>기준 월</span>

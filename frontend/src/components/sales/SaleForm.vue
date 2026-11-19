@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import http from '@/api/http'
 import { fieldErrors } from '@/api/interceptors'
 import BaseButton from '@/components/common/BaseButton.vue'
+import ItemSelect from '@/components/common/ItemSelect.vue'
+import MarketSelect from '@/components/common/MarketSelect.vue'
 import BaseInput from '@/components/common/BaseInput.vue'
 import { GRADES } from '@/constants/grades'
 import { todayKst } from '@/utils/dates'
@@ -35,15 +37,6 @@ const formError = ref('')
 const saving = ref(false)
 const deleting = ref(false)
 
-// 품목 선택지는 분류(과일·채소…)별로 묶는다 (가격 화면과 같다)
-const itemGroups = computed(() => {
-  const groups = new Map()
-  for (const it of props.items) {
-    if (!groups.has(it.category)) groups.set(it.category, [])
-    groups.get(it.category).push(it)
-  }
-  return [...groups.entries()]
-})
 
 // 기존 기록의 등급이 선택지(GRADES)에 없으면(숫자 등급 등) 그 값도 선택지에 넣어 둔다
 const gradeOptions = computed(() =>
@@ -111,20 +104,12 @@ async function remove() {
       />
       <div class="field">
         <label for="sale-market">시장</label>
-        <select id="sale-market" v-model="form.market_id" :class="{ invalid: first('market_id') }">
-          <option v-for="m in markets" :key="m.market_id" :value="m.market_id">
-            {{ m.name }}
-          </option>
-        </select>
+        <MarketSelect id="sale-market" v-model="form.market_id" :markets="markets" :invalid="!!first('market_id')" />
         <p v-if="first('market_id')" class="msg error">{{ first('market_id') }}</p>
       </div>
       <div class="field">
         <label for="sale-item">품목</label>
-        <select id="sale-item" v-model="form.item_id" :class="{ invalid: first('item_id') }">
-          <optgroup v-for="[category, list] in itemGroups" :key="category" :label="category">
-            <option v-for="it in list" :key="it.item_id" :value="it.item_id">{{ it.name }}</option>
-          </optgroup>
-        </select>
+        <ItemSelect id="sale-item" v-model="form.item_id" :items="items" :invalid="!!first('item_id')" />
         <p v-if="first('item_id')" class="msg error">{{ first('item_id') }}</p>
       </div>
       <div class="field">

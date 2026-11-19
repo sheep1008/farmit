@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import http from '@/api/http'
 import { diagnose } from '@/api/farming'
 import BaseButton from '@/components/common/BaseButton.vue'
+import ItemSelect from '@/components/common/ItemSelect.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import { useCurrentItemStore } from '@/stores/currentItem'
 import { chatPrefillRoute } from '@/utils/chat'
@@ -24,14 +25,6 @@ const sending = ref(false)
 const formError = ref('')
 const result = ref(null) // { data, meta }
 
-const itemGroups = computed(() => {
-  const groups = new Map()
-  for (const it of items.value) {
-    if (!groups.has(it.category)) groups.set(it.category, [])
-    groups.get(it.category).push(it)
-  }
-  return [...groups.entries()]
-})
 const canSubmit = computed(() => itemId.value && symptom.value.trim() && !sending.value)
 watch(itemId, (id) => currentItem.set(id)) // 다른 화면에서도 이어 보이게
 
@@ -82,11 +75,7 @@ function followUp(candidate = null) {
     <form class="form" @submit.prevent="submit">
       <label>
         <span>품목</span>
-        <select v-model="itemId">
-          <optgroup v-for="[category, list] in itemGroups" :key="category" :label="category">
-            <option v-for="it in list" :key="it.item_id" :value="it.item_id">{{ it.name }}</option>
-          </optgroup>
-        </select>
+        <ItemSelect v-model="itemId" :items="items" />
       </label>
       <label class="symptom">
         <span>증상 설명</span>
@@ -188,7 +177,6 @@ h1 {
   font-weight: 600;
   color: var(--color-heading);
 }
-select,
 textarea {
   padding: 8px 12px;
   border: 1px solid var(--color-border-hover);
@@ -198,14 +186,13 @@ textarea {
   font: inherit;
   font-weight: 400;
 }
-select {
-  min-height: 40px;
+/* 품목 선택 상자(ItemSelect)는 폼 너비만큼 늘어나지 않게 */
+.search-select {
   max-width: 240px;
 }
 textarea {
   resize: vertical;
 }
-select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--color-primary);

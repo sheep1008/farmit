@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import http from '@/api/http'
 import EmptyState from '@/components/common/EmptyState.vue'
+import ItemSelect from '@/components/common/ItemSelect.vue'
+import MarketSelect from '@/components/common/MarketSelect.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
 import InfoTip from '@/components/common/InfoTip.vue'
@@ -44,25 +46,6 @@ const rows = ref([])
 const meta = ref(null)
 const loading = ref(false)
 const errorMessage = ref('')
-
-// 품목 선택지는 분류(과일·채소…)별로 묶는다
-const itemGroups = computed(() => {
-  const groups = new Map()
-  for (const it of items.value) {
-    if (!groups.has(it.category)) groups.set(it.category, [])
-    groups.get(it.category).push(it)
-  }
-  return [...groups.entries()]
-})
-// 시장 선택: 전국 시장을 시도별로 묶는다 (정산 가격은 전국 시장을 모두 수집한다)
-const marketGroups = computed(() => {
-  const groups = new Map()
-  for (const m of markets.value) {
-    if (!groups.has(m.sido)) groups.set(m.sido, [])
-    groups.get(m.sido).push(m)
-  }
-  return [...groups.entries()]
-})
 
 // 정산은 다음 날 반영되므로 기간 끝은 어제 (api.md 기본값과 같다)
 const range = computed(() => {
@@ -167,21 +150,11 @@ const lastUpdated = computed(() => formatKstDateTime(meta.value?.last_updated))
     <form class="filters" @submit.prevent>
       <label>
         <span>품목</span>
-        <select v-model="filters.itemId">
-          <optgroup v-for="[category, list] in itemGroups" :key="category" :label="category">
-            <option v-for="it in list" :key="it.item_id" :value="it.item_id">{{ it.name }}</option>
-          </optgroup>
-        </select>
+        <ItemSelect v-model="filters.itemId" :items="items" />
       </label>
       <label>
         <span>시장</span>
-        <select v-model="filters.marketId">
-          <optgroup v-for="[sido, list] in marketGroups" :key="sido" :label="sido">
-            <option v-for="m in list" :key="m.market_id" :value="m.market_id">
-              {{ m.name }}
-            </option>
-          </optgroup>
-        </select>
+        <MarketSelect v-model="filters.marketId" :markets="markets" />
       </label>
       <label>
         <span>등급</span>
@@ -245,7 +218,7 @@ const lastUpdated = computed(() => formatKstDateTime(meta.value?.last_updated))
         <PriceCompareTable :item-id="filters.itemId" :grade="filters.grade" :selected-market-id="filters.marketId" />
       </div>
       <div class="card">
-        <PriceRealtimeCard :item-id="filters.itemId" />
+        <PriceRealtimeCard :item-id="filters.itemId" :selected-market-id="filters.marketId" />
       </div>
     </div>
   </section>
