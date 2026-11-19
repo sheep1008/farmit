@@ -6,6 +6,7 @@ import { fetchMonthlyTasks, fetchWeeklyFarmInfo } from '@/api/farming'
 import http from '@/api/http'
 import { fetchForecasts, fetchRealtimePrices } from '@/api/prices'
 import BaseButton from '@/components/common/BaseButton.vue'
+import ItemSelect from '@/components/common/ItemSelect.vue'
 import InfoTip from '@/components/common/InfoTip.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import SellNowTrial from '@/components/recommend/SellNowTrial.vue'
@@ -302,9 +303,7 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
       </div>
       <label v-if="isGuest && guestItems.length" class="item-select">
         품목
-        <select v-model="guestItemId">
-          <option v-for="it in guestItems" :key="it.item_id" :value="it.item_id">{{ it.name }}</option>
-        </select>
+        <ItemSelect v-model="guestItemId" :items="guestItems" />
       </label>
       <RouterLink v-else-if="item" :to="{ name: 'mypage' }" class="item-chip">
         관심 품목 <strong>{{ item.name }}</strong>
@@ -642,17 +641,6 @@ h1 {
   min-width: 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
-}
-.item-select select {
-  min-width: 0;
-  max-width: 100%;
-  min-height: 40px;
-  padding: 6px 10px;
-  border: 1px solid var(--color-border-hover);
-  border-radius: var(--radius);
-  background: var(--color-background);
-  color: var(--color-text);
-  font: inherit;
 }
 /* 오늘의 한 줄 브리핑: 카드보다 가볍게, 왼쪽 선으로만 구분한다 */
 .briefing {

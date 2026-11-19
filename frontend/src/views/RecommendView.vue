@@ -7,6 +7,7 @@ import { fieldErrors } from '@/api/interceptors'
 import { fetchForecastHistory, fetchForecasts } from '@/api/prices'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
+import ItemSelect from '@/components/common/ItemSelect.vue'
 import InfoTip from '@/components/common/InfoTip.vue'
 import BaseInput from '@/components/common/BaseInput.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -64,15 +65,6 @@ const tab = ref('weekly') // 'weekly' | 'now'
 const showAll = ref(false)
 const weekOptions = desiredWeekOptions(todayKst())
 
-// 품목 선택지는 분류별로 묶는다 (가격 화면과 같다)
-const itemGroups = computed(() => {
-  const groups = new Map()
-  for (const it of items.value) {
-    if (!groups.has(it.category)) groups.set(it.category, [])
-    groups.get(it.category).push(it)
-  }
-  return [...groups.entries()]
-})
 
 onMounted(async () => {
   try {
@@ -340,11 +332,7 @@ const fmt = (v, digits = 0) => Number(v).toLocaleString('ko-KR', { maximumFracti
       <h1>오늘의 판매 판단<template v-if="selectedItem"> · {{ selectedItem.name }}</template></h1>
       <label v-if="form" class="item-pick">
         <span>품목</span>
-        <select v-model="form.item_id">
-          <optgroup v-for="[category, list] in itemGroups" :key="category" :label="category">
-            <option v-for="it in list" :key="it.item_id" :value="it.item_id">{{ it.name }}</option>
-          </optgroup>
-        </select>
+        <ItemSelect v-model="form.item_id" :items="items" />
       </label>
     </div>
 

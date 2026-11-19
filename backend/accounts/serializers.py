@@ -6,9 +6,9 @@ from django.db import transaction
 from rest_framework import serializers
 
 from chat.limits import remaining_today
-from codes.models import Item
+from codes.models import Item, Market
 
-from .models import UserInterestItem, UserProfile
+from .models import UserInterestItem, UserInterestMarket, UserProfile
 from .validators import is_valid_username
 
 User = get_user_model()
@@ -87,6 +87,8 @@ class ProfileUpdateSerializer(serializers.Serializer):
     sigungu = serializers.CharField(max_length=20, required=False)
     interest_item_ids = serializers.ListField(
         child=serializers.IntegerField(), max_length=5, required=False)
+    interest_market_ids = serializers.ListField(
+        child=serializers.CharField(max_length=6), max_length=5, required=False)
     transport_cost_per_km = serializers.IntegerField(min_value=0, required=False)
     storage_cost_per_week = serializers.IntegerField(min_value=0, required=False)
     # 0 이상 100 미만 (%). 소수 둘째 자리까지 저장하므로 최대 99.99
@@ -98,6 +100,12 @@ class ProfileUpdateSerializer(serializers.Serializer):
 
     def validate_interest_item_ids(self, value):
         return validate_item_ids(value)
+
+    def validate_interest_market_ids(self, value):
+        # 없는 시장이 섞여 있으면 오류, 통과하면 중복을 없앤 목록(순서 유지)
+        if Market.objects.filter(market_id__in=value).count() != len(set(value)):
+            raise serializers.ValidationError('존재하지 않는 시장이 포함되어 있습니다.')
+        return list(dict.fromkeys(value))
 
     def validate(self, attrs):
         if 'username' in self.initial_data:
@@ -117,6 +125,13 @@ class ProfileUpdateSerializer(serializers.Serializer):
             UserInterestItem.objects.filter(user=user).delete()
             UserInterestItem.objects.bulk_create(
                 [UserInterestItem(user=user, item_id=item_id) for item_id in validated_data['interest_item_ids']]
+            )
+        # 관심 시장도 같은 방식으로 통째로 교체한다
+        if 'interest_market_ids' in validated_data:
+            UserInterestMarket.objects.filter(user=user).delete()
+            UserInterestMarket.objects.bulk_create(
+                [UserInterestMarket(user=user, market_id=market_id)
+                 for market_id in validated_data['interest_market_ids']]
             )
         return user
 
@@ -138,7 +153,9 @@ def me_data(user):
     """내 정보 응답 모양. 로그인·GET/PATCH /users/me가 함께 쓴다."""
     profile = user.userprofile
     data = user_data(user)
+    markets = UserInterestMarket.objects.filter(user=user).select_related('market')
     data.update({
+        'interest_markets': [{'market_id': m.market_id, 'name': m.market.name} for m in markets],
         'transport_cost_per_km': profile.transport_cost_per_km,
         'storage_cost_per_week': profile.storage_cost_per_week,
         'loss_rate': float(profile.loss_rate),

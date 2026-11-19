@@ -21,12 +21,14 @@
 erDiagram
   auth_user ||--|| user_profile : ""
   auth_user ||--o{ user_interest_item : ""
+  auth_user ||--o{ user_interest_market : ""
   auth_user ||--o{ sale_record : ""
   auth_user ||--o{ alert : ""
   auth_user ||--o{ chat_session : ""
   auth_user ||--o{ price_alert : ""
 
   item ||--o{ user_interest_item : ""
+  market ||--o{ user_interest_market : ""
   item ||--o{ settle_price : ""
   item ||--o{ auction_trade : ""
   item ||--o{ realtime_price : ""
@@ -53,7 +55,7 @@ erDiagram
 | 영역 | 테이블 | 주차 |
 |---|---|---|
 | 코드 | `market`, `item`, `weather_station`, `item_producing_area`, `holiday`, `market_closure`, `warning_zone` | 1주차 |
-| 회원 | `auth_user`, `user_profile`, `user_interest_item` | 1주차 |
+| 회원 | `auth_user`, `user_profile`, `user_interest_item`, `user_interest_market`(2026-11-19 추가) | 1주차 |
 | 가격 | `settle_price`, `auction_trade` | 1주차 |
 | 가격 | `realtime_price` | 2주차 (Flink) |
 | 날씨 | `weather_daily`, `weather_warning` | 1주차 |
@@ -74,7 +76,9 @@ erDiagram
 erDiagram
   auth_user ||--|| user_profile : ""
   auth_user ||--o{ user_interest_item : ""
+  auth_user ||--o{ user_interest_market : ""
   item ||--o{ user_interest_item : ""
+  market ||--o{ user_interest_market : ""
   item ||--o{ settle_price : ""
   market ||--o{ settle_price : ""
   item ||--o{ auction_trade : ""
@@ -117,6 +121,10 @@ erDiagram
   user_interest_item {
     int user_id PK,FK
     int item_id PK,FK
+  }
+  user_interest_market {
+    int user_id PK,FK
+    varchar market_id PK,FK
   }
   settle_price {
     bigint id PK
@@ -287,7 +295,13 @@ erDiagram
 | user_id | int | PK, FK | 회원 |
 | item_id | int | PK, FK | 품목 |
 
-회원 탈퇴 시 `user_profile`, `user_interest_item`, `sale_record`, `alert`, `chat_session`을 모두 삭제한다 (REQ-USR-004). Django의 `on_delete=CASCADE`로 구현하므로 DB의 FK 제약(`DELETE_RULE`)은 `NO ACTION`이다. 탈퇴 처리는 반드시 Django ORM(`user.delete()`)으로 한다. SQL로 `auth_user`를 직접 지우지 않는다.
+**user_interest_market** — 관심 시장 (회원 : 시장 = N : M). 시장 선택 상자의 ★로 넣고 뺀다 (최대 5개, REQ-USR-003)
+| 컬럼 | 타입 | 키 | 설명 |
+|---|---|---|---|
+| user_id | int | PK, FK | 회원 |
+| market_id | varchar(6) | PK, FK | 시장 |
+
+회원 탈퇴 시 `user_profile`, `user_interest_item`, `user_interest_market`, `sale_record`, `alert`, `chat_session`을 모두 삭제한다 (REQ-USR-004). Django의 `on_delete=CASCADE`로 구현하므로 DB의 FK 제약(`DELETE_RULE`)은 `NO ACTION`이다. 탈퇴 처리는 반드시 Django ORM(`user.delete()`)으로 한다. SQL로 `auth_user`를 직접 지우지 않는다.
 
 ### 2.3 가격
 
@@ -383,7 +397,7 @@ erDiagram
 | 규칙 | 해당 | 의미 |
 |---|---|---|
 | `PROTECT` | `settle_price`·`auction_trade`의 `market`, `item`, `crop_production.item`, `sale_record`의 `market`, `item`, `forecast`의 `market`, `item`, `item_producing_area.station` | 가격 이력이 있는 시장·품목, 주산지가 쓰는 관측소는 지울 수 없다 |
-| `CASCADE` | `user_interest_item`(`user`, `item`), `user_profile.user`, `sale_record.user`, `chat_session.user`, `chat_message.session`, `market_closure.market`, `item_producing_area.item`, `weather_daily.station` | 부모를 지우면 함께 지운다 |
+| `CASCADE` | `user_interest_item`(`user`, `item`), `user_interest_market`(`user`, `market`), `user_profile.user`, `sale_record.user`, `chat_session.user`, `chat_message.session`, `market_closure.market`, `item_producing_area.item`, `weather_daily.station` | 부모를 지우면 함께 지운다 |
 
 **기본값.** `default`는 Django가 값을 채울 때만 적용되고 DB에는 기본값이 없다. SQL로 직접 INSERT하는 수집기는 값을 직접 넣어야 한다. DB에도 기본값을 심을지(`db_default`)는 수집기를 만들 때 정한다.
 | 테이블 | 컬럼 | 기본값 |

@@ -17,6 +17,19 @@ class UserInterestItem(models.Model):
         db_table = 'user_interest_item'
 
 
+# 관심 시장. 회원 : 시장 = N : M 을 잇는 중간 테이블 (erd.md 2.2). 시장 선택 상자의 ★로 넣고 뺀다
+class UserInterestMarket(models.Model):
+    # user: 회원 FK. 회원을 삭제하면 관심 시장도 함께 삭제된다 (DB 컬럼은 user_id)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    # market: 시장 FK. 시장을 삭제하면 관심 시장도 함께 삭제된다 (DB 컬럼은 market_id)
+    market = models.ForeignKey(Market, on_delete=models.CASCADE)
+    # pk: (user, market) 복합 PK. 같은 회원이 같은 시장을 두 번 담을 수 없다
+    pk = models.CompositePrimaryKey('user', 'market')
+
+    class Meta:
+        db_table = 'user_interest_market'
+
+
 # 회원 프로필. auth_user와 1:1 (erd.md 2.2)
 class UserProfile(models.Model):
     # user: 회원과 1:1이면서 이 테이블의 PK. 회원이 탈퇴하면 프로필도 함께 삭제된다 (DB 컬럼은 user_id)

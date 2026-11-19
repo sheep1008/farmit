@@ -5,6 +5,7 @@ import http from '@/api/http'
 import { fetchCases } from '@/api/alerts'
 import CaseChangeChart from '@/components/cases/CaseChangeChart.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
+import ItemSelect from '@/components/common/ItemSelect.vue'
 import InfoTip from '@/components/common/InfoTip.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
@@ -50,8 +51,6 @@ const today = todayKst()
 const md = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
 const seasonText = `${md(addDays(today, -SEASON_DAYS))} ~ ${md(addDays(today, SEASON_DAYS))}` // 예: 10/21 ~ 12/16
 
-const interestIds = computed(() => new Set((auth.user?.interest_items ?? []).map((i) => i.item_id)))
-const interestOptions = computed(() => items.value.filter((i) => interestIds.value.has(i.item_id)))
 const itemName = computed(() => items.value.find((i) => i.item_id === itemId.value)?.name ?? '')
 
 onMounted(async () => {
@@ -155,15 +154,7 @@ const won = (v) => (v == null ? '–' : `${Math.round(v).toLocaleString('ko-KR')
 
     <div class="field">
       <label for="case-item">품목</label>
-      <select id="case-item" v-model="itemId" :disabled="!items.length">
-        <option :value="null" disabled>품목을 고르세요</option>
-        <optgroup v-if="interestOptions.length" label="관심 품목">
-          <option v-for="i in interestOptions" :key="`i${i.item_id}`" :value="i.item_id">{{ i.name }}</option>
-        </optgroup>
-        <optgroup label="전체 품목">
-          <option v-for="i in items" :key="i.item_id" :value="i.item_id">{{ i.name }}</option>
-        </optgroup>
-      </select>
+      <ItemSelect id="case-item" v-model="itemId" :items="items" />
       <p v-if="itemsError" class="error" role="alert">{{ itemsError }}</p>
     </div>
 
@@ -303,20 +294,6 @@ h2 {
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-heading);
-}
-select {
-  min-height: 40px;
-  padding: 8px 12px;
-  border: 1px solid var(--color-border-hover);
-  border-radius: var(--radius);
-  background: var(--color-background-soft);
-  color: var(--color-text);
-  font: inherit;
-}
-select:focus-visible {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: var(--focus-ring);
 }
 .scope {
   display: flex;

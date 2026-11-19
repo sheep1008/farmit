@@ -2,9 +2,9 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from rest_framework.test import APIClient, APITestCase
 
-from codes.models import Item
+from codes.models import Item, Market
 
-from .models import UserInterestItem, UserProfile
+from .models import UserInterestItem, UserInterestMarket, UserProfile
 
 User = get_user_model()
 
@@ -185,6 +185,28 @@ class MeTests(AccountTestBase):
     def test_patch_empty_item_list_clears_interest_items(self):
         self.client.patch(ME_URL, {'interest_item_ids': []}, format='json')
         self.assertEqual(UserInterestItem.objects.count(), 0)
+
+    def test_patch_interest_markets_replace_and_clear(self):
+        garak = Market.objects.create(market_id='110001', name='서울가락', sido='서울특별시', lat=37.49, lng=127.11)
+        Market.objects.create(market_id='210001', name='부산엄궁', sido='부산광역시', lat=35.12, lng=128.97)
+        self.assertEqual(self.client.get(ME_URL).data['data']['interest_markets'], [])
+        res = self.client.patch(ME_URL, {'interest_market_ids': ['110001', '210001']}, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual([m['name'] for m in res.data['data']['interest_markets']], ['서울가락', '부산엄궁'])
+        # 보낸 목록으로 통째로 바꾼다. 관심 품목은 건드리지 않는다
+        res = self.client.patch(ME_URL, {'interest_market_ids': [garak.market_id]}, format='json')
+        self.assertEqual(res.data['data']['interest_markets'], [{'market_id': '110001', 'name': '서울가락'}])
+        self.assertEqual(len(res.data['data']['interest_items']), 2)
+        self.client.patch(ME_URL, {'interest_market_ids': []}, format='json')
+        self.assertEqual(UserInterestMarket.objects.count(), 0)
+
+    def test_patch_interest_markets_validation(self):
+        for i in range(6):
+            Market.objects.create(market_id=f'90000{i}', name=f'시장{i}', sido='경기도', lat=37, lng=127)
+        for bad in (['999999'], [f'90000{i}' for i in range(6)]):  # 없는 시장, 6개(최대 5개)
+            res = self.client.patch(ME_URL, {'interest_market_ids': bad}, format='json')
+            self.assertEqual(res.status_code, 400, bad)
+            self.assertIn('interest_market_ids', res.data['error']['details'])
 
     def test_patch_cannot_change_username(self):
         res = self.client.patch(ME_URL, {'username': 'other01'}, format='json')
