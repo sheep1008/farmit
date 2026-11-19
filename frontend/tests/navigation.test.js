@@ -8,7 +8,7 @@ const isMemberOnly = (name) => MEMBER_ONLY.has(name)
 describe('공통 메뉴 (docs/screens.md 1절)', () => {
   it('로그인하면 5개 메뉴와 하위 화면이 모두 보인다', () => {
     const s = visibleSections(true, isMemberOnly)
-    expect(s.map((x) => x.label)).toEqual(['홈', '시세', '판매', '농사', 'AI 상담'])
+    expect(s.map((x) => x.label)).toEqual(['홈', '가격 통계', '판매 추천', '재배 정보', 'AI 챗봇'])
     expect(s.find((x) => x.key === 'farm').pages.map((p) => p.name)).toEqual(['farming', 'diagnose'])
   })
 

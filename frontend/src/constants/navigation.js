@@ -5,7 +5,7 @@ export const SECTIONS = [
   { key: 'home', label: '홈', icon: 'home', pages: [{ name: 'dashboard', label: '대시보드' }] },
   {
     key: 'market',
-    label: '시세',
+    label: '가격 통계',
     icon: 'chart',
     pages: [
       { name: 'prices', label: '가격 통계' },
@@ -14,7 +14,7 @@ export const SECTIONS = [
   },
   {
     key: 'sell',
-    label: '판매',
+    label: '판매 추천',
     icon: 'tag',
     pages: [
       { name: 'recommend', label: '판매 추천' },
@@ -23,14 +23,14 @@ export const SECTIONS = [
   },
   {
     key: 'farm',
-    label: '농사',
+    label: '재배 정보',
     icon: 'sprout',
     pages: [
       { name: 'farming', label: '재배 정보' },
       { name: 'diagnose', label: '증상 진단' },
     ],
   },
-  { key: 'chat', label: 'AI 상담', icon: 'chat', pages: [{ name: 'chat', label: 'AI 상담' }] },
+  { key: 'chat', label: 'AI 챗봇', icon: 'chat', pages: [{ name: 'chat', label: 'AI 챗봇' }] },
 ]
 
 /**
