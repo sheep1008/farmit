@@ -14,4 +14,5 @@ urlpatterns = [
     path('api/', include('alerts.urls')),
     path('api/chat/', include('chat.urls')),
     path('api/farming/', include('farming.urls')),
+    path('api/weather/', include('weather.urls')),
 ]

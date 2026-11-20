@@ -47,6 +47,13 @@ export const DATA_SOURCES = [
         url: 'https://www.data.go.kr',
       },
       {
+        name: '초단기실황·초단기예보',
+        provider: '기상청 · 공공데이터포털',
+        use: '홈 화면의 내 위치 현재 날씨',
+        terms: '이용 제한 없음',
+        url: 'https://www.data.go.kr',
+      },
+      {
         name: '특일 정보',
         provider: '한국천문연구원 · 공공데이터포털',
         use: '명절·공휴일(가격 예측, 휴장일)',

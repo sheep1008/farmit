@@ -183,6 +183,11 @@ SELL_NOW_MIN_VOLUME_KG = 1000        # 최근 14일 총 물량이 이보다 적�
 SELL_NOW_VOLUME_WARN_MULTIPLE = 1    # 내 물량이 최근 14일 일평균 물량의 이 배수를 넘으면 물량 경고
 SELL_NOW_STALE_DAYS = 3              # 기준일이 오늘보다 이 일수 넘게 오래되면 "오래된 데이터" 경고
 
+# ── 현재 날씨 (REQ-HOM-002) ──────────────────────
+# 기상청 초단기실황·초단기예보를 부르는 data.go.kr 키 (weather/current.py). 수집기와 같은 키를 쓴다.
+# 비우면 날씨를 주지 않는다(503 DATA_NOT_READY). 테스트는 외부 API를 부르지 않게 키를 끈다
+DATA_GO_KR_KEY = None if sys.argv[1:2] == ['test'] else (os.environ.get('DATA_GO_KR_KEY') or None)
+
 # ── 운송비 (REQ-REC-002) ──────────────────────────
 # 카카오모빌리티 자동차 길찾기 REST 키. 내 위치 → 시장 도로 거리·통행료를 받는다 (prices/routes.py).
 # 비우면 직선거리로 계산한다. 테스트는 외부 API를 부르지 않게 키를 끈다

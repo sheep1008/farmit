@@ -71,3 +71,14 @@ export function formatKstDateTime(iso) {
     hour12: false,
   }).format(new Date(iso))
 }
+
+// 현재 시각을 한국 시간 'HH:mm:ss'로 (홈 화면 시계)
+export function formatKstClock(date) {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: KST,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date)
+}

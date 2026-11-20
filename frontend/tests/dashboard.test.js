@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CHAT_MAX_LENGTH, chatAskRoute, chatPrefillRoute } from '@/utils/chat'
-import { formatWon, summarizeForecast, summarizeMonthly, summarizeRealtime } from '@/utils/dashboard'
+import { formatWon, summarizeForecast, summarizeMonthly, summarizeRealtime, weatherDetails, weatherIcon } from '@/utils/dashboard'
+import { formatKstClock } from '@/utils/dates'
 
 describe('이번 주 예측 카드', () => {
   const row = (market_id, horizon, pred_price, last_week_price, holiday_notice = null) => ({
@@ -27,6 +28,27 @@ describe('이번 주 예측 카드', () => {
 
   it('예측이 없으면 빈 요약', () => {
     expect(summarizeForecast([])).toEqual({ top: [], marketCount: 0, targetWeek: null, holidayNotice: null })
+  })
+})
+
+describe('홈 현재 날씨·시각', () => {
+  it('아이콘: 강수가 하늘 상태보다 먼저, 맑은 밤은 달', () => {
+    expect(weatherIcon({ precip_type: '눈', sky: '흐림' })).toBe('🌨️')
+    expect(weatherIcon({ precip_type: '빗방울', sky: '흐림' })).toBe('🌧️')
+    expect(weatherIcon({ precip_type: null, sky: '맑음', observed_at: '2026-11-20T11:00:00+09:00' })).toBe('☀️')
+    expect(weatherIcon({ precip_type: null, sky: '맑음', observed_at: '2026-11-20T21:00:00+09:00' })).toBe('🌙')
+    expect(weatherIcon({ precip_type: null, sky: '흐림' })).toBe('☁️')
+    expect(weatherIcon({ precip_type: null, sky: null })).toBe('🌡️')
+  })
+
+  it('보조 값: 비가 올 때만 강수량, 없는 값은 뺀다', () => {
+    expect(weatherDetails({ rain_mm_1h: 0, humidity_pct: 68, wind_ms: 2.4 })).toEqual(['습도 68%', '바람 2.4m/s'])
+    expect(weatherDetails({ rain_mm_1h: 0.5, humidity_pct: 90.4, wind_ms: null })).toEqual(['강수 0.5mm', '습도 90%'])
+    expect(weatherDetails({ rain_mm_1h: null, humidity_pct: null, wind_ms: null })).toEqual([])
+  })
+
+  it('시각은 한국 시간 초 단위', () => {
+    expect(formatKstClock(new Date('2026-11-20T02:03:04Z'))).toBe('11:03:04')
   })
 })
 
