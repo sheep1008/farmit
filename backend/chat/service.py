@@ -406,7 +406,9 @@ def run(user, question, item, history, today, recommend, market=None):
 
     # 6) RAG 답변 (병해충·날씨재해·재배)
     yield 'status', {'step': 'search', 'message': '농촌진흥청 자료를 찾는 중'}
-    evidence = retrieve.search(question, crop=q_crop, queries=c['queries'], size=EVIDENCE_SIZE)
+    # 품목을 고르지 않았고 질문에 작물이 둘 이상이면("사과와 배 중 …") 한 작물 자료로 좁히지 않고 전체에서 찾는다
+    search_crop = q_crop if crop or len(crop_util.find_crops(question, known)) < 2 else None
+    evidence = retrieve.search(question, crop=search_crop, queries=c['queries'], size=EVIDENCE_SIZE)
     if not evidence:
         msg = f'{P.NOT_FOUND}. 다른 표현으로 물어보시거나 가까운 농업기술센터에 문의해 주세요.'
         yield 'delta', {'text': msg}
@@ -415,7 +417,7 @@ def run(user, question, item, history, today, recommend, market=None):
     yield 'status', {'step': 'answer', 'message': f'근거 {len(evidence)}건으로 답변을 쓰는 중'}
     text = ''
     for kind, value in _stream_answer(P.ANSWER_SYSTEM, P.ANSWER_USER.format(
-            crop=q_crop or '(선택 안 함)', role=P.INTENT_LABELS[intent], role_format=P.ROLE_FORMAT[intent],
+            crop=search_crop or '(선택 안 함)', role=P.INTENT_LABELS[intent], role_format=P.ROLE_FORMAT[intent],
             question=question, evidence=retrieve.format_evidence(evidence)), evidence, usage):
         if kind == 'answer':
             text = value['text']

@@ -12,6 +12,15 @@ export function chatPrefillRoute(text) {
   return q ? { name: 'chat', query: { q } } : null
 }
 
+/**
+ * 홈 입력창의 "질문하기": 채팅 화면으로 가자마자 그 질문을 보낸다.
+ * 표시(autoSend)는 주소가 아니라 history.state에 넣는다 → 주소를 복사·즐겨찾기해도 자동으로 보내지 않는다.
+ */
+export function chatAskRoute(text) {
+  const to = chatPrefillRoute(text)
+  return to && { ...to, state: { autoSend: true } }
+}
+
 /** 답변 하나의 처음 상태. 질문을 보내자마자 화면에 넣어 진행 상태를 바로 보여 준다 (REQ-CHT-006). */
 export function newReply() {
   return {
