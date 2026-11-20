@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import http from '@/api/http'
+import { fetchForecastBacktest, fetchForecastHistory, fetchForecasts } from '@/api/prices'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ItemSelect from '@/components/common/ItemSelect.vue'
 import MarketSelect from '@/components/common/MarketSelect.vue'
@@ -12,6 +13,7 @@ import PriceCompareTable from '@/components/price/PriceCompareTable.vue'
 import PriceRealtimeCard from '@/components/price/PriceRealtimeCard.vue'
 import PriceTrendChart from '@/components/price/PriceTrendChart.vue'
 import { GRADES } from '@/constants/grades'
+import { useAuthStore } from '@/stores/auth'
 import { useCurrentItemStore } from '@/stores/currentItem'
 import { addDays, addMonths, formatKstDateTime, periodsBetween, todayKst } from '@/utils/dates'
 
@@ -19,13 +21,14 @@ import { addDays, addMonths, formatKstDateTime, periodsBetween, todayKst } from 
 // 선택 영역(품목·시장·기간·단위·등급) → GET /api/prices/daily 추이 차트(전년 비교선 포함)
 // 아래에 같은 품목·등급의 시장 비교 표(GET /api/prices/compare, REQ-PRC-003),
 // 당일 경매가(GET /api/prices/realtime, REQ-PRC-004), "이 품목 판매 추천" 이동.
+// 회원에게는 추이 차트에 예측 선(검증 예측·지난 예측 + 앞으로 4주, GET /api/forecasts·/history·/backtest)을 겹쳐 보여 준다.
 
 const UNITS = [
   { value: 'day', label: '일' },
   { value: 'week', label: '주' },
   { value: 'month', label: '월' },
 ]
-// 기간 = 어제부터 거슬러 올라간 개월 수. 일 단위는 API 한도(최대 1년) 때문에 12개월까지만
+// 기간 = 어제부터 거슬러 올라간 개월 수 (API 한도: 모든 단위 최대 5년)
 const RANGES = [
   { months: 1, label: '1개월' },
   { months: 3, label: '3개월' },
@@ -34,12 +37,12 @@ const RANGES = [
   { months: 36, label: '3년' },
   { months: 60, label: '5년' },
 ]
-const DAY_MAX_MONTHS = 12
 
 const items = ref([])
 const markets = ref([])
 const route = useRoute()
 const currentItem = useCurrentItemStore()
+const auth = useAuthStore()
 const filters = ref({ itemId: null, marketId: '', unit: 'day', months: 3, grade: 'ALL' })
 
 const rows = ref([])
@@ -53,15 +56,44 @@ const range = computed(() => {
   const from = addDays(addMonths(to, -filters.value.months), 1)
   return { from, to }
 })
-const periods = computed(() => periodsBetween(range.value.from, range.value.to, filters.value.unit))
 
-// 일 단위로 바꿨는데 기간이 1년보다 길면 1년으로 줄인다
+// ── 예측 선 (회원만) ── 예측은 주 평균이라 일·주 단위에서만 그린다 (월 단위에는 맞는 자리가 없다)
+const forecast = ref([])
+let forecastSeq = 0
+async function loadForecast() {
+  const { itemId, marketId, unit } = filters.value
+  const seq = ++forecastSeq
+  forecast.value = []
+  if (!auth.isLoggedIn || !itemId || !marketId || unit === 'month') return
+  // 예측이 없는 품목·시장이거나 아직 준비 전(503)이면 선 없이 둔다. 하나가 실패해도 나머지는 그린다
+  const [backtest, history, upcoming] = await Promise.all([
+    fetchForecastBacktest(itemId, marketId, range.value.from).catch(() => null),
+    fetchForecastHistory(itemId, marketId).catch(() => null),
+    fetchForecasts(itemId, marketId).catch(() => null),
+  ])
+  if (seq !== forecastSeq) return
+  // 같은 주가 겹치면 뒤에 넣은 것이 이긴다: 검증 예측 < 실제로 내보낸 지난 예측 < 이번 예측
+  const byWeek = new Map()
+  // 검증 예측: 서비스 예측이 없던 기간을 모델 검증 때의 1주 앞 예측으로 채운다 (그때 보여 준 값은 아니다)
+  for (const r of backtest?.data ?? []) byWeek.set(r.target_week, { ...r, period: r.target_week, kind: 'backtest' })
+  // 지난 예측: 끝난 주마다 그 주에 한 예측(horizon 1) 하나만 쓴다
+  for (const r of history?.data ?? []) {
+    if (r.horizon === 1) byWeek.set(r.target_week, { ...r, period: r.target_week, kind: 'past' })
+  }
+  // 앞으로의 예측: 가장 최근 기준 주의 이번 주~3주 후
+  for (const r of upcoming?.data ?? []) byWeek.set(r.target_week, { ...r, period: r.target_week, kind: 'upcoming' })
+  forecast.value = [...byWeek.values()]
+}
 watch(
-  () => filters.value.unit,
-  (unit) => {
-    if (unit === 'day' && filters.value.months > DAY_MAX_MONTHS) filters.value.months = DAY_MAX_MONTHS
-  },
+  () => [filters.value.itemId, filters.value.marketId, filters.value.unit, filters.value.months, auth.isLoggedIn],
+  loadForecast,
 )
+
+// x축은 기간 끝(어제)에서 예측이 있는 마지막 주까지 늘린다. 기간 시작보다 이른 지난 예측은 축에 없어 그려지지 않는다
+const periods = computed(() => {
+  const lastForecast = forecast.value.reduce((max, f) => (f.period > max ? f.period : max), range.value.to)
+  return periodsBetween(range.value.from, lastForecast, filters.value.unit)
+})
 
 async function loadCodes() {
   // 목록은 전국 시장(collect=false), 처음 고를 시장은 수집 대상 시장(기본 응답)에서 고른다
@@ -179,15 +211,9 @@ const lastUpdated = computed(() => formatKstDateTime(meta.value?.last_updated))
           <label
             v-for="r in RANGES"
             :key="r.months"
-            :class="{ active: filters.months === r.months, disabled: filters.unit === 'day' && r.months > DAY_MAX_MONTHS }"
+            :class="{ active: filters.months === r.months }"
           >
-            <input
-              v-model="filters.months"
-              type="radio"
-              name="range"
-              :value="r.months"
-              :disabled="filters.unit === 'day' && r.months > DAY_MAX_MONTHS"
-            />
+            <input v-model="filters.months" type="radio" name="range" :value="r.months" />
             {{ r.label }}
           </label>
         </div>
@@ -210,7 +236,7 @@ const lastUpdated = computed(() => formatKstDateTime(meta.value?.last_updated))
         title="이 기간에는 거래가 없습니다"
         description="기간을 늘리거나 다른 시장·등급을 골라 보세요."
       />
-      <PriceTrendChart v-else :periods="periods" :rows="rows" :class="{ dim: loading }" />
+      <PriceTrendChart v-else :periods="periods" :rows="rows" :forecast="forecast" :class="{ dim: loading }" />
     </div>
 
     <!-- 시장 비교(확정)와 당일 경매가(확정 전)를 나란히 놓아 같이 비교한다. 좁은 화면에서는 위아래로 -->
@@ -284,10 +310,6 @@ select {
 .segmented label.active {
   background: var(--color-primary);
   color: var(--color-on-primary);
-}
-.segmented label.disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 .segmented label:has(input:focus-visible) {
   box-shadow: var(--focus-ring);

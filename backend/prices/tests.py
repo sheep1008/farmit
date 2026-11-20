@@ -311,20 +311,17 @@ class DailyPriceApiTest(PriceApiBase):
         self.assertEqual(res.json()['error']['code'], 'VALIDATION_ERROR')
 
     def test_range_limits_per_unit(self):
-        over_year = {'from': '2025-10-01', 'to': '2026-10-02'}           # 367일
-        res = self.get(**over_year)
-        self.assertEqual(res.status_code, 400)
-        self.assertEqual(res.json()['error']['code'], 'VALIDATION_ERROR')
-        self.assertEqual(self.get(unit='week', **over_year).status_code, 200)
+        five_years = {'from': '2021-10-02', 'to': '2026-10-02'}
         over_five_years = {'from': '2020-01-01', 'to': '2026-01-01'}
-        self.assertEqual(self.get(unit='month', **over_five_years).status_code, 400)
+        for unit in ('day', 'week', 'month'):                             # 일 단위도 5년까지 (주식 차트처럼 길게 본다)
+            self.assertEqual(self.get(unit=unit, **five_years).status_code, 200)
+            res = self.get(unit=unit, **over_five_years)
+            self.assertEqual(res.status_code, 400)
+            self.assertEqual(res.json()['error']['code'], 'VALIDATION_ERROR')
 
     def test_range_limit_counts_years_not_days_so_leap_day_is_ok(self):
-        # 정확히 1년·5년은 윤일이 끼어도 통과하고, 하루라도 넘으면 거절된다
-        self.assertEqual(self.get(**{'from': '2027-03-01', 'to': '2028-02-29'}).status_code, 200)
-        self.assertEqual(self.get(**{'from': '2027-03-01', 'to': '2028-03-01'}).status_code, 200)
-        self.assertEqual(self.get(**{'from': '2027-03-01', 'to': '2028-03-02'}).status_code, 400)
-        five = {'unit': 'month', 'from': '2021-11-15'}
+        # 정확히 5년은 윤일이 끼어도 통과하고, 하루라도 넘으면 거절된다
+        five = {'unit': 'day', 'from': '2021-11-15'}
         self.assertEqual(self.get(to='2026-11-14', **five).status_code, 200)          # 1826일
         self.assertEqual(self.get(to='2026-11-15', **five).status_code, 200)
         self.assertEqual(self.get(to='2026-11-16', **five).status_code, 400)
@@ -1183,3 +1180,46 @@ class RoadTransportTest(TestCase):
         body['routes'][0] = {'result_code': 104, 'result_msg': '출발지와 도착지가 5m 이내'}
         with mock.patch.object(routes.httpx, 'get', return_value=response):
             self.assertIsNone(routes._fetch((36.3552, 127.3838), self.market))
+
+
+class ForecastBacktestApiTest(TestCase):
+    """GET /api/forecasts/backtest — 검증 예측 (가격 통계 차트의 지난 예측 선)."""
+    URL = '/api/forecasts/backtest'
+
+    @classmethod
+    def setUpTestData(cls):
+        from .models import ForecastBacktest
+        cls.market = Market.objects.create(market_id='110001', name='서울가락', sido='서울', lat=0, lng=0)
+        cls.apple = Item.objects.create(at_code='0601', name='사과', category='과일', is_forecast=True)
+        cls.cabbage = Item.objects.create(at_code='1001', name='배추', category='채소', is_forecast=False)
+        created = datetime(2026, 11, 20, tzinfo=dt_timezone.utc)
+        for week, horizon, price in ((date(2021, 1, 11), 1, '3706.0'), (date(2021, 1, 18), 1, '3727.4'),
+                                     (date(2021, 1, 18), 2, '3821.8')):
+            ForecastBacktest.objects.create(
+                item=cls.apple, market=cls.market, target_week=week, horizon=horizon, pred_price=Decimal(price),
+                lower80=Decimal('3000.0'), upper80=Decimal('4500.0'), model_version='v4-backtest', created_at=created)
+
+    def get(self, **params):
+        return self.client.get(self.URL, {'item_id': self.apple.item_id, 'market_id': '110001', **params})
+
+    def test_returns_one_week_ahead_rows_from_the_week_of_from(self):
+        body = self.get(**{'from': '2021-01-13'}).json()      # 수요일 → 그 주 월요일(1/11)부터
+        self.assertEqual(body['data'], [
+            {'target_week': '2021-01-11', 'pred_price': 3706.0, 'lower80': 3000.0, 'upper80': 4500.0},
+            {'target_week': '2021-01-18', 'pred_price': 3727.4, 'lower80': 3000.0, 'upper80': 4500.0}])   # h2 행은 없다
+        self.assertEqual(body['meta']['horizon'], 1)
+        self.assertTrue(body['meta']['forecast_available'])
+        self.assertEqual([r['target_week'] for r in self.get(**{'from': '2021-01-18'}).json()['data']], ['2021-01-18'])
+
+    def test_default_from_is_five_years_ago(self):
+        self.assertEqual(self.get().json()['data'], [])       # 2021-01은 오늘에서 5년보다 이전
+
+    def test_item_without_forecast_is_200_with_flag(self):
+        body = self.client.get(self.URL, {'item_id': self.cabbage.item_id, 'market_id': '110001'}).json()
+        self.assertEqual((body['data'], body['meta']['forecast_available']), ([], False))
+
+    def test_validation_and_not_found(self):
+        self.assertEqual(self.client.get(self.URL).status_code, 400)
+        self.assertEqual(self.get(**{'from': '2021/01/11'}).status_code, 400)
+        self.assertEqual(self.client.get(self.URL, {'item_id': 999999, 'market_id': '110001'}).status_code, 404)
+        self.assertEqual(self.client.get(self.URL, {'item_id': self.apple.item_id, 'market_id': 'x'}).status_code, 404)

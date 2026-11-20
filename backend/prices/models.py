@@ -144,6 +144,35 @@ class Forecast(models.Model):
             fields=['item', 'market', 'base_week', 'horizon'], name='uk_forecast')]
 
 
+# 검증 예측(백테스트): 서비스가 예측을 내보내기 전 기간을 모델 검증 때의 예측으로 채운다 (가격 통계 차트의 지난 예측 선)
+#   그 시점 이전 데이터로만 학습한 값이지만 그때 실제로 보여 준 예측은 아니라서 forecast와 섞지 않는다.
+#   값 채우기는 ml/farmit_ml/backtest_store.py
+class ForecastBacktest(models.Model):
+    # item: 품목 FK (DB 컬럼은 item_id)
+    item = models.ForeignKey(Item, on_delete=models.PROTECT)
+    # market: 시장 FK (DB 컬럼은 market_id)
+    market = models.ForeignKey(Market, on_delete=models.PROTECT)
+    # target_week: 예측 대상 주의 월요일
+    target_week = models.DateField()
+    # horizon: 몇 주 앞 예측인지 (1~4). 1 = 그 주 월요일에 한 그 주 예측
+    horizon = models.SmallIntegerField()
+    # pred_price: 예측 주평균 가격 (원/kg)
+    pred_price = models.DecimalField(max_digits=10, decimal_places=1)
+    # lower80, upper80: 80% 예측 구간 (원/kg)
+    lower80 = models.DecimalField(max_digits=10, decimal_places=1)
+    upper80 = models.DecimalField(max_digits=10, decimal_places=1)
+    # model_version: 검증에 쓴 설정 버전 (예: v4-backtest)
+    model_version = models.CharField(max_length=50)
+    # created_at: 적재한 시각 (UTC)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        db_table = 'forecast_backtest'
+        # 다시 적재해도 행이 두 번 저장되지 않게 막는다
+        constraints = [models.UniqueConstraint(
+            fields=['item', 'market', 'target_week', 'horizon'], name='uk_forecast_backtest')]
+
+
 # 내 위치(시군구 중심) → 시장 도로 경로. 카카오모빌리티 자동차 길찾기 결과를 저장해 다시 쓴다 (REQ-REC-002)
 #   처음 그 시군구의 회원이 판매 추천을 열 때 채운다 (prices/routes.py). 시장 좌표를 고치면 그 시장 행을 지워 다시 받는다
 class MarketRoute(models.Model):

@@ -18,8 +18,9 @@ export async function fetchRealtimePrices(itemId) {
  *        meta: { forecast_available, base_week, is_stale, message? } }
  * 예측 대상이 아닌 품목은 200 + forecast_available false, 예측 행이 아직 없으면 503 DATA_NOT_READY.
  */
-export async function fetchForecasts(itemId) {
-  const res = await http.get('/forecasts', { params: { item_id: itemId } })
+export async function fetchForecasts(itemId, marketId) {
+  // 시장을 주지 않으면 예측이 있는 모든 시장
+  const res = await http.get('/forecasts', { params: { item_id: itemId, market_id: marketId } })
   return res.data
 }
 
@@ -30,5 +31,14 @@ export async function fetchForecasts(itemId) {
  */
 export async function fetchForecastHistory(itemId, marketId) {
   const res = await http.get('/forecasts/history', { params: { item_id: itemId, market_id: marketId } })
+  return res.data
+}
+
+/**
+ * 검증 예측 GET /api/forecasts/backtest (docs/api.md 2.5). 서비스 예측이 없던 기간의 1주 앞 예측 (그때 실제로 보여 준 값은 아니다).
+ * 반환: { data: [{ target_week, pred_price, lower80, upper80 }], meta: { forecast_available, horizon } }
+ */
+export async function fetchForecastBacktest(itemId, marketId, from) {
+  const res = await http.get('/forecasts/backtest', { params: { item_id: itemId, market_id: marketId, from } })
   return res.data
 }

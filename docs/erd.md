@@ -33,6 +33,7 @@ erDiagram
   item ||--o{ auction_trade : ""
   item ||--o{ realtime_price : ""
   item ||--o{ forecast : ""
+  item ||--o{ forecast_backtest : ""
   item ||--o{ sale_record : ""
   item ||--o{ item_producing_area : ""
   item ||--o{ past_case : ""
@@ -42,6 +43,7 @@ erDiagram
   market ||--o{ auction_trade : ""
   market ||--o{ realtime_price : ""
   market ||--o{ forecast : ""
+  market ||--o{ forecast_backtest : ""
   market ||--o{ sale_record : ""
   market ||--o{ market_closure : ""
 
@@ -425,6 +427,7 @@ erDiagram
 | `realtime_price` | trade_date(정산일자. 전날 오후 경매분 포함, settle_price와 같은 기준), market_id, item_id, avg_price(물량 가중, 원/kg), min_price, max_price, volume_kg, trade_count, last_auction_at(UTC), updated_at(UTC) | UK(trade_date, market_id, item_id) `uk_realtime_price`. Flink `realtime_price` 작업이 UPSERT (`source_key`로 중복 제거 후 집계). **구현됨** (`prices` 앱) | REQ-PRC-004 |
 | `sale_record` | user_id, sale_date, market_id, item_id, grade, volume_kg, amount_won, created_at | grade 기본 `ALL`(settle_price.grade와 같은 값), amount_won은 총액(원). 평균 대비 %는 저장하지 않고 조회 때 settle_price(같은 날짜·시장·품목·등급)와 맞춰 계산. 인덱스 `idx_sale_user_date`(user_id, sale_date). **구현됨** (`accounts` 앱) | REQ-SAL-001~003 |
 | `forecast` | item_id, market_id, base_week(예측 기준 월요일), horizon(1~4), target_week, pred_price, lower80, upper80, last_week_price, model_version, created_at | UK(item_id, market_id, base_week, horizon) `uk_forecast`. 지난 예측도 지우지 않음. h1의 target_week = base_week(이번 주), h4 = 3주 뒤. 값 채우기는 `ml/` 예측 작업(김기현). **구현됨** (`prices` 앱) | REQ-PRD-001~005 |
+| `forecast_backtest` | item_id, market_id, target_week(대상 주 월요일), horizon(1~4), pred_price, lower80, upper80, model_version(예: `v4-backtest`), created_at | UK(item_id, market_id, target_week, horizon) `uk_forecast_backtest`. 검증 예측: 서비스 예측(`forecast`)이 없던 기간을 모델 검증(OOF·테스트) 때의 예측으로 채운다. 그 주 이전 데이터로만 학습한 값이지만 그때 실제로 보여 준 예측이 아니라서 `forecast`와 섞지 않는다. 값 채우기는 `ml/farmit_ml/backtest_store.py`(김기현). **구현됨** (`prices` 앱) | REQ-PRD-005 |
 | `market_route` | sido, sigungu(출발지, user_profile과 같은 표기), market_id, distance_m(도로 거리 m), toll_won(통행료 원, 1종 차량·하이패스 아님), duration_s(소요 시간 초, 참고용), fetched_at(UTC) | UK(sido, sigungu, market_id) `uk_market_route`. 시군구 중심 → 시장의 카카오모빌리티 자동차 길찾기 결과를 저장해 다시 쓴다. 그 시군구 회원이 판매 추천을 처음 열 때 채운다(`prices/routes.py`). 시장 좌표를 고치면 그 시장 행을 지워 다시 받는다. market CASCADE. **구현됨** (`prices` 앱) | REQ-REC-002 |
 | `special_event` | event_type(WARNING·IMPORT_SURGE·PEST_INCREASE·GOV_NOTICE), item_id(없으면 NULL), sido, sigungu(NULL이면 시도 전체), occurred_at, title, detail(JSON: 비교 수치 등), source_url, source_ref | 특수 상황 1건 = 1행. UK(event_type, source_ref) `uq_special_event_source`. 기상특보는 source_ref = `source_key:status`, 상태가 발표·변경발표일 때만 만든다. 수입량 급증은 `batch/spark/alert_rules.py`가 만들고 sido = `전국`, source_ref = `hs_code:YYYY-MM`, occurred_at = 그달 1일 00:00(한국)의 UTC. 예찰 증가도 같은 작업이 만들고 sido = 주산지 표기(회원 프로필과 같은 옛 시도 이름), source_ref = `item_id:sigungu_code:YYYY-MM-DD`(품목·시군·조사일 하나), occurred_at = 조사 기준일 00:00(한국)의 UTC, detail.pests = 기준을 넘은 항목 목록. **구현됨** (`alerts` 앱) | REQ-ALT-001, 004~006 |
 | `alert` | user_id, special_event_id, created_at, read_at | 회원별 알림. read_at이 NULL이면 안 읽음. UK(user_id, special_event_id) `uq_alert_user_event`. 수입량 급증·예찰 증가 알림은 `batch/spark/alert_rules.py`가 최근 60일 사건만 INSERT IGNORE로 만든다 (수입량: 관심 품목 회원 모두, 예찰: 관심 품목 회원 중 프로필 시도·시군이 같은 회원). **구현됨** (`alerts` 앱) | REQ-ALT-003~005 |

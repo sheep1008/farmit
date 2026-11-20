@@ -23,7 +23,7 @@ AUCTION_END_HOUR = 17
 # 정산 수집기(collectors/settle)가 쓰는 collect_log.source 값
 SETTLE_SOURCE = 'at_settle'
 # 기간 제한 (api.md 2.3): 일 단위는 최대 1년, 주·월 단위는 최대 5년. 윤일에 걸리지 않게 일수가 아니라 연으로 센다
-MAX_YEARS = {'day': 1, 'week': 5, 'month': 5}
+MAX_YEARS = {'day': 5, 'week': 5, 'month': 5}
 UNITS = tuple(MAX_YEARS)
 # 받아들이는 날짜 범위. 너무 먼 날짜는 전년 계산에서 오류가 나므로 입력에서 막는다
 MIN_DATE, MAX_DATE = date(2000, 1, 1), date(2100, 12, 31)
