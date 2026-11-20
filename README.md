@@ -210,6 +210,76 @@ docker compose -f infra/docker-compose.yml --profile auction run --rm auction-pr
   ```
 - 제출된 작업 설정에는 DB 비밀번호가 들어 있어 Flink 웹 UI(내 PC에서만 열림)에서 보인다. 배포 설정에서는 다른 방법이 필요하다.
 
+## 배포 (AWS Lightsail, Ubuntu 24.04)
+
+개발용 `docker-compose.yml` 위에 덮어쓰기 파일을 겹쳐서 띄운다. 서버는 `master` 브랜치를 받는다.
+
+| 파일 | 하는 일 |
+|---|---|
+| `infra/docker-compose.prod.yml` | gunicorn, Nginx가 화면 서빙, 외부 포트는 80뿐, 메모리 제한, 자동 재시작 |
+| `infra/docker-compose.https.yml` | 443 + 인증서 + 자동 갱신(`certbot`). 인증서를 받은 뒤부터 붙인다 |
+| `infra/scripts/server-setup.sh` | 서버 초기 설정 (Docker, 로그 크기 제한, 스왑 4GB, UTC) |
+| `infra/scripts/issue-cert.sh` | HTTPS 인증서 첫 발급 |
+| `infra/scripts/deploy-check.sh` | 배포 점검 (health, 외부 포트, 응답 시간, Flink, Airflow) |
+
+### 처음 배포
+
+콘솔에서 먼저 한다: Lightsail 인스턴스(8GB) 생성, 고정 IP 연결, 방화벽은 22(내 IP만)·80·443만 연다. 도메인 A 레코드를 고정 IP로 건다.
+
+```bash
+# 1. 코드 받기 + 서버 초기 설정 (끝나면 로그아웃했다가 다시 접속해야 docker 그룹이 적용된다)
+git clone -b master https://lab.ssafy.com/s16/b05/pjt/999_final/final_kimkihyun_yangjeongho.git farmit && cd farmit
+sudo bash infra/scripts/server-setup.sh
+
+# 2. 환경 변수: 빈 값을 채운다. DJANGO_ALLOWED_HOSTS에는 도메인을 적는다 (이 값으로 인증서도 받는다)
+cp .env.prod.example .env && chmod 600 .env && nano .env
+
+# 3. 띄우기 (HTTP). 명령이 길어서 변수에 담아 쓴다
+DC="docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --profile airflow --profile auction"
+$DC up -d --build
+
+# 4. 인증서 받기 → Nginx가 HTTPS로 바뀐다. 이제부터는 https.yml을 같이 붙인다
+bash infra/scripts/issue-cert.sh
+DC="docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml -f infra/docker-compose.https.yml --profile airflow --profile auction"
+
+# 5. 초기 데이터: 시장·품목 코드, 상담 근거 자료 수집(병해충·현장사례만 외부 API 약 1,900번·약 25분) → 색인
+$DC exec backend python manage.py loaddata markets_collect markets_national items
+$DC exec backend python manage.py rag_collect
+$DC exec backend python manage.py rag_index
+
+# 6. Flink 작업 제출 (Flink 컨테이너가 다시 뜰 때마다 다시 한다)
+for j in weather_warning auction_trade realtime_price; do bash streaming/flink/submit.sh $j; done
+
+# 7. 점검. 실패 항목이 없어야 한다
+bash infra/scripts/deploy-check.sh https://도메인
+```
+
+- Airflow DAG는 새 서버에서 모두 꺼져 있다. 관리 화면에서 켠다 (아래 SSH 터널).
+- 관리 포트의 외부 차단 확인은 서버 밖에서 봐야 정확하다. 내 PC(Git Bash)에서도 `bash infra/scripts/deploy-check.sh https://도메인`을 한 번 실행한다.
+- 인증서는 `certbot` 컨테이너가 12시간마다 확인해 만료 30일 전에 갱신하고, Nginx가 하루 한 번 다시 읽는다.
+
+### 수정한 코드 반영
+
+개발은 지금처럼 각자 PC에서 하고 `develop`으로 MR 한다. 서버에 올릴 때 `develop` → `master` MR을 합친 뒤, 서버에서:
+
+```bash
+cd farmit && git pull
+DC="docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml -f infra/docker-compose.https.yml --profile airflow --profile auction"
+$DC up -d --build                                 # 코드가 이미지 안에 있어서 --build가 있어야 반영된다. migrate는 backend가 뜰 때 돈다
+bash infra/scripts/deploy-check.sh https://도메인   # Flink 작업이 빠졌으면 여기서 알려 준다 → submit.sh
+```
+
+- 환경 변수가 새로 생겼으면 서버의 `.env`에도 직접 넣는다 (`.env`는 git에 없다).
+- 반영하는 사람은 서버 SSH 접속이 필요하다. 각자 키를 만들어 공개 키를 서버 `~/.ssh/authorized_keys`에 추가하고(`.pem` 파일을 주고받지 않는다), Lightsail 방화벽 22번에 그 사람 IP를 넣는다.
+
+### 관리 화면 보기 (SSH 터널)
+
+Airflow·Flink·ES·Kibana는 서버의 `127.0.0.1`에만 열려 있다. 내 PC에서 터널을 건 뒤 `http://localhost:8080` 처럼 연다.
+
+```bash
+ssh -i <키 파일> -L 8080:localhost:8080 -L 8081:localhost:8081 ubuntu@<서버 IP>   # 8080 Airflow, 8081 Flink
+```
+
 ## 개발 규칙
 
 - **시간:** DB에는 UTC로 저장하고(Django `USE_TZ=True`, MySQL `default-time-zone=+00:00`), 화면·API 응답에서 Asia/Seoul로 바꿔 보여 준다. 수집기·배치도 UTC로 저장한다.
