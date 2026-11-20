@@ -5,6 +5,7 @@ import AppFooter from './components/layout/AppFooter.vue'
 import AppTabBar from './components/layout/AppTabBar.vue'
 import SectionTabs from './components/layout/SectionTabs.vue'
 import ToastList from './components/ToastList.vue'
+import GuideChat from './components/guide/GuideChat.vue'
 </script>
 
 <template>
@@ -15,6 +16,7 @@ import ToastList from './components/ToastList.vue'
   </main>
   <AppFooter />
   <AppTabBar />
+  <GuideChat />
   <ToastList />
 </template>
 
