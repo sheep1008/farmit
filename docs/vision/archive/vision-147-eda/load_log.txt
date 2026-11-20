@@ -1,0 +1,5 @@
+라벨 수 150337
+키 구조(top, description, annotations) 별 개수
+  150337 (('annotations', 'description'), ('date', 'height', 'image', 'region', 'task', 'type', 'width', 'worker'), ('area', 'crop', 'disease', 'grow', 'points', 'risk'))
+이상 {}
+알려지지 않은 추가 필드 {}

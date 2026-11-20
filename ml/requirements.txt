@@ -1,0 +1,13 @@
+# 참고 저장소(ml_kimkihyun_yangjeongho)에서 결과를 낸 버전과 같게 고정한다
+pandas==3.0.5
+numpy==2.5.1
+scikit-learn==1.9.1
+lightgbm==4.7.0
+xgboost==3.4.1
+mlflow==3.17.1
+# forecast 테이블 적재 (farmit_ml.store). 수집기(collectors/requirements.txt)와 같은 버전
+PyMySQL==1.1.1
+cryptography==43.0.3
+# torch는 CPU 버전만 쓴다. 이 파일보다 먼저 설치한다: pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1
+pytest

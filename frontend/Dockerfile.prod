@@ -1,0 +1,21 @@
+# 배포용 이미지: Vue를 빌드해 정적 파일로 만들고 Nginx가 내보낸다 (T02). 개발용은 Dockerfile(Vite dev server)
+# 1단계(build)에서 만든 dist/만 2단계로 복사하므로 최종 이미지에는 Node·node_modules가 없다
+
+FROM node:22.18.0-alpine AS build
+
+WORKDIR /app
+
+# package*.json만 먼저 복사해 의존성 설치 층을 캐시한다 (Dockerfile과 같은 방식)
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+FROM nginx:1.28.0-alpine
+
+# 빌드 결과(index.html + assets/)를 Nginx 기본 문서 폴더에 넣는다
+# Nginx 설정(infra/nginx/default.conf)은 compose가 마운트한다. HTTPS를 붙일 때(T03) 이미지를 다시 빌드하지 않게
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80

@@ -1,0 +1,20 @@
+{
+ "version": "v3",
+ "item_code": "0601",
+ "item_name": "사과",
+ "data_file": "apple_weekly.csv",
+ "horizons": [1, 2, 3, 4],
+ "seed": 42,
+ "lstm_seeds": 5,
+ "interval": {
+  "level": 0.8,
+  "method": "v3 테스트(2025-01 ~ 2026-10) 상대잔차 (실제 − 예측) / 예측 의 10%·90% 분위수. 하한 = 예측 × (1 + lo), 상한 = 예측 × (1 + hi)",
+  "quantiles": {
+   "1": [-0.10963, 0.14342],
+   "2": [-0.13258, 0.17432],
+   "3": [-0.13657, 0.18578],
+   "4": [-0.15706, 0.21413]
+  }
+ },
+ "source": "ml_kimkihyun_yangjeongho 저장소 08_more_experiments (v3 최종 + 후처리). 나머지 json은 그 저장소 reports/config에서 그대로 복사했다 (final_choice = final_choice_v3, postprocess = postprocess_v3)"
+}

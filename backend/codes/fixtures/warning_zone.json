@@ -1,0 +1,2480 @@
+[
+ {
+  "region_code": "L1010000",
+  "name": "경기도",
+  "sido": "경기도",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1010200",
+  "name": "광명시",
+  "sido": "경기도",
+  "sigungu": "광명시"
+ },
+ {
+  "region_code": "L1010300",
+  "name": "과천시",
+  "sido": "경기도",
+  "sigungu": "과천시"
+ },
+ {
+  "region_code": "L1010400",
+  "name": "안산시",
+  "sido": "경기도",
+  "sigungu": "안산시"
+ },
+ {
+  "region_code": "L1010500",
+  "name": "시흥시",
+  "sido": "경기도",
+  "sigungu": "시흥시"
+ },
+ {
+  "region_code": "L1010600",
+  "name": "부천시",
+  "sido": "경기도",
+  "sigungu": "부천시"
+ },
+ {
+  "region_code": "L1010700",
+  "name": "김포시",
+  "sido": "경기도",
+  "sigungu": "김포시"
+ },
+ {
+  "region_code": "L1010900",
+  "name": "강화군",
+  "sido": "인천광역시",
+  "sigungu": "강화군"
+ },
+ {
+  "region_code": "L1011100",
+  "name": "동두천시",
+  "sido": "경기도",
+  "sigungu": "동두천시"
+ },
+ {
+  "region_code": "L1011200",
+  "name": "연천군",
+  "sido": "경기도",
+  "sigungu": "연천군"
+ },
+ {
+  "region_code": "L1011300",
+  "name": "포천시",
+  "sido": "경기도",
+  "sigungu": "포천시"
+ },
+ {
+  "region_code": "L1011400",
+  "name": "가평군",
+  "sido": "경기도",
+  "sigungu": "가평군"
+ },
+ {
+  "region_code": "L1011500",
+  "name": "고양시",
+  "sido": "경기도",
+  "sigungu": "고양시"
+ },
+ {
+  "region_code": "L1011600",
+  "name": "양주시",
+  "sido": "경기도",
+  "sigungu": "양주시"
+ },
+ {
+  "region_code": "L1011700",
+  "name": "의정부시",
+  "sido": "경기도",
+  "sigungu": "의정부시"
+ },
+ {
+  "region_code": "L1011900",
+  "name": "수원시",
+  "sido": "경기도",
+  "sigungu": "수원시"
+ },
+ {
+  "region_code": "L1012000",
+  "name": "성남시",
+  "sido": "경기도",
+  "sigungu": "성남시"
+ },
+ {
+  "region_code": "L1012100",
+  "name": "안양시",
+  "sido": "경기도",
+  "sigungu": "안양시"
+ },
+ {
+  "region_code": "L1012200",
+  "name": "구리시",
+  "sido": "경기도",
+  "sigungu": "구리시"
+ },
+ {
+  "region_code": "L1012300",
+  "name": "남양주시",
+  "sido": "경기도",
+  "sigungu": "남양주시"
+ },
+ {
+  "region_code": "L1012400",
+  "name": "오산시",
+  "sido": "경기도",
+  "sigungu": "오산시"
+ },
+ {
+  "region_code": "L1012500",
+  "name": "평택시",
+  "sido": "경기도",
+  "sigungu": "평택시"
+ },
+ {
+  "region_code": "L1012600",
+  "name": "군포시",
+  "sido": "경기도",
+  "sigungu": "군포시"
+ },
+ {
+  "region_code": "L1012700",
+  "name": "의왕시",
+  "sido": "경기도",
+  "sigungu": "의왕시"
+ },
+ {
+  "region_code": "L1012800",
+  "name": "하남시",
+  "sido": "경기도",
+  "sigungu": "하남시"
+ },
+ {
+  "region_code": "L1013000",
+  "name": "이천시",
+  "sido": "경기도",
+  "sigungu": "이천시"
+ },
+ {
+  "region_code": "L1013100",
+  "name": "안성시",
+  "sido": "경기도",
+  "sigungu": "안성시"
+ },
+ {
+  "region_code": "L1013200",
+  "name": "화성시",
+  "sido": "경기도",
+  "sigungu": "화성시"
+ },
+ {
+  "region_code": "L1013400",
+  "name": "광주시",
+  "sido": "경기도",
+  "sigungu": "광주시"
+ },
+ {
+  "region_code": "L1013600",
+  "name": "옹진군",
+  "sido": "인천광역시",
+  "sigungu": "옹진군"
+ },
+ {
+  "region_code": "L1013700",
+  "name": "파주시",
+  "sido": "경기도",
+  "sigungu": "파주시"
+ },
+ {
+  "region_code": "L1013710",
+  "name": "파주시동북부",
+  "sido": "경기도",
+  "sigungu": "파주시"
+ },
+ {
+  "region_code": "L1013720",
+  "name": "파주시서북부",
+  "sido": "경기도",
+  "sigungu": "파주시"
+ },
+ {
+  "region_code": "L1013730",
+  "name": "파주시남부",
+  "sido": "경기도",
+  "sigungu": "파주시"
+ },
+ {
+  "region_code": "L1013800",
+  "name": "용인시",
+  "sido": "경기도",
+  "sigungu": "용인시"
+ },
+ {
+  "region_code": "L1013810",
+  "name": "용인시동북부",
+  "sido": "경기도",
+  "sigungu": "용인시"
+ },
+ {
+  "region_code": "L1013820",
+  "name": "용인시서북부",
+  "sido": "경기도",
+  "sigungu": "용인시"
+ },
+ {
+  "region_code": "L1013830",
+  "name": "용인시남부",
+  "sido": "경기도",
+  "sigungu": "용인시"
+ },
+ {
+  "region_code": "L1013900",
+  "name": "여주시",
+  "sido": "경기도",
+  "sigungu": "여주시"
+ },
+ {
+  "region_code": "L1013910",
+  "name": "여주시동남부",
+  "sido": "경기도",
+  "sigungu": "여주시"
+ },
+ {
+  "region_code": "L1013920",
+  "name": "여주시서부",
+  "sido": "경기도",
+  "sigungu": "여주시"
+ },
+ {
+  "region_code": "L1014000",
+  "name": "서해5도",
+  "sido": "인천광역시",
+  "sigungu": "옹진군"
+ },
+ {
+  "region_code": "L1014200",
+  "name": "백령도.대청도",
+  "sido": "인천광역시",
+  "sigungu": "옹진군"
+ },
+ {
+  "region_code": "L1014300",
+  "name": "연평도.우도",
+  "sido": "인천광역시",
+  "sigungu": "옹진군"
+ },
+ {
+  "region_code": "L1014400",
+  "name": "양평군",
+  "sido": "경기도",
+  "sigungu": "양평군"
+ },
+ {
+  "region_code": "L1014410",
+  "name": "양평군동부",
+  "sido": "경기도",
+  "sigungu": "양평군"
+ },
+ {
+  "region_code": "L1014420",
+  "name": "양평군서부",
+  "sido": "경기도",
+  "sigungu": "양평군"
+ },
+ {
+  "region_code": "L1020000",
+  "name": "강원도",
+  "sido": "강원특별자치도",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1020300",
+  "name": "태백시",
+  "sido": "강원특별자치도",
+  "sigungu": "태백시"
+ },
+ {
+  "region_code": "L1020800",
+  "name": "영월군",
+  "sido": "강원특별자치도",
+  "sigungu": "영월군"
+ },
+ {
+  "region_code": "L1021100",
+  "name": "횡성군",
+  "sido": "강원특별자치도",
+  "sigungu": "횡성군"
+ },
+ {
+  "region_code": "L1021200",
+  "name": "원주시",
+  "sido": "강원특별자치도",
+  "sigungu": "원주시"
+ },
+ {
+  "region_code": "L1021300",
+  "name": "철원군",
+  "sido": "강원특별자치도",
+  "sigungu": "철원군"
+ },
+ {
+  "region_code": "L1021400",
+  "name": "화천군",
+  "sido": "강원특별자치도",
+  "sigungu": "화천군"
+ },
+ {
+  "region_code": "L1021600",
+  "name": "춘천시",
+  "sido": "강원특별자치도",
+  "sigungu": "춘천시"
+ },
+ {
+  "region_code": "L1021900",
+  "name": "동해시",
+  "sido": "강원특별자치도",
+  "sigungu": "동해시"
+ },
+ {
+  "region_code": "L1021910",
+  "name": "동해시평지",
+  "sido": "강원특별자치도",
+  "sigungu": "동해시"
+ },
+ {
+  "region_code": "L1021920",
+  "name": "동해시산지",
+  "sido": "강원특별자치도",
+  "sigungu": "동해시"
+ },
+ {
+  "region_code": "L1022000",
+  "name": "삼척시",
+  "sido": "강원특별자치도",
+  "sigungu": "삼척시"
+ },
+ {
+  "region_code": "L1022010",
+  "name": "삼척시평지",
+  "sido": "강원특별자치도",
+  "sigungu": "삼척시"
+ },
+ {
+  "region_code": "L1022020",
+  "name": "삼척시산지",
+  "sido": "강원특별자치도",
+  "sigungu": "삼척시"
+ },
+ {
+  "region_code": "L1022100",
+  "name": "속초시",
+  "sido": "강원특별자치도",
+  "sigungu": "속초시"
+ },
+ {
+  "region_code": "L1022110",
+  "name": "속초시평지",
+  "sido": "강원특별자치도",
+  "sigungu": "속초시"
+ },
+ {
+  "region_code": "L1022120",
+  "name": "속초시산지",
+  "sido": "강원특별자치도",
+  "sigungu": "속초시"
+ },
+ {
+  "region_code": "L1022200",
+  "name": "고성군",
+  "sido": "강원특별자치도",
+  "sigungu": "고성군"
+ },
+ {
+  "region_code": "L1022210",
+  "name": "고성군평지",
+  "sido": "강원특별자치도",
+  "sigungu": "고성군"
+ },
+ {
+  "region_code": "L1022220",
+  "name": "고성군산지",
+  "sido": "강원특별자치도",
+  "sigungu": "고성군"
+ },
+ {
+  "region_code": "L1022300",
+  "name": "양양군",
+  "sido": "강원특별자치도",
+  "sigungu": "양양군"
+ },
+ {
+  "region_code": "L1022310",
+  "name": "양양군평지",
+  "sido": "강원특별자치도",
+  "sigungu": "양양군"
+ },
+ {
+  "region_code": "L1022320",
+  "name": "양양군산지",
+  "sido": "강원특별자치도",
+  "sigungu": "양양군"
+ },
+ {
+  "region_code": "L1022400",
+  "name": "평창군",
+  "sido": "강원특별자치도",
+  "sigungu": "평창군"
+ },
+ {
+  "region_code": "L1022410",
+  "name": "평창군평지",
+  "sido": "강원특별자치도",
+  "sigungu": "평창군"
+ },
+ {
+  "region_code": "L1022420",
+  "name": "평창군산지",
+  "sido": "강원특별자치도",
+  "sigungu": "평창군"
+ },
+ {
+  "region_code": "L1022500",
+  "name": "강릉시",
+  "sido": "강원특별자치도",
+  "sigungu": "강릉시"
+ },
+ {
+  "region_code": "L1022510",
+  "name": "강릉시평지",
+  "sido": "강원특별자치도",
+  "sigungu": "강릉시"
+ },
+ {
+  "region_code": "L1022520",
+  "name": "강릉시산지",
+  "sido": "강원특별자치도",
+  "sigungu": "강릉시"
+ },
+ {
+  "region_code": "L1022600",
+  "name": "정선군",
+  "sido": "강원특별자치도",
+  "sigungu": "정선군"
+ },
+ {
+  "region_code": "L1022610",
+  "name": "정선군평지",
+  "sido": "강원특별자치도",
+  "sigungu": "정선군"
+ },
+ {
+  "region_code": "L1022620",
+  "name": "정선군산지",
+  "sido": "강원특별자치도",
+  "sigungu": "정선군"
+ },
+ {
+  "region_code": "L1022700",
+  "name": "홍천군",
+  "sido": "강원특별자치도",
+  "sigungu": "홍천군"
+ },
+ {
+  "region_code": "L1022710",
+  "name": "홍천군평지",
+  "sido": "강원특별자치도",
+  "sigungu": "홍천군"
+ },
+ {
+  "region_code": "L1022720",
+  "name": "홍천군산지",
+  "sido": "강원특별자치도",
+  "sigungu": "홍천군"
+ },
+ {
+  "region_code": "L1022800",
+  "name": "양구군",
+  "sido": "강원특별자치도",
+  "sigungu": "양구군"
+ },
+ {
+  "region_code": "L1022810",
+  "name": "양구군평지",
+  "sido": "강원특별자치도",
+  "sigungu": "양구군"
+ },
+ {
+  "region_code": "L1022820",
+  "name": "양구군산지",
+  "sido": "강원특별자치도",
+  "sigungu": "양구군"
+ },
+ {
+  "region_code": "L1022900",
+  "name": "인제군",
+  "sido": "강원특별자치도",
+  "sigungu": "인제군"
+ },
+ {
+  "region_code": "L1022910",
+  "name": "인제군평지",
+  "sido": "강원특별자치도",
+  "sigungu": "인제군"
+ },
+ {
+  "region_code": "L1022920",
+  "name": "인제군산지",
+  "sido": "강원특별자치도",
+  "sigungu": "인제군"
+ },
+ {
+  "region_code": "L1030000",
+  "name": "충청남도",
+  "sido": "충청남도",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1030100",
+  "name": "대전광역시",
+  "sido": "대전광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1030200",
+  "name": "천안시",
+  "sido": "충청남도",
+  "sigungu": "천안시"
+ },
+ {
+  "region_code": "L1030300",
+  "name": "공주시",
+  "sido": "충청남도",
+  "sigungu": "공주시"
+ },
+ {
+  "region_code": "L1030400",
+  "name": "아산시",
+  "sido": "충청남도",
+  "sigungu": "아산시"
+ },
+ {
+  "region_code": "L1030500",
+  "name": "논산시",
+  "sido": "충청남도",
+  "sigungu": "논산시"
+ },
+ {
+  "region_code": "L1030600",
+  "name": "금산군",
+  "sido": "충청남도",
+  "sigungu": "금산군"
+ },
+ {
+  "region_code": "L1030800",
+  "name": "부여군",
+  "sido": "충청남도",
+  "sigungu": "부여군"
+ },
+ {
+  "region_code": "L1030900",
+  "name": "청양군",
+  "sido": "충청남도",
+  "sigungu": "청양군"
+ },
+ {
+  "region_code": "L1031000",
+  "name": "예산군",
+  "sido": "충청남도",
+  "sigungu": "예산군"
+ },
+ {
+  "region_code": "L1031100",
+  "name": "태안군",
+  "sido": "충청남도",
+  "sigungu": "태안군"
+ },
+ {
+  "region_code": "L1031200",
+  "name": "당진시",
+  "sido": "충청남도",
+  "sigungu": "당진시"
+ },
+ {
+  "region_code": "L1031300",
+  "name": "서산시",
+  "sido": "충청남도",
+  "sigungu": "서산시"
+ },
+ {
+  "region_code": "L1031500",
+  "name": "서천군",
+  "sido": "충청남도",
+  "sigungu": "서천군"
+ },
+ {
+  "region_code": "L1031700",
+  "name": "계룡시",
+  "sido": "충청남도",
+  "sigungu": "계룡시"
+ },
+ {
+  "region_code": "L1031900",
+  "name": "보령시",
+  "sido": "충청남도",
+  "sigungu": "보령시"
+ },
+ {
+  "region_code": "L1031910",
+  "name": "보령(도서제외)",
+  "sido": "충청남도",
+  "sigungu": "보령시"
+ },
+ {
+  "region_code": "L1031920",
+  "name": "보령도서",
+  "sido": "충청남도",
+  "sigungu": "보령시"
+ },
+ {
+  "region_code": "L1032000",
+  "name": "홍성군",
+  "sido": "충청남도",
+  "sigungu": "홍성군"
+ },
+ {
+  "region_code": "L1032010",
+  "name": "홍성군동부",
+  "sido": "충청남도",
+  "sigungu": "홍성군"
+ },
+ {
+  "region_code": "L1032020",
+  "name": "홍성군서부",
+  "sido": "충청남도",
+  "sigungu": "홍성군"
+ },
+ {
+  "region_code": "L1040000",
+  "name": "충청북도",
+  "sido": "충청북도",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1040300",
+  "name": "보은군",
+  "sido": "충청북도",
+  "sigungu": "보은군"
+ },
+ {
+  "region_code": "L1040400",
+  "name": "괴산군",
+  "sido": "충청북도",
+  "sigungu": "괴산군"
+ },
+ {
+  "region_code": "L1040600",
+  "name": "옥천군",
+  "sido": "충청북도",
+  "sigungu": "옥천군"
+ },
+ {
+  "region_code": "L1040700",
+  "name": "영동군",
+  "sido": "충청북도",
+  "sigungu": "영동군"
+ },
+ {
+  "region_code": "L1040800",
+  "name": "충주시",
+  "sido": "충청북도",
+  "sigungu": "충주시"
+ },
+ {
+  "region_code": "L1040900",
+  "name": "제천시",
+  "sido": "충청북도",
+  "sigungu": "제천시"
+ },
+ {
+  "region_code": "L1041000",
+  "name": "진천군",
+  "sido": "충청북도",
+  "sigungu": "진천군"
+ },
+ {
+  "region_code": "L1041100",
+  "name": "음성군",
+  "sido": "충청북도",
+  "sigungu": "음성군"
+ },
+ {
+  "region_code": "L1041200",
+  "name": "단양군",
+  "sido": "충청북도",
+  "sigungu": "단양군"
+ },
+ {
+  "region_code": "L1041300",
+  "name": "증평군",
+  "sido": "충청북도",
+  "sigungu": "증평군"
+ },
+ {
+  "region_code": "L1041400",
+  "name": "청주시",
+  "sido": "충청북도",
+  "sigungu": "청주시"
+ },
+ {
+  "region_code": "L1041410",
+  "name": "청주시동부",
+  "sido": "충청북도",
+  "sigungu": "청주시"
+ },
+ {
+  "region_code": "L1041420",
+  "name": "청주시서부",
+  "sido": "충청북도",
+  "sigungu": "청주시"
+ },
+ {
+  "region_code": "L1050000",
+  "name": "전라남도",
+  "sido": "전라남도",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1050300",
+  "name": "담양군",
+  "sido": "전라남도",
+  "sigungu": "담양군"
+ },
+ {
+  "region_code": "L1050600",
+  "name": "장성군",
+  "sido": "전라남도",
+  "sigungu": "장성군"
+ },
+ {
+  "region_code": "L1050700",
+  "name": "화순군",
+  "sido": "전라남도",
+  "sigungu": "화순군"
+ },
+ {
+  "region_code": "L1050900",
+  "name": "보성군",
+  "sido": "전라남도",
+  "sigungu": "보성군"
+ },
+ {
+  "region_code": "L1051000",
+  "name": "여수시",
+  "sido": "전라남도",
+  "sigungu": "여수시"
+ },
+ {
+  "region_code": "L1051100",
+  "name": "광양시",
+  "sido": "전라남도",
+  "sigungu": "광양시"
+ },
+ {
+  "region_code": "L1051200",
+  "name": "순천시",
+  "sido": "전라남도",
+  "sigungu": "순천시"
+ },
+ {
+  "region_code": "L1051300",
+  "name": "장흥군",
+  "sido": "전라남도",
+  "sigungu": "장흥군"
+ },
+ {
+  "region_code": "L1051400",
+  "name": "강진군",
+  "sido": "전라남도",
+  "sigungu": "강진군"
+ },
+ {
+  "region_code": "L1051700",
+  "name": "영암군",
+  "sido": "전라남도",
+  "sigungu": "영암군"
+ },
+ {
+  "region_code": "L1051900",
+  "name": "함평군",
+  "sido": "전라남도",
+  "sigungu": "함평군"
+ },
+ {
+  "region_code": "L1052100",
+  "name": "목포시",
+  "sido": "전라남도",
+  "sigungu": "목포시"
+ },
+ {
+  "region_code": "L1052200",
+  "name": "신안군(흑산면제외)",
+  "sido": "전라남도",
+  "sigungu": "신안군"
+ },
+ {
+  "region_code": "L1052300",
+  "name": "진도군",
+  "sido": "전라남도",
+  "sigungu": "진도군"
+ },
+ {
+  "region_code": "L1052400",
+  "name": "흑산도.홍도",
+  "sido": "전라남도",
+  "sigungu": "신안군"
+ },
+ {
+  "region_code": "L1052500",
+  "name": "흑산도.홍도",
+  "sido": "전라남도",
+  "sigungu": "신안군"
+ },
+ {
+  "region_code": "L1052600",
+  "name": "거문도.초도",
+  "sido": "전라남도",
+  "sigungu": "여수시"
+ },
+ {
+  "region_code": "L1052700",
+  "name": "영광군",
+  "sido": "전라남도",
+  "sigungu": "영광군"
+ },
+ {
+  "region_code": "L1052710",
+  "name": "영광군(낙월면 제외)",
+  "sido": "전라남도",
+  "sigungu": "영광군"
+ },
+ {
+  "region_code": "L1052720",
+  "name": "영광낙월면",
+  "sido": "전라남도",
+  "sigungu": "영광군"
+ },
+ {
+  "region_code": "L1052800",
+  "name": "나주시",
+  "sido": "전라남도",
+  "sigungu": "나주시"
+ },
+ {
+  "region_code": "L1052810",
+  "name": "나주시동남부",
+  "sido": "전라남도",
+  "sigungu": "나주시"
+ },
+ {
+  "region_code": "L1052820",
+  "name": "나주시서북부",
+  "sido": "전라남도",
+  "sigungu": "나주시"
+ },
+ {
+  "region_code": "L1052900",
+  "name": "곡성군",
+  "sido": "전라남도",
+  "sigungu": "곡성군"
+ },
+ {
+  "region_code": "L1052910",
+  "name": "곡성군북부",
+  "sido": "전라남도",
+  "sigungu": "곡성군"
+ },
+ {
+  "region_code": "L1052920",
+  "name": "곡성군남부",
+  "sido": "전라남도",
+  "sigungu": "곡성군"
+ },
+ {
+  "region_code": "L1053000",
+  "name": "구례군",
+  "sido": "전라남도",
+  "sigungu": "구례군"
+ },
+ {
+  "region_code": "L1053010",
+  "name": "구례군평지",
+  "sido": "전라남도",
+  "sigungu": "구례군"
+ },
+ {
+  "region_code": "L1053020",
+  "name": "구례군산간",
+  "sido": "전라남도",
+  "sigungu": "구례군"
+ },
+ {
+  "region_code": "L1053100",
+  "name": "고흥군",
+  "sido": "전라남도",
+  "sigungu": "고흥군"
+ },
+ {
+  "region_code": "L1053110",
+  "name": "고흥군북부",
+  "sido": "전라남도",
+  "sigungu": "고흥군"
+ },
+ {
+  "region_code": "L1053120",
+  "name": "고흥군남부",
+  "sido": "전라남도",
+  "sigungu": "고흥군"
+ },
+ {
+  "region_code": "L1053200",
+  "name": "해남군",
+  "sido": "전라남도",
+  "sigungu": "해남군"
+ },
+ {
+  "region_code": "L1053210",
+  "name": "해남군북부",
+  "sido": "전라남도",
+  "sigungu": "해남군"
+ },
+ {
+  "region_code": "L1053220",
+  "name": "해남군남부",
+  "sido": "전라남도",
+  "sigungu": "해남군"
+ },
+ {
+  "region_code": "L1053300",
+  "name": "완도군",
+  "sido": "전라남도",
+  "sigungu": "완도군"
+ },
+ {
+  "region_code": "L1053310",
+  "name": "완도군(여서도 제외)",
+  "sido": "전라남도",
+  "sigungu": "완도군"
+ },
+ {
+  "region_code": "L1053320",
+  "name": "완도군여서도",
+  "sido": "전라남도",
+  "sigungu": "완도군"
+ },
+ {
+  "region_code": "L1053400",
+  "name": "무안군",
+  "sido": "전라남도",
+  "sigungu": "무안군"
+ },
+ {
+  "region_code": "L1053410",
+  "name": "무안군북부",
+  "sido": "전라남도",
+  "sigungu": "무안군"
+ },
+ {
+  "region_code": "L1053420",
+  "name": "무안군남부",
+  "sido": "전라남도",
+  "sigungu": "무안군"
+ },
+ {
+  "region_code": "L1060000",
+  "name": "전북자치도",
+  "sido": "전북특별자치도",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1060100",
+  "name": "고창군",
+  "sido": "전북특별자치도",
+  "sigungu": "고창군"
+ },
+ {
+  "region_code": "L1060400",
+  "name": "김제시",
+  "sido": "전북특별자치도",
+  "sigungu": "김제시"
+ },
+ {
+  "region_code": "L1060500",
+  "name": "완주군",
+  "sido": "전북특별자치도",
+  "sigungu": "완주군"
+ },
+ {
+  "region_code": "L1060600",
+  "name": "진안군",
+  "sido": "전북특별자치도",
+  "sigungu": "진안군"
+ },
+ {
+  "region_code": "L1060700",
+  "name": "무주군",
+  "sido": "전북특별자치도",
+  "sigungu": "무주군"
+ },
+ {
+  "region_code": "L1060800",
+  "name": "장수군",
+  "sido": "전북특별자치도",
+  "sigungu": "장수군"
+ },
+ {
+  "region_code": "L1060900",
+  "name": "임실군",
+  "sido": "전북특별자치도",
+  "sigungu": "임실군"
+ },
+ {
+  "region_code": "L1061000",
+  "name": "순창군",
+  "sido": "전북특별자치도",
+  "sigungu": "순창군"
+ },
+ {
+  "region_code": "L1061100",
+  "name": "익산시",
+  "sido": "전북특별자치도",
+  "sigungu": "익산시"
+ },
+ {
+  "region_code": "L1061200",
+  "name": "정읍시",
+  "sido": "전북특별자치도",
+  "sigungu": "정읍시"
+ },
+ {
+  "region_code": "L1061300",
+  "name": "전주시",
+  "sido": "전북특별자치도",
+  "sigungu": "전주시"
+ },
+ {
+  "region_code": "L1061400",
+  "name": "남원시",
+  "sido": "전북특별자치도",
+  "sigungu": "남원시"
+ },
+ {
+  "region_code": "L1061500",
+  "name": "부안군",
+  "sido": "전북특별자치도",
+  "sigungu": "부안군"
+ },
+ {
+  "region_code": "L1061510",
+  "name": "부안군(위도면 제외)",
+  "sido": "전북특별자치도",
+  "sigungu": "부안군"
+ },
+ {
+  "region_code": "L1061520",
+  "name": "부안위도면",
+  "sido": "전북특별자치도",
+  "sigungu": "부안군"
+ },
+ {
+  "region_code": "L1061600",
+  "name": "군산시",
+  "sido": "전북특별자치도",
+  "sigungu": "군산시"
+ },
+ {
+  "region_code": "L1061610",
+  "name": "군산시(옥도면 제외)",
+  "sido": "전북특별자치도",
+  "sigungu": "군산시"
+ },
+ {
+  "region_code": "L1061620",
+  "name": "군산옥도면(어청도 제외)",
+  "sido": "전북특별자치도",
+  "sigungu": "군산시"
+ },
+ {
+  "region_code": "L1061630",
+  "name": "군산어청도",
+  "sido": "전북특별자치도",
+  "sigungu": "군산시"
+ },
+ {
+  "region_code": "L1070000",
+  "name": "경상북도",
+  "sido": "경상북도",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1070200",
+  "name": "군위군",
+  "sido": "대구광역시",
+  "sigungu": "군위군"
+ },
+ {
+  "region_code": "L1070300",
+  "name": "구미시",
+  "sido": "경상북도",
+  "sigungu": "구미시"
+ },
+ {
+  "region_code": "L1070400",
+  "name": "영천시",
+  "sido": "경상북도",
+  "sigungu": "영천시"
+ },
+ {
+  "region_code": "L1070500",
+  "name": "경산시",
+  "sido": "경상북도",
+  "sigungu": "경산시"
+ },
+ {
+  "region_code": "L1070700",
+  "name": "청도군",
+  "sido": "경상북도",
+  "sigungu": "청도군"
+ },
+ {
+  "region_code": "L1070800",
+  "name": "고령군",
+  "sido": "경상북도",
+  "sigungu": "고령군"
+ },
+ {
+  "region_code": "L1070900",
+  "name": "성주군",
+  "sido": "경상북도",
+  "sigungu": "성주군"
+ },
+ {
+  "region_code": "L1071000",
+  "name": "칠곡군",
+  "sido": "경상북도",
+  "sigungu": "칠곡군"
+ },
+ {
+  "region_code": "L1071200",
+  "name": "상주시",
+  "sido": "경상북도",
+  "sigungu": "상주시"
+ },
+ {
+  "region_code": "L1071300",
+  "name": "문경시",
+  "sido": "경상북도",
+  "sigungu": "문경시"
+ },
+ {
+  "region_code": "L1071400",
+  "name": "예천군",
+  "sido": "경상북도",
+  "sigungu": "예천군"
+ },
+ {
+  "region_code": "L1071600",
+  "name": "영주시",
+  "sido": "경상북도",
+  "sigungu": "영주시"
+ },
+ {
+  "region_code": "L1071700",
+  "name": "의성군",
+  "sido": "경상북도",
+  "sigungu": "의성군"
+ },
+ {
+  "region_code": "L1071800",
+  "name": "청송군",
+  "sido": "경상북도",
+  "sigungu": "청송군"
+ },
+ {
+  "region_code": "L1072100",
+  "name": "울릉도.독도",
+  "sido": "경상북도",
+  "sigungu": "울릉군"
+ },
+ {
+  "region_code": "L1072200",
+  "name": "영덕군",
+  "sido": "경상북도",
+  "sigungu": "영덕군"
+ },
+ {
+  "region_code": "L1072400",
+  "name": "포항시",
+  "sido": "경상북도",
+  "sigungu": "포항시"
+ },
+ {
+  "region_code": "L1072600",
+  "name": "김천시",
+  "sido": "경상북도",
+  "sigungu": "김천시"
+ },
+ {
+  "region_code": "L1072610",
+  "name": "김천시북부",
+  "sido": "경상북도",
+  "sigungu": "김천시"
+ },
+ {
+  "region_code": "L1072620",
+  "name": "김천시남부",
+  "sido": "경상북도",
+  "sigungu": "김천시"
+ },
+ {
+  "region_code": "L1072700",
+  "name": "안동시",
+  "sido": "경상북도",
+  "sigungu": "안동시"
+ },
+ {
+  "region_code": "L1072710",
+  "name": "안동시북부",
+  "sido": "경상북도",
+  "sigungu": "안동시"
+ },
+ {
+  "region_code": "L1072720",
+  "name": "안동시동남부",
+  "sido": "경상북도",
+  "sigungu": "안동시"
+ },
+ {
+  "region_code": "L1072730",
+  "name": "안동시서부",
+  "sido": "경상북도",
+  "sigungu": "안동시"
+ },
+ {
+  "region_code": "L1072800",
+  "name": "영양군",
+  "sido": "경상북도",
+  "sigungu": "영양군"
+ },
+ {
+  "region_code": "L1072810",
+  "name": "영양군평지",
+  "sido": "경상북도",
+  "sigungu": "영양군"
+ },
+ {
+  "region_code": "L1072820",
+  "name": "영양군산지",
+  "sido": "경상북도",
+  "sigungu": "영양군"
+ },
+ {
+  "region_code": "L1072900",
+  "name": "봉화군",
+  "sido": "경상북도",
+  "sigungu": "봉화군"
+ },
+ {
+  "region_code": "L1072910",
+  "name": "봉화군평지",
+  "sido": "경상북도",
+  "sigungu": "봉화군"
+ },
+ {
+  "region_code": "L1072920",
+  "name": "봉화군산지",
+  "sido": "경상북도",
+  "sigungu": "봉화군"
+ },
+ {
+  "region_code": "L1073000",
+  "name": "울진군",
+  "sido": "경상북도",
+  "sigungu": "울진군"
+ },
+ {
+  "region_code": "L1073010",
+  "name": "울진군평지",
+  "sido": "경상북도",
+  "sigungu": "울진군"
+ },
+ {
+  "region_code": "L1073020",
+  "name": "울진군산지",
+  "sido": "경상북도",
+  "sigungu": "울진군"
+ },
+ {
+  "region_code": "L1073100",
+  "name": "경주시",
+  "sido": "경상북도",
+  "sigungu": "경주시"
+ },
+ {
+  "region_code": "L1073110",
+  "name": "경주시중북부",
+  "sido": "경상북도",
+  "sigungu": "경주시"
+ },
+ {
+  "region_code": "L1073120",
+  "name": "경주시동부",
+  "sido": "경상북도",
+  "sigungu": "경주시"
+ },
+ {
+  "region_code": "L1073130",
+  "name": "경주시남부",
+  "sido": "경상북도",
+  "sigungu": "경주시"
+ },
+ {
+  "region_code": "L1073140",
+  "name": "경주시서부",
+  "sido": "경상북도",
+  "sigungu": "경주시"
+ },
+ {
+  "region_code": "L1080000",
+  "name": "경상남도",
+  "sido": "경상남도",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1080500",
+  "name": "양산시",
+  "sido": "경상남도",
+  "sigungu": "양산시"
+ },
+ {
+  "region_code": "L1080600",
+  "name": "창원시",
+  "sido": "경상남도",
+  "sigungu": "창원시"
+ },
+ {
+  "region_code": "L1080900",
+  "name": "김해시",
+  "sido": "경상남도",
+  "sigungu": "김해시"
+ },
+ {
+  "region_code": "L1081000",
+  "name": "밀양시",
+  "sido": "경상남도",
+  "sigungu": "밀양시"
+ },
+ {
+  "region_code": "L1081100",
+  "name": "의령군",
+  "sido": "경상남도",
+  "sigungu": "의령군"
+ },
+ {
+  "region_code": "L1081200",
+  "name": "함안군",
+  "sido": "경상남도",
+  "sigungu": "함안군"
+ },
+ {
+  "region_code": "L1081300",
+  "name": "창녕군",
+  "sido": "경상남도",
+  "sigungu": "창녕군"
+ },
+ {
+  "region_code": "L1081400",
+  "name": "진주시",
+  "sido": "경상남도",
+  "sigungu": "진주시"
+ },
+ {
+  "region_code": "L1082000",
+  "name": "통영시",
+  "sido": "경상남도",
+  "sigungu": "통영시"
+ },
+ {
+  "region_code": "L1082100",
+  "name": "사천시",
+  "sido": "경상남도",
+  "sigungu": "사천시"
+ },
+ {
+  "region_code": "L1082200",
+  "name": "거제시",
+  "sido": "경상남도",
+  "sigungu": "거제시"
+ },
+ {
+  "region_code": "L1082300",
+  "name": "고성군",
+  "sido": "경상남도",
+  "sigungu": "고성군"
+ },
+ {
+  "region_code": "L1082400",
+  "name": "남해군",
+  "sido": "경상남도",
+  "sigungu": "남해군"
+ },
+ {
+  "region_code": "L1082500",
+  "name": "부산동부",
+  "sido": "부산광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1082600",
+  "name": "부산중부",
+  "sido": "부산광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1082700",
+  "name": "부산서부",
+  "sido": "부산광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1082800",
+  "name": "울산동부",
+  "sido": "울산광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1082900",
+  "name": "울산서부",
+  "sido": "울산광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1083000",
+  "name": "하동군",
+  "sido": "경상남도",
+  "sigungu": "하동군"
+ },
+ {
+  "region_code": "L1083010",
+  "name": "하동군북부",
+  "sido": "경상남도",
+  "sigungu": "하동군"
+ },
+ {
+  "region_code": "L1083020",
+  "name": "하동군남부",
+  "sido": "경상남도",
+  "sigungu": "하동군"
+ },
+ {
+  "region_code": "L1083100",
+  "name": "산청군",
+  "sido": "경상남도",
+  "sigungu": "산청군"
+ },
+ {
+  "region_code": "L1083110",
+  "name": "산청군북부",
+  "sido": "경상남도",
+  "sigungu": "산청군"
+ },
+ {
+  "region_code": "L1083120",
+  "name": "산청군서남부",
+  "sido": "경상남도",
+  "sigungu": "산청군"
+ },
+ {
+  "region_code": "L1083130",
+  "name": "산청군동남부",
+  "sido": "경상남도",
+  "sigungu": "산청군"
+ },
+ {
+  "region_code": "L1083200",
+  "name": "함양군",
+  "sido": "경상남도",
+  "sigungu": "함양군"
+ },
+ {
+  "region_code": "L1083210",
+  "name": "함양중부",
+  "sido": "경상남도",
+  "sigungu": "함양군"
+ },
+ {
+  "region_code": "L1083220",
+  "name": "함양서북부",
+  "sido": "경상남도",
+  "sigungu": "함양군"
+ },
+ {
+  "region_code": "L1083300",
+  "name": "거창군",
+  "sido": "경상남도",
+  "sigungu": "거창군"
+ },
+ {
+  "region_code": "L1083310",
+  "name": "거창군북부",
+  "sido": "경상남도",
+  "sigungu": "거창군"
+ },
+ {
+  "region_code": "L1083320",
+  "name": "거창군남부",
+  "sido": "경상남도",
+  "sigungu": "거창군"
+ },
+ {
+  "region_code": "L1083400",
+  "name": "합천군",
+  "sido": "경상남도",
+  "sigungu": "합천군"
+ },
+ {
+  "region_code": "L1083410",
+  "name": "합천군서북부",
+  "sido": "경상남도",
+  "sigungu": "합천군"
+ },
+ {
+  "region_code": "L1083420",
+  "name": "합천군중부",
+  "sido": "경상남도",
+  "sigungu": "합천군"
+ },
+ {
+  "region_code": "L1083430",
+  "name": "합천군남부",
+  "sido": "경상남도",
+  "sigungu": "합천군"
+ },
+ {
+  "region_code": "L1090000",
+  "name": "제주도",
+  "sido": "제주특별자치도",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1090500",
+  "name": "제주도산지",
+  "sido": "제주특별자치도",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1091000",
+  "name": "추자도",
+  "sido": "제주특별자치도",
+  "sigungu": "제주시"
+ },
+ {
+  "region_code": "L1091300",
+  "name": "제주시(산지 제외)",
+  "sido": "제주특별자치도",
+  "sigungu": "제주시"
+ },
+ {
+  "region_code": "L1091310",
+  "name": "제주시서부",
+  "sido": "제주특별자치도",
+  "sigungu": "제주시"
+ },
+ {
+  "region_code": "L1091320",
+  "name": "제주시북부",
+  "sido": "제주특별자치도",
+  "sigungu": "제주시"
+ },
+ {
+  "region_code": "L1091330",
+  "name": "제주시동부",
+  "sido": "제주특별자치도",
+  "sigungu": "제주시"
+ },
+ {
+  "region_code": "L1091340",
+  "name": "제주시중산간",
+  "sido": "제주특별자치도",
+  "sigungu": "제주시"
+ },
+ {
+  "region_code": "L1091400",
+  "name": "서귀포시(산지 제외)",
+  "sido": "제주특별자치도",
+  "sigungu": "서귀포시"
+ },
+ {
+  "region_code": "L1091410",
+  "name": "서귀포시서부",
+  "sido": "제주특별자치도",
+  "sigungu": "서귀포시"
+ },
+ {
+  "region_code": "L1091420",
+  "name": "서귀포시남부",
+  "sido": "제주특별자치도",
+  "sigungu": "서귀포시"
+ },
+ {
+  "region_code": "L1091430",
+  "name": "서귀포시동부",
+  "sido": "제주특별자치도",
+  "sigungu": "서귀포시"
+ },
+ {
+  "region_code": "L1091440",
+  "name": "서귀포시중산간",
+  "sido": "제주특별자치도",
+  "sigungu": "서귀포시"
+ },
+ {
+  "region_code": "L1100000",
+  "name": "서울특별시",
+  "sido": "서울특별시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1100100",
+  "name": "서울동남권",
+  "sido": "서울특별시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1100200",
+  "name": "서울동북권",
+  "sido": "서울특별시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1100300",
+  "name": "서울서남권",
+  "sido": "서울특별시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1100400",
+  "name": "서울서북권",
+  "sido": "서울특별시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1110000",
+  "name": "인천광역시",
+  "sido": "인천광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1110100",
+  "name": "인천광역시",
+  "sido": "인천광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1110110",
+  "name": "인천영종",
+  "sido": "인천광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1110120",
+  "name": "인천남부",
+  "sido": "인천광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1110130",
+  "name": "인천북부",
+  "sido": "인천광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1120000",
+  "name": "대전광역시",
+  "sido": "대전광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1130000",
+  "name": "광주광역시",
+  "sido": "광주광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1130100",
+  "name": "광주광역시",
+  "sido": "광주광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1130110",
+  "name": "광주서부",
+  "sido": "광주광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1130120",
+  "name": "광주동부",
+  "sido": "광주광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1140000",
+  "name": "대구광역시",
+  "sido": "대구광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1140100",
+  "name": "대구중부",
+  "sido": "대구광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1140200",
+  "name": "달성군",
+  "sido": "대구광역시",
+  "sigungu": "달성군"
+ },
+ {
+  "region_code": "L1140210",
+  "name": "달성군북부",
+  "sido": "대구광역시",
+  "sigungu": "달성군"
+ },
+ {
+  "region_code": "L1140220",
+  "name": "달성군남부",
+  "sido": "대구광역시",
+  "sigungu": "달성군"
+ },
+ {
+  "region_code": "L1150000",
+  "name": "부산광역시",
+  "sido": "부산광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1160000",
+  "name": "울산광역시",
+  "sido": "울산광역시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1170000",
+  "name": "세종특별자치시",
+  "sido": "세종특별자치시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1170100",
+  "name": "세종특별자치시",
+  "sido": "세종특별자치시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1170110",
+  "name": "세종북부",
+  "sido": "세종특별자치시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1170120",
+  "name": "세종남부",
+  "sido": "세종특별자치시",
+  "sigungu": null
+ },
+ {
+  "region_code": "L1600000",
+  "name": "울릉도.독도",
+  "sido": "경상북도",
+  "sigungu": "울릉군"
+ },
+ {
+  "region_code": "S1000000",
+  "name": "전해상",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1100000",
+  "name": "동해전해상",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1130000",
+  "name": "동해남부전해상",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1131000",
+  "name": "동해남부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1131100",
+  "name": "울산앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1131200",
+  "name": "경북남부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1131300",
+  "name": "경북북부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1132110",
+  "name": "동해남부남쪽안쪽먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1132120",
+  "name": "동해남부남쪽바깥먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1132210",
+  "name": "동해남부북쪽안쪽먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1132220",
+  "name": "동해남부북쪽바깥먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1150000",
+  "name": "동해중부전해상",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1151000",
+  "name": "동해중부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1151100",
+  "name": "강원북부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1151200",
+  "name": "강원중부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1151300",
+  "name": "강원남부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1152010",
+  "name": "동해중부안쪽먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1152020",
+  "name": "동해중부바깥먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1200000",
+  "name": "서해전해상",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1230000",
+  "name": "서해남부전해상",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1231000",
+  "name": "서해남부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1231100",
+  "name": "전북북부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1231200",
+  "name": "전북남부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1231300",
+  "name": "전남북부서해앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1231400",
+  "name": "전남중부서해앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1231500",
+  "name": "전남남부서해앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1232110",
+  "name": "서해남부북쪽안쪽먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1232120",
+  "name": "서해남부북쪽바깥먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1232210",
+  "name": "서해남부남쪽안쪽먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1232220",
+  "name": "서해남부남쪽바깥먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1250000",
+  "name": "서해중부전해상",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1251000",
+  "name": "서해중부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1251100",
+  "name": "인천·경기북부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1251200",
+  "name": "인천·경기남부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1251300",
+  "name": "충남북부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1251400",
+  "name": "충남남부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1252010",
+  "name": "서해중부안쪽먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1252020",
+  "name": "서해중부바깥먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1300000",
+  "name": "남해전해상",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1310000",
+  "name": "남해동부전해상",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1311000",
+  "name": "남해동부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1311100",
+  "name": "부산앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1311200",
+  "name": "경남서부남해앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1311300",
+  "name": "경남중부남해앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1311400",
+  "name": "거제시동부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1312010",
+  "name": "남해동부안쪽먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1312020",
+  "name": "남해동부바깥먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1320000",
+  "name": "남해서부전해상",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1321000",
+  "name": "남해서부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1321100",
+  "name": "전남서부남해앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1321200",
+  "name": "전남동부남해앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1322100",
+  "name": "남해서부서쪽먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1322200",
+  "name": "남해서부동쪽먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1323000",
+  "name": "제주도앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1323100",
+  "name": "제주도북부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1323200",
+  "name": "제주도동부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1323300",
+  "name": "제주도남부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1323400",
+  "name": "제주도서부앞바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1324020",
+  "name": "제주도남쪽바깥먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1324110",
+  "name": "제주도남동쪽안쪽먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1324210",
+  "name": "제주도남서쪽안쪽먼바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S1330000",
+  "name": "제주도전해상",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2000000",
+  "name": "연안바다/평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2110100",
+  "name": "경북남부앞바다중 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2110200",
+  "name": "울산앞바다중 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2120100",
+  "name": "경북북부앞바다중 연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2120200",
+  "name": "경북북부앞바다중 영덕연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2120300",
+  "name": "경북남부앞바다중 연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2120400",
+  "name": "울산앞바다중 연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2120500",
+  "name": "강원중부앞바다중 연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2120600",
+  "name": "강원북부앞바다중 연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2120700",
+  "name": "강원남부앞바다중 연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2120800",
+  "name": "울릉도울릉읍연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2120900",
+  "name": "울릉도서면연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2121000",
+  "name": "울릉도북면연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2210100",
+  "name": "전북북부앞바다중 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2210200",
+  "name": "전북남부앞바다중 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2210300",
+  "name": "전남북부서해앞바다중 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2210500",
+  "name": "전남남부서해앞바다중 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2210700",
+  "name": "충남남부앞바다중 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2211100",
+  "name": "인천경기남부앞바다중 먼평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2211200",
+  "name": "서해남부남쪽안쪽먼바다중 조도부근평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2211300",
+  "name": "전남중부서해앞바다중 먼평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2211400",
+  "name": "전남중부서해앞바다중 앞평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2211500",
+  "name": "천수만 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2211600",
+  "name": "인천·경기남부앞바다중 북부앞평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2211700",
+  "name": "인천·경기남부앞바다중 남부앞평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2211900",
+  "name": "안면도 서쪽 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2212000",
+  "name": "인천·경기북부앞바다중 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2212100",
+  "name": "당진 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2212200",
+  "name": "태안·서산 북쪽 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2310100",
+  "name": "부산앞바다중 동부평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2310200",
+  "name": "부산앞바다중 서부평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2310300",
+  "name": "경남중부남해앞바다중 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2310400",
+  "name": "경남서부남해앞바다중 동부평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2310500",
+  "name": "경남서부남해앞바다중 서부평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2310600",
+  "name": "경남서부남해앞바다중 남부평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2310700",
+  "name": "전남서부남해앞바다중 평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2310800",
+  "name": "전남동부남해앞바다중 서부평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2310900",
+  "name": "전남동부남해앞바다중 동부평수구역",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2320100",
+  "name": "부산앞바다중 연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2320200",
+  "name": "거제시동부앞바다중 연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2320300",
+  "name": "경남서부남해앞바다중 남해군연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2320400",
+  "name": "제주도북부앞바다중 연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2320610",
+  "name": "제주도서부앞바다중 북서연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2320620",
+  "name": "제주도서부앞바다중 남서연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2320700",
+  "name": "제주도남부앞바다중 연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2320800",
+  "name": "경남중부남해앞바다중 연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2320900",
+  "name": "제주도동부앞바다중 북동연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2321000",
+  "name": "제주도동부앞바다중 남동연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2330100",
+  "name": "남해서부서쪽먼바다중 추자도연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2330200",
+  "name": "제주도동부앞바다중 우도연안바다",
+  "sido": null,
+  "sigungu": null
+ },
+ {
+  "region_code": "S2330300",
+  "name": "제주도서부앞바다중 가파도연안바다",
+  "sido": null,
+  "sigungu": null
+ }
+]

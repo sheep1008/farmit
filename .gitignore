@@ -1,0 +1,52 @@
+# 환경 변수·키
+.env
+.env.*
+!.env.example
+!.env.prod.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Django
+backend/staticfiles/
+backend/media/
+*.sqlite3
+
+# Node / Vue
+node_modules/
+frontend/dist/
+.vite/
+
+# 데이터·모델
+data/
+*.csv
+*.parquet
+mlruns/
+ml/outputs/
+*.pkl
+*.joblib
+
+# 사진 진단(ml/vision): 학습 산출물·모델 가중치. 데이터는 위 data/ 규칙으로 이미 제외
+ml/vision/runs/
+*.onnx
+!ml/vision/model/vision.onnx
+*.pt
+*.pth
+
+# 로그
+*.log
+logs/
+
+# IDE·OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code 개인 설정
+.claude/settings.local.json

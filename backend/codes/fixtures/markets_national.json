@@ -1,0 +1,326 @@
+[
+  {
+    "model": "codes.market",
+    "pk": "110008",
+    "fields": {
+      "name": "서울강서",
+      "sido": "서울특별시",
+      "lat": "37.553280",
+      "lng": "126.820700",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "210001",
+    "fields": {
+      "name": "부산엄궁",
+      "sido": "부산광역시",
+      "lat": "35.130850",
+      "lng": "128.966390",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "210009",
+    "fields": {
+      "name": "부산반여",
+      "sido": "부산광역시",
+      "lat": "35.215070",
+      "lng": "129.122520",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "220001",
+    "fields": {
+      "name": "대구북부",
+      "sido": "대구광역시",
+      "lat": "35.902060",
+      "lng": "128.543280",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "230001",
+    "fields": {
+      "name": "인천남촌",
+      "sido": "인천광역시",
+      "lat": "37.424340",
+      "lng": "126.719890",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "230003",
+    "fields": {
+      "name": "인천삼산",
+      "sido": "인천광역시",
+      "lat": "37.522010",
+      "lng": "126.748990",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "240001",
+    "fields": {
+      "name": "광주각화",
+      "sido": "광주광역시",
+      "lat": "35.184320",
+      "lng": "126.934280",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "240004",
+    "fields": {
+      "name": "광주서부",
+      "sido": "광주광역시",
+      "lat": "35.115720",
+      "lng": "126.857040",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "310101",
+    "fields": {
+      "name": "수원",
+      "sido": "경기도",
+      "lat": "37.255360",
+      "lng": "127.030900",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "310401",
+    "fields": {
+      "name": "안양",
+      "sido": "경기도",
+      "lat": "37.382260",
+      "lng": "126.969700",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "310901",
+    "fields": {
+      "name": "안산",
+      "sido": "경기도",
+      "lat": "37.309000",
+      "lng": "126.856810",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "311201",
+    "fields": {
+      "name": "구리",
+      "sido": "경기도",
+      "lat": "37.608560",
+      "lng": "127.146450",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "320101",
+    "fields": {
+      "name": "춘천",
+      "sido": "강원특별자치도",
+      "lat": "37.909900",
+      "lng": "127.727390",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "320201",
+    "fields": {
+      "name": "원주",
+      "sido": "강원특별자치도",
+      "lat": "37.354938",
+      "lng": "127.923311",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "320301",
+    "fields": {
+      "name": "강릉",
+      "sido": "강원특별자치도",
+      "lat": "37.737938",
+      "lng": "128.917986",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "330201",
+    "fields": {
+      "name": "충주",
+      "sido": "충청북도",
+      "lat": "37.005090",
+      "lng": "127.923650",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "350101",
+    "fields": {
+      "name": "전주",
+      "sido": "전북특별자치도",
+      "lat": "35.868149",
+      "lng": "127.117422",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "350301",
+    "fields": {
+      "name": "익산",
+      "sido": "전북특별자치도",
+      "lat": "35.919190",
+      "lng": "126.918867",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "350402",
+    "fields": {
+      "name": "정읍",
+      "sido": "전북특별자치도",
+      "lat": "35.587621",
+      "lng": "126.845781",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "360301",
+    "fields": {
+      "name": "순천",
+      "sido": "전라남도",
+      "lat": "34.916794",
+      "lng": "127.537562",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "370101",
+    "fields": {
+      "name": "포항",
+      "sido": "경상북도",
+      "lat": "36.081850",
+      "lng": "129.336870",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "370401",
+    "fields": {
+      "name": "안동",
+      "sido": "경상북도",
+      "lat": "36.589769",
+      "lng": "128.608599",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "371501",
+    "fields": {
+      "name": "구미",
+      "sido": "경상북도",
+      "lat": "36.156740",
+      "lng": "128.350030",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "380101",
+    "fields": {
+      "name": "창원팔용",
+      "sido": "경상남도",
+      "lat": "35.230790",
+      "lng": "128.638370",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "380201",
+    "fields": {
+      "name": "울산",
+      "sido": "울산광역시",
+      "lat": "35.538690",
+      "lng": "129.342750",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "380303",
+    "fields": {
+      "name": "창원내서",
+      "sido": "경상남도",
+      "lat": "35.255420",
+      "lng": "128.511320",
+      "is_collect": true,
+      "is_reference": false
+    }
+  },
+  {
+    "model": "codes.market",
+    "pk": "380401",
+    "fields": {
+      "name": "진주",
+      "sido": "경상남도",
+      "lat": "35.211390",
+      "lng": "128.123050",
+      "is_collect": true,
+      "is_reference": false
+    }
+  }
+]

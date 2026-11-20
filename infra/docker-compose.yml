@@ -1,0 +1,355 @@
+# 실행: 레포 루트에서  docker compose -f infra/docker-compose.yml up --build
+# 이 파일 안의 상대 경로(../.env, ../backend 등)는 이 파일이 있는 infra/ 기준이다.
+name: farmit
+
+services:
+  mysql:
+    image: mysql:8.4
+    env_file: ../.env              # MYSQL_DATABASE·USER·PASSWORD·ROOT_PASSWORD로 첫 실행 때 DB와 계정을 만든다
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00 # DB에는 UTC로 저장한다. 한국 시간 변환은 Django가 한다
+    ports:
+      - "3307:3306"                # 호스트 3307 → 컨테이너 3306 (DB 도구 접속용)
+    volumes:
+      - mysql-data:/var/lib/mysql                         # 데이터 보존. down -v 하면 지워진다
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro       # 볼륨이 비어 있을 때(첫 실행)만 실행된다
+    healthcheck:
+      # -h 127.0.0.1 로 TCP 접속을 확인한다. 첫 실행 때 초기화용 임시 서버는 소켓으로만 떠서
+      # TCP ping이 실패하므로, 초기화가 끝나고 진짜 서버가 뜬 뒤에야 healthy가 된다
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  backend:
+    build: ../backend
+    image: farmit-backend          # alert-consumer도 이 이미지를 쓴다 (따로 빌드하면 의존성이 어긋남, TS-37)
+    env_file: ../.env
+    environment:
+      ES_URL: http://elasticsearch:9200   # RAG 문서 검색 (rag_docs 인덱스)
+      FASTEMBED_CACHE_PATH: /models       # 임베딩 모델 파일. 볼륨에 두어 다시 받지 않는다
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/app            # 코드 변경이 바로 반영된다 (runserver 자동 재시작)
+      - model-cache:/models        # 임베딩 모델 (multilingual-e5-small, 약 470MB)
+    depends_on:
+      mysql:
+        condition: service_healthy # mysql healthcheck가 통과한 뒤 시작
+      # ES는 기다리지 않는다. ES가 없으면 채팅만 503이고 나머지 API는 동작한다
+
+  # 검색 저장소: RAG 문서 조각 + 벡터 (Y12), 보도자료 (Y10). 한국어 형태소 분석기 nori 포함
+  # 보안(xpack)은 끄고 내 PC에서만 접속한다 (REQ-NFR-005: 관리 포트는 외부에 열지 않는다)
+  elasticsearch:
+    build: ./elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m   # WSL 메모리가 작아 힙을 512MB로 묶는다
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  # 수집 상태 대시보드 (K23, REQ-COL-008). Airflow DAG collect_log_to_es가 옮긴 collect_log 인덱스를 본다
+  # 관리 도구라 기본으로는 뜨지 않는다. 켤 때: --profile kibana up -d  → http://localhost:5601
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.19.3   # ES와 같은 버전이어야 한다
+    profiles: ["kibana"]
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      NODE_OPTIONS: --max-old-space-size=512        # ES처럼 메모리를 묶는다
+      TELEMETRY_OPTIN: "false"                      # Elastic으로 사용 통계를 보내지 않는다
+    ports:
+      # 내 PC에서만 접속한다 (REQ-NFR-005). 배포 서버에서는 이 ports 줄을 지우고 SSH 터널로 본다
+      - "127.0.0.1:5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  # Vue 3 + Vite dev server. /api 요청은 Vite 프록시가 backend:8000 으로 넘긴다 (K05)
+  frontend:
+    build: ../frontend
+    environment:
+      API_PROXY_TARGET: http://backend:8000
+      VITE_USE_POLLING: "true"     # Windows 바인드 마운트는 파일 변경 알림이 안 와서 폴링으로 감지한다
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../frontend:/app           # 코드 저장 시 화면이 자동 새로고침된다 (HMR)
+      - frontend-node-modules:/app/node_modules   # node_modules는 이미지 것을 쓴다 (내 PC 폴더로 덮이지 않게)
+    depends_on:
+      - backend
+
+  # ── 실시간 경로: 수집기 → Kafka → Flink → MySQL ──────────────────────────
+  kafka:
+    image: apache/kafka:3.9.1      # KRaft 모드(ZooKeeper 없음), 브로커+컨트롤러 1대
+    environment:
+      CLUSTER_ID: 5L6g3nShT-eMCtK--X86sw            # 로컬용 고정 클러스터 ID (이미지 기본값과 같음)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      # 리스너 3개: 컨테이너끼리(kafka:9092), 호스트에서(localhost:29092), 컨트롤러 내부용(9093)
+      KAFKA_LISTENERS: INTERNAL://:9092,HOST://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      # 브로커가 1대라 내부 토픽 복제 수를 1로 낮춘다
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    ports:
+      - "127.0.0.1:29092:29092"    # 내 PC에서만 접속 (외부에 열지 않는다)
+    # 볼륨 없음: Kafka는 전달 통로이고 데이터는 MySQL에 남는다. down 하면 토픽이 지워진다
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  # 토픽 생성용 일회성 컨테이너. 토픽을 만들고 종료한다 (ps -a 에서 Exited (0)이면 정상)
+  # 볼륨이 없어 up 할 때마다 실행되므로 --if-not-exists 로 이미 있으면 건너뛴다
+  kafka-init:
+    image: apache/kafka:3.9.1
+    command:
+      - sh
+      - -c
+      - |
+        # weather.warning.event: Flink가 새로 생기거나 바뀐 특보만 골라 보내는 토픽 (알림이 읽는다)
+        for t in auction.trade.raw weather.warning.raw weather.warning.event; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+            --topic "$$t" --partitions 1 --replication-factor 1 --config retention.ms=604800000
+        done
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  flink-jobmanager:
+    build: ../streaming/flink      # Flink + Kafka·JDBC 커넥터, MySQL 드라이버
+    command: jobmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        # 체크포인트를 파일로 저장한다. 기본값(JobManager 메모리)은 상태 하나가 5MB를 넘으면 실패한다
+        # (realtime_price의 중복 제거 상태가 전국 32곳에서 약 11MB). jobmanager·taskmanager가 같은 볼륨을 본다
+        execution.checkpointing.dir: file:///opt/flink/checkpoints
+    ports:
+      - "127.0.0.1:8081:8081"      # Flink 웹 UI, 내 PC에서만 접속
+    volumes:
+      - ../streaming:/opt/farmit/streaming:ro   # Flink SQL 파일을 컨테이너 안에서 바로 실행
+      - flink-checkpoints:/opt/flink/checkpoints
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully   # 토픽이 만들어진 뒤 시작
+      mysql:
+        condition: service_healthy
+
+  flink-taskmanager:
+    build: ../streaming/flink
+    command: taskmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        # jobmanager와 같은 값
+        execution.checkpointing.dir: file:///opt/flink/checkpoints
+        # Flink 작업 1개가 슬롯 1개를 쓴다. 지금 2개(weather_warning, auction_trade) + 2주차 realtime_price 등 여유
+        taskmanager.numberOfTaskSlots: 4
+    volumes:
+      - flink-checkpoints:/opt/flink/checkpoints
+    depends_on:
+      - flink-jobmanager
+
+  # 실시간 경매 프로듀서: 한국 시간 00~12시에 3분마다(POLL_SECONDS), 12~17시에 30분마다 API → Kafka(auction.trade.raw)
+  # 각자 인증키로 API를 부르므로 기본으로는 뜨지 않는다. 켤 때: --profile auction up -d
+  auction-producer:
+    build: ../collectors/auction
+    profiles: ["auction"]
+    env_file: ../.env              # DATA_GO_KR_KEY, MYSQL_*, DB_HOST·DB_PORT
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092   # .env의 localhost:29092(호스트용)보다 우선한다
+    volumes:
+      - ../collectors/auction:/app # 코드 변경 후 restart만 하면 반영된다
+    restart: unless-stopped        # 한 번 켜 두면 Docker 재시작·오류 뒤에도 다시 뜬다 (매일 자동 수집)
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully   # 토픽이 만들어진 뒤 시작
+      mysql:
+        condition: service_healthy
+
+  # 기상특보 수집기: 10분마다 최근 6일치를 weather.warning.raw로 보낸다 (REQ-COL-004, REQ-ALT-001)
+  weather-warning-producer:
+    build: ../collectors/weather_warning
+    command: python producer.py --every 600
+    env_file: ../.env                # DATA_GO_KR_KEY
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092   # .env의 localhost:29092(호스트용)보다 우선한다
+    volumes:
+      - ../collectors/weather_warning:/app  # 코드 변경 후 restart만 하면 반영된다 (auction-producer와 같게)
+    restart: unless-stopped
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
+  # 배치 수집기 실행 환경: collectors/common(공통 모듈)을 쓰는 수집기를 python -m 으로 한 번씩 실행한다 (K03)
+  # 계속 떠 있는 서비스가 아니라서 기본으로는 뜨지 않는다. 실행: --profile collect run --rm collectors python -m <모듈>
+  collectors:
+    build: ../collectors
+    profiles: ["collect"]
+    env_file: ../.env              # MYSQL_*, DB_HOST·DB_PORT, API 키
+    volumes:
+      - ../collectors:/app         # 코드 변경이 다시 빌드하지 않아도 반영된다
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  # ── 배치 경로: Airflow가 collectors/ 수집기를 스케줄대로 실행한다 (K11) ──────────
+  # Spark 작업(batch/spark, K12)도 따로 Spark 서비스를 띄우지 않고 Airflow 컨테이너 안에서 local 모드로 돈다.
+  # 손으로 실행: --profile airflow exec airflow-scheduler sh -c "cd /opt/farmit/spark && python -m <모듈>"
+  # 각자 인증키로 API를 부르므로 기본으로는 뜨지 않는다. 켤 때: --profile airflow up -d
+  # 구성: 메타DB(Postgres) + 초기화(1회) + api-server(관리 화면) + scheduler(태스크 실행) + dag-processor(DAG 파일 읽기)
+  # LocalExecutor라 태스크는 scheduler 컨테이너 안에서 실행된다. Redis·Celery worker·triggerer는 쓰지 않는다 (메모리 절약)
+  airflow-db:
+    image: postgres:16.10-alpine
+    profiles: ["airflow"]
+    env_file: ../.env              # POSTGRES_PASSWORD
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_DB: airflow
+    # ports 없음: Airflow 컨테이너끼리만 접속한다
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 10
+
+  # 메타DB 테이블을 만들거나 올린다. 끝나면 종료한다 (ps -a 에서 Exited (0)이면 정상)
+  airflow-init:
+    <<: &airflow-common
+      build: ../batch/airflow
+      image: farmit-airflow:3.3.2  # 네 서비스가 이미지 하나를 같이 쓴다 (서비스마다 따로 빌드하지 않게)
+      env_file: ../.env            # AIRFLOW__DATABASE__SQL_ALCHEMY_CONN, AIRFLOW__API_AUTH__JWT_SECRET, AIRFLOW__CORE__FERNET_KEY
+      environment:
+        AIRFLOW__CORE__EXECUTOR: LocalExecutor
+        AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+        AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"   # 새 DAG는 화면에서 켜야 돈다
+        AIRFLOW__CORE__DEFAULT_TIMEZONE: utc                 # 스케줄은 UTC 기준 (CLAUDE.md 2절)
+        AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+        # 로그인 없이 모두 관리자. 포트를 127.0.0.1에만 열기 때문에 로컬 개발용으로만 쓴다
+        AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
+        PYTHONDONTWRITEBYTECODE: "1"   # 읽기 전용 collectors/ 에 .pyc를 쓰려 하지 않게
+        # 주간 예측(K19)의 MLflow 기록. 내 PC에서 직접 돌린 기록(ml/mlruns/mlflow.db)과 나눈다:
+        # 그쪽 실험은 산출물 경로가 Windows 경로(file:///C:/...)로 저장돼 있어 컨테이너에서 쓰면 산출물이 컨테이너 안에 버려진다
+        MLFLOW_TRACKING_URI: sqlite:////opt/farmit/ml/mlruns/airflow.db
+        MLFLOW_ARTIFACT_LOCATION: file:///opt/farmit/ml/mlruns/airflow-artifacts
+        ES_URL: http://elasticsearch:9200   # collect_log를 ES로 옮기는 DAG (K23, batch/dags/collect_log_es.py)
+      volumes:
+        - ../batch/dags:/opt/airflow/dags
+        - ../collectors:/opt/farmit/collectors:ro   # 태스크가 cd 해서 python -m <모듈> 로 실행
+        - ../batch/spark:/opt/farmit/spark:ro       # Spark 작업(K12). 이미지 안의 pyspark가 local 모드로 실행
+        # 가격 예측(K19): config/ 설정을 읽고, data/(Spark가 만든 피처 CSV)·outputs/·mlruns/에 쓴다 (셋 다 커밋 제외)
+        - ../ml:/opt/farmit/ml
+        - airflow-logs:/opt/airflow/logs
+      depends_on:
+        airflow-db:
+          condition: service_healthy
+    profiles: ["airflow"]
+    command: db migrate
+    restart: "no"
+
+  airflow-apiserver:
+    <<: *airflow-common
+    profiles: ["airflow"]
+    command: api-server
+    ports:
+      # 관리 화면은 내 PC에서만 접속한다 (REQ-NFR-005). 배포 서버에서는 이 ports 줄을 지우고 SSH 터널로 본다
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    profiles: ["airflow"]
+    command: scheduler
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy   # 수집 태스크가 MySQL에 쓴다
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    profiles: ["airflow"]
+    command: dag-processor
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # 기상특보 알림: weather.warning.event를 읽어 special_event·alert를 만든다 (REQ-ALT-001)
+  # backend 이미지·코드를 그대로 쓴다. 테이블은 backend가 시작할 때 migrate로 만든다
+  alert-consumer:
+    image: farmit-backend          # build 없이 backend가 만든 이미지를 그대로 쓴다
+    env_file: ../.env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    command: python manage.py consume_warning_events
+    volumes:
+      - ../backend:/app
+    # migrate 전에 떠서 테이블이 없으면 멈췄다가 다시 뜬다 (DB 오류 때도 같은 방식으로 재시도)
+    restart: unless-stopped
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      backend:
+        condition: service_started
+
+  # 주간농사정보 자동 수집: 하루 한 번 최근 호를 받아 weekly_farm_info에 넣는다 (REQ-RAG-008, REQ-COL-006)
+  # 농사로가 매주 수~목요일에 다음 주 호를 올린다. 새 호가 없는 날은 목록 1번만 호출하고 끝난다 (같은 호는 덮어씀)
+  # Airflow에는 backend 코드(Django)가 없어 alert-consumer처럼 backend 이미지를 그대로 쓴다. 기록은 collect_log(source=weekfarm)
+  # 성공하면 24시간, 실패하면(키 없음·테이블 아직 없음·농사로 장애) 1시간 뒤에 다시 한다
+  weekly-farm-collector:
+    image: farmit-backend
+    env_file: ../.env              # NONGSARO_WEEKFARM_KEY, MYSQL_*
+    command: sh -c "while true; do python manage.py collect_weekly_farm_info && sleep 86400 || sleep 3600; done"
+    volumes:
+      - ../backend:/app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      backend:
+        condition: service_started   # 테이블은 backend가 시작할 때 migrate로 만든다
+
+volumes:
+  mysql-data:
+  frontend-node-modules:
+  airflow-db-data:
+  airflow-logs:
+  es-data:
+  flink-checkpoints:
+  model-cache:

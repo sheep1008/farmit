@@ -1,0 +1,28 @@
+{
+ "target_mode": "logratio",
+ "tree": {
+  "features": [
+   "price_kg", "qty_kg", "price_allgrade", "n_trade_days", "price_last1",
+   "price_lag1", "price_lag2", "price_lag4", "price_ma4", "price_ma8", "price_yoy", "qty_lag1", "qty_ma4",
+   "chg_1w", "chg_4w",
+   "nat_price", "nat_price_ma4", "ratio_nat_med26", "dev_nat", "nat_chg_1w",
+   "nat_qty", "nat_qty_ma4", "nat_qty_yoy", "qty_share", "qty_yoy",
+   "weekofyear", "month", "days_to_seol", "days_since_seol", "days_to_chuseok", "days_since_chuseok",
+   "hol_offset_h1", "hol_offset_h2", "hol_offset_h3", "hol_offset_h4",
+   "hol_in_target_h1", "hol_in_target_h2", "hol_in_target_h3", "hol_in_target_h4",
+   "mkt_id"
+  ],
+  "prep": {
+   "relative": true,
+   "pest_zero": false,
+   "market_dummies": false,
+   "na_indicator": false,
+   "log1p": ["qty_kg", "qty_lag1", "qty_ma4", "nat_qty", "nat_qty_ma4"]
+  }
+ },
+ "linear": {
+  "features": [],
+  "prep": {}
+ },
+ "note": "experiments/dataset.py GROUPS(base·lags·national·supply·calendar·market) 그대로에서 K30에 없는 n_records·가락 묶음(garak_price·garak_price_ma4·dev_garak)을 뺀 40개. 전처리도 실험의 X_of·fit_pred와 같다: 가격 수준은 지난주 가격 대비 로그비, 물량은 log1p, 시장은 mkt_id 정수 하나(더미 없음), RF 결측은 학습 중앙값(결측 표시 없음). LSTM을 쓰지 않아 linear는 비워 둔다"
+}

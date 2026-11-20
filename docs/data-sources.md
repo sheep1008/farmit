@@ -1,0 +1,249 @@
+# 외부 데이터 API 정리
+
+수집기를 만들기 전에 각 API가 무엇을 돌려주는지 정리한 문서다 (K02, REQ-COL-001·003, REQ-NFR-009).
+테이블 정의는 `erd.md`, 요구사항은 `requirements.md`가 기준이다.
+
+- 응답 확인: 2026-11-14 `collectors/explore/explore.py`로 API마다 한 번씩 호출해 확인했다. 원본은 `data/explore/`에 저장한다 (커밋하지 않음).
+- 호출 방법(주소·파라미터의 함정)은 `ml/experiments`에서 먼저 확인한 것을 따랐다.
+
+| API | 키 | 쓰는 곳 |
+|---|---|---|
+| aT 정산정보 | `DATA_GO_KR_KEY` | `settle_price`, 예측 학습 |
+| 기상청 ASOS 일자료 | `DATA_GO_KR_KEY` | `weather_daily` |
+| 한국천문연구원 특일 정보 | `DATA_GO_KR_KEY` | `holiday` |
+| KOSIS 과실생산량 | `KOSIS_API_KEY` | `crop_production`, 예측 피처(선택) |
+| 관세청 품목별 국가별 수출입실적 | `DATA_GO_KR_KEY` | `import_monthly` (K16, 7절) |
+| NCPMS 병해충 예찰 | `NCPMS_API_KEY` | `pest_survey` (K16, 8절) |
+
+---
+
+## 1. 공통 (data.go.kr)
+
+- **인증키:** 계정당 하나다. API마다 활용신청이 승인돼야 그 API를 부를 수 있다. **승인되지 않은 API는 HTTP 403**을 돌려준다 (같은 키로 실시간 경매는 200, 정산은 활용신청 전 403이었다).
+- **키 인코딩:** 포털의 Encoding 키(`%` 포함)는 그대로, Decoding 키는 URL 인코딩해서 붙인다. `urlencode`에 키를 넣으면 Encoding 키가 두 번 인코딩되므로 키는 따로 붙인다 (`collectors/auction/client.py`).
+- **응답 모양:** `response.header.{resultCode, resultMsg}`, `response.body.{totalCount, items.item}`.
+  - 정상 `resultCode`가 API마다 다르다: aT `0`, 기상청·천문연 `00`.
+  - **결과가 1건이면 `item`이 리스트가 아니라 객체로 온다.** 항상 리스트로 바꿔서 쓴다.
+  - 키 오류 등은 JSON을 요청해도 XML로 올 수 있다.
+- **키 노출:** 요청 URL에 키가 들어가므로 로그에는 URL을 찍지 않는다. 오류는 HTTP 상태 코드·`resultCode`만 남긴다.
+
+## 2. aT 정산정보
+
+`GET https://apis.data.go.kr/B552845/katSale/trades` — 공영도매시장 거래 정산 확정 내역 (다음 날 반영, 2018-01~)
+
+| 파라미터 | 값 | 주의 |
+|---|---|---|
+| `serviceKey` | 인증키 | |
+| `returnType` | `json` | |
+| `pageNo`, `numOfRows` | 페이지, 최대 10,000 | |
+| `cond[trd_clcln_ymd::GTE]`, `cond[trd_clcln_ymd::LTE]` | `YYYY-MM-DD` | **`EQ`나 `YYYYMMDD`로 주면 0건.** 하루만 받을 때도 GTE·LTE에 같은 날짜 |
+| `cond[whsl_mrkt_cd::EQ]` | 시장 코드 | **시장 조건이 없으면 0건.** 전국은 `GTE=100000`, `LTE=999999` |
+| `cond[gds_lclsf_cd::EQ]`, `cond[gds_mclsf_cd::EQ]` | 품목 대·중분류 | 품목만 받을 때 |
+
+**응답 필드 (28개, 값은 모두 문자열):** 한 행 = 한 날짜·시장·법인·품목·등급·포장·크기·산지·거래방식 묶음의 합계다. 낙찰 한 건이 아니다.
+
+| 필드 | 뜻 | 예시 (대전오정 2026-10-30) |
+|---|---|---|
+| `trd_clcln_ymd` | 거래정산일자 | `2026-10-30` |
+| `whsl_mrkt_cd`, `whsl_mrkt_nm` | 도매시장 | `250001`, `대전오정` |
+| `corp_cd`, `corp_nm` | 도매법인 | `25000102`, `대전청과㈜` |
+| `gds_lclsf_cd/nm`, `gds_mclsf_cd/nm`, `gds_sclsf_cd/nm` | 품목 대·중·소분류 | `03` 두류, `05` 강낭콩, `01` 강낭콩(일반) |
+| `grd_cd`, `grd_nm` | 등급 | `10`, `.` |
+| `sz_cd`, `sz_nm` | 크기 | `100`, `.` |
+| `pkg_cd`, `pkg_nm` | 포장 | `101`, `상자` |
+| `unit_cd`, `unit_nm`, `unit_qty` | 포장 1개의 단위·양 | `12`, `kg`, `4.000` (4kg 상자) |
+| `unit_tot_qty` | 총물량 (`unit_nm` 단위) | `296.000` (kg) |
+| `totprc` | 총 거래금액 (원) | `1489500.000` |
+| `avgprc`, `hgprc`, `lwprc` | **포장 1개당** 평균·최고·최저가 (원) | `19900`, `26000`, `15000` |
+| `plor_cd`, `plor_nm` | 산지 | `250000`, `강원특별자치도 홍천군` |
+| `trd_se` | 거래 방식 | `경매`, `정가수의`, `자기계산` 등 |
+
+**하루치 분포 (2026-10-30, 수집 대상 5개 시장 10,124행):**
+
+| 항목 | 결과 | 수집기에서 할 일 |
+|---|---|---|
+| `unit_nm` | 전부 `kg` | 그래도 `kg`이 아닌 행은 환산하지 않고 원본만 보관한다 (다른 날·품목에는 있을 수 있다) |
+| 물량·금액 0 이하 | 50행 | 가격 계산에서 뺀다 |
+| `grd_nm` | 특 6,582 · `.`(등급 없음) 1,478 · 상 1,455 · 중 227 · 등외 156 · 보통 72 · 5등 58 · 하 52 · 6~7등 · 무등급 | 등급 이름이 품목마다 다르다. `.`은 등급 없음 |
+| `trd_se` | 경매 77% · 정가수의 18% · 자기계산 2% | 경매가 아닌 거래도 들어 있다 |
+| 품목 매칭 | `gds_lclsf_cd + gds_mclsf_cd` = `item.at_code` (예 `03`+`05`=`0305` 강낭콩). 97%가 `item` 테이블 품목 | `item`에 없는 품목은 저장하지 않고 건수만 로그에 남긴다 |
+
+**원/kg 변환 (`unit_nm == "kg"`인 행):**
+
+- 가격(원/kg) = `totprc` ÷ `unit_tot_qty`, 물량(kg) = `unit_tot_qty`
+- 포장 1개 가격을 kg당으로: `avgprc` ÷ `unit_qty`. 위 계산과의 비율이 중앙값 1.00 (10~90%: 0.94~1.01)으로 같은 값임을 확인했다.
+- 원본(포장 단위) 행은 그대로 따로 보관한다 (CLAUDE.md 단위 규칙).
+
+`settle_price` 매핑 (날짜·시장·품목·등급으로 묶은 값):
+
+| `settle_price` | 계산 |
+|---|---|
+| `trade_date` | `trd_clcln_ymd` |
+| `market_id` | `whsl_mrkt_cd` |
+| `item_id` | `item.at_code` = `gds_lclsf_cd + gds_mclsf_cd` |
+| `grade` | `grd_nm`. 전 등급 합계는 `ALL` |
+| `avg_price` | Σ`totprc` ÷ Σ`unit_tot_qty` (물량가중) |
+| `min_price`, `max_price` | 묶음 안 행들의 `lwprc ÷ unit_qty` 최소, `hgprc ÷ unit_qty` 최대 |
+| `volume_kg` | Σ`unit_tot_qty` |
+
+## 3. 기상청 ASOS 일자료
+
+`GET https://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList` — 지상 관측소 일별 관측값 (D-1까지)
+
+| 파라미터 | 값 |
+|---|---|
+| `serviceKey` | 인증키 |
+| `dataType` | `JSON` |
+| `dataCd`, `dateCd` | `ASOS`, `DAY` |
+| `startDt`, `endDt` | `YYYYMMDD` |
+| `stnIds` | 관측소 번호 (예: 대전 133) |
+| `pageNo`, `numOfRows` | 관측소 하나·1년(최대 366행)이 한 페이지에 들어가게 999 |
+
+- 관측소 하나·하루 = 1행, 필드 62개. **숫자까지 모두 문자열**이고 관측이 없으면 빈 문자열 `""`이다.
+- 2026-10-30 대전: `avgTa` 13.6, `maxTa` 20.3, `minTa` 8.1, `sumRn` 0.0, `avgRhm` 75.4
+
+`weather_daily` 매핑:
+
+| `weather_daily` | 응답 필드 | 주의 |
+|---|---|---|
+| `station_id` | `stnId` | |
+| `obs_date` | `tm` (`YYYY-MM-DD`) | |
+| `avg_temp`, `max_temp`, `min_temp` | `avgTa`, `maxTa`, `minTa` | ℃ |
+| `rain_mm` | `sumRn` | 빈 값이 올 수 있다 (`ml/experiments/weather.py`가 0으로 채우는 이유). `erd.md`대로 DB에는 0으로 채우지 않고 NULL로 둔다 |
+| `humidity` | `avgRhm` | % |
+
+### 3.1 관측소 목록 (기상청 API허브 지점정보)
+
+`GET https://apihub.kma.go.kr/api/typ01/url/stn_inf.php?inf=SFC&stn=&tm=YYYYMMDDHHMM&authKey=...` — `tm` 시각에 운영 중인 지상(ASOS) 지점
+
+- 인증키는 공공데이터포털과 따로다 (`KMA_APIHUB_KEY`, API허브 회원가입 → "지상관측 지점정보 조회 > 지상" 활용신청).
+- 응답은 **EUC-KR 텍스트**다. `#`으로 시작하는 줄은 설명이고, 한 줄이 지점 하나다 (공백으로 나뉜 칸: 지점번호·경도·위도·…·지점명·영문명·예보구역·법정동코드·수계·법정동주소). 영문명·주소에 공백이 있다.
+- 2026-11-15 기준 97곳. 주소의 시도가 `전남광주통합특별시`로 오므로, 특보구역(`warning_zone`)과 같은 옛 표기로 나눠 저장한다 (구 → 광주광역시, 시·군 → 전라남도).
+- 수집기가 아니라 `backend/codes/fixtures/build_weather_station.py`가 `weather_station.json`을 만들고, 마이그레이션 `codes.0008`이 넣는다. 그래서 키가 없어도 `migrate`만 하면 채워진다.
+
+### 3.2 주산지 (`item_producing_area`)
+
+`python -m weather.producing_area [--items 사과 …]` (K29). 키 두 개(`DATA_GO_KR_KEY`, `KMA_APIHUB_KEY`)가 필요하다.
+
+- 원산지: aT 정산(2절)을 최근 1년, 수집 대상 시장마다 다시 받는다. `settle_price`는 원산지를 저장하지 않기 때문이다. `plor_nm`은 `"경상북도 영주시"`처럼 시도·시군구로 오고, 통합 시도(`전남광주통합특별시 …`)도 섞여 온다. kg 단위 행만 더한다.
+- 고르는 기준: 시군구 물량 비중이 큰 순서로 누적 80%까지, 한 곳이 3% 미만이면 거기서 멈춘다. 2026-11-15 사과: 원산지 102곳 중 8곳(합계 약 70%), 정산 호출 70건.
+- 관측소 연결: 시군구 위치 = 그 시군구 안 기상청 지점(ASOS+AWS, 3.1절 API의 `inf=SFC`·`inf=AWS`)의 평균 위경도. 가장 가까운 `weather_station`을 잇는다 (사과 8곳 모두 30km 이내).
+- 다시 돌리면 그 품목의 주산지를 이번 결과로 바꾼다 (빠진 시군구는 지운다).
+
+## 4. 한국천문연구원 특일 정보 (공휴일)
+
+`GET https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo`
+
+| 파라미터 | 값 | 주의 |
+|---|---|---|
+| `ServiceKey` | 인증키 | **대문자 S** (다른 API와 다르다) |
+| `_type` | `json` | 없으면 XML |
+| `solYear`, `solMonth` | `2026`, `09` | 월은 두 자리. **`solMonth`를 빼면 그해 전체**가 온다 (2026년 22건, 2026-11-14 확인) → 수집기는 연 1건 |
+| `numOfRows` | 50 | |
+
+- 2026-09: 3건 (추석 9/24~26). `{"dateKind": "01", "dateName": "추석", "isHoliday": "Y", "locdate": 20260924, "seq": 1}`
+- `locdate`는 **숫자**(`20260924`)로 온다. 날짜로 바꿀 때 문자열로 바꾼 뒤 파싱한다.
+- 한 달에 공휴일이 1건이면 `item`이 객체로 온다 (1절).
+
+`holiday` 매핑: `holiday_date` ← `locdate`, `name` ← `dateName`. `isHoliday == "Y"`인 것만 넣는다.
+- **같은 날 공휴일이 둘**일 수 있다 (2025-05-05 어린이날·부처님오신날). `holiday_date`가 PK라 이름을 `·`로 합쳐 한 행으로 넣는다 (`collectors/weather/holiday.py`).
+
+## 5. KOSIS 과실생산량
+
+`GET https://kosis.kr/openapi/Param/statisticsParameterData.do` (KOSIS 공유서비스, 별도 키)
+
+| 파라미터 | 값 | 주의 |
+|---|---|---|
+| `apiKey` | `KOSIS_API_KEY` | |
+| `method`, `format`, `jsonVD` | `getList`, `json`, `Y` | |
+| `orgId`, `tblId` | `101`, `DT_1ET0292` (과실생산량) | |
+| `prdSe`, `startPrdDe`, `endPrdDe` | `Y`, 시작·끝 연도 | 연 단위 |
+| `itmId`, `objL1` | `ALL`, `00`(전국) | **`objL2`를 넣으면 오류 21** |
+
+- 정상이면 `data.go.kr` 모양이 아니라 **행 리스트**가 바로 온다. 오류면 `{"err": "11", "errMsg": "유효하지 않은 인증KEY입니다."}` 같은 객체다.
+- 2024~2025 전국: 70행 = 연도 2 × 항목 35. 항목(`ITM_NM`)은 `과일:지표` 모양이다 — 사과·배·복숭아·포도·감귤·감·단감·떫은감·자두·기타 × 면적(ha)·생산량(톤)·10a당 생산량(kg)
+- 값은 `DT`(문자열), 연도 `PRD_DE`, 최종 수정일 `LST_CHN_DE`(2024년 값이 2025-10-29에 공표).
+- 저장: `crop_production` (`erd.md` 3절). 생산량은 톤 → kg(×1000, 반올림). 2012~올해를 호출 1건으로 받아 UPSERT (`collectors/weather/kosis.py`). `item`에 하나뿐인 이름만 매칭되므로 감·매실·기타·합계는 건너뛴다.
+- 연 1회 공표라 3회 정도면 충분하다. `docs/ml.md` 7장 결과로는 사과 예측에 효과가 작아 우선순위가 낮다.
+
+---
+
+## 6. 호출 한도와 과거 적재 계산
+
+| API | 한도 | 매일 수집 | 과거 적재 (2018-01-01 ~ 2026-11-13, 3,239일) |
+|---|---|---|---|
+| aT 정산 | 하루 10,000건 (실시간 경매와 별도) | 시장 5곳 × 1건 = 5건 + 전국 모드 예측 품목 수 × 1건 | 아래 계산 |
+| ASOS | 마이페이지 활용신청 현황에서 확인 필요 | 관측소 수 × 1 | 관측소 수 × 9년 (예: 53곳 → 477건. `ml/experiments`는 530건을 하루에 받았다) |
+| 특일 | 마이페이지 활용신청 현황에서 확인 필요 | 연 1회 1건 (`solMonth` 생략) | 2018~2027 = 10건 |
+| KOSIS | 제한 미공개 | 연 1회 | 1~3건 |
+| NCPMS 예찰 | 제한 미공개 (호출 수를 `collect_log`에 남김) | 목록 페이지 수 + 새 회차·최근 30일 회차 × (1 + 시도 수) | 회차 × (1 + 시도 약 8) (8절) |
+| 관세청 수출입실적 | data.go.kr 개발계정 (10,000건 가정) | 월 1회, 품목 수 × 2년 | 품목 수 × 연도 (6품목 × 2018~2026 = 54건) |
+
+**aT 정산 하루 행 수 (2026-10-30, 금):** 서울가락 5,895 · 대전오정 1,555 · 대전노은 1,350 · 청주 864 · 천안 460 = **5개 시장 합계 10,124행**. 모두 1페이지(10,000행) 안에 들어간다.
+
+| 방법 | 호출 수 | 기간 |
+|---|---|---|
+| A. 시장·날짜마다 1회 (매일 수집과 같은 방식) | 3,239일 × 5 = **16,195건** | 하루 10,000건 한도로 **2일** |
+| B. 시장마다 날짜 범위로 묶어 조회 (GTE~LTE, 페이지 넘김) | 전체 행 ÷ 10,000 ≈ 3,239 × 10,124 ÷ 10,000 ≈ **3,300건** | **하루 안** |
+
+- **B를 권한다.** 호출 수는 "받는 날 수"가 아니라 "받는 행 수"에 비례하게 된다. 다만 한 번에 너무 긴 범위를 잡으면 실패했을 때 다시 받는 양이 커지므로 시장별로 **한 달씩** 끊는다 (월 단위 조회는 `ml/experiments`에서 써 본 방식이다).
+- 하루치 표본 하나로 계산한 값이다. 명절 전처럼 물량이 많은 날, 과거 연도는 행 수가 다를 수 있다. 적재하면서 `collect_log.api_calls`로 실제 값을 남긴다.
+- 품목 조건을 붙이면 품목 수만큼 호출이 늘어나므로, 전 품목을 받은 뒤 `item` 테이블에 있는 품목만 남긴다.
+
+**전국 모드 (`--national`, K31):** 가격 예측의 전국 가격·물량 피처(`docs/ml.md` 7절)용으로 **예측 품목(`item.is_forecast`)만** `market` 테이블에 등록된 전국 시장(32곳)으로 받는다.
+- 조회: 품목 대·중분류 조건 + 시장 범위 `GTE=100000`·`LTE=999999`, 한 달씩. 응답 행의 `whsl_mrkt_cd`별로 묶어 `settle_price`에 UPSERT한다. 등록되지 않은 시장은 건너뛴다 (`시장_없음`).
+- 호출 수: 사과 하루 151행(32개 시장) → 매일 1건. 2018-01-02 ~ 2026-11-15 과거 적재는 **651건**(한 달 3~9건, 원본 행 수에 비례), 저장 401,501행.
+- 시장 × 전 품목으로 32곳을 받으면 하루 약 35,000행(2026-11-13)이라 과거 적재가 1만 건을 넘는다. 그래서 전국은 예측 품목만 받는다.
+- collect_log 출처는 `at_settle`로 같다 (같은 API라 하루 한도를 함께 센다).
+- 예측 품목을 새로 켜면 그 품목만 과거 적재한다: `--national --backfill --item 0501 --item 0502` (K28). `--item`은 예측 품목 중에서만 고르고, 아니면 아무것도 받지 않고 멈춘다.
+
+---
+
+## 7. 관세청 품목별 국가별 수출입실적
+
+`GET https://apis.data.go.kr/1220000/nitemtrade/getNitemtradeList` — HS 코드별·나라별 월 수출입 (2026-11-14 확인, K16)
+
+| 파라미터 | 값 | 주의 |
+|---|---|---|
+| `serviceKey` | 인증키 | 활용신청을 따로 해야 한다 (안 하면 403 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`) |
+| `strtYymm`, `endYymm` | `YYYYMM` | **1년 이내만.** 넘으면 `resultCode 99` "조회기간은 1년이내" |
+| `hsSgn` | HS 코드 2·4·6·10자리 | 6자리로 주면 그 아래 10자리 코드들이 모두 온다 |
+
+- 비슷한 이름의 `Itemtrade/getItemtradeList`(품목별, 나라 구분 없음)는 활용신청이 따로라 쓰지 않았다.
+- **응답은 XML만** 온다. `response.header.resultCode` 정상은 `00`. `totalCount`·페이지가 없고 한 번에 다 온다 (포도 1년 213행).
+- 첫 행은 `year=총계`(조회 기간 전체 합)다. 나머지는 `year=2025.03`, `hsCd`(10자리), `statCd`·`statCdCntnKor1`(나라), `impWgt`(kg), `impDlr`(USD), `expWgt`, `expDlr`, `balPayments`.
+- **거래가 없는 달·나라는 행이 없다.** 사과(신선, 0808.10)는 검역 때문에 수입이 거의 없다 (2022·2023년 0kg, 다른 해 수 kg). 그래서 수입량 급증 알림은 사과 외에 수입이 많은 품목에도 HS 코드를 넣었다.
+- 저장: `import_monthly` (`erd.md` 3절). 나라·10자리 코드를 달마다 더하고, 값이 없는 달은 0으로 넣는다. 아직 공표되지 않은 달까지 0이 되지 않게 그 실행에서 어느 품목이든 값이 온 마지막 달까지만 채운다 (`collectors/imports/customs.py`). 2026-11-14 기준 10월분까지 공표됐다.
+
+| 품목 (`item.hs_code`) | HS | 2025년 수입 | 6자리에 함께 들어가는 것 |
+|---|---|---|---|
+| 사과 | 080810 | 8kg | |
+| 양파 | 070310 | 139,518톤 | 깐 양파, 샬롯 |
+| 마늘 | 070320 | 1,510톤 | 깐 마늘 (냉동·건조 마늘은 다른 코드라 빠진다) |
+| 당근 | 070610 | 112,949톤 | 순무 |
+| 포도 | 080610 | 31,260톤 | |
+| 참다래(키위) | 081050 | 48,695톤 | |
+
+---
+
+## 8. NCPMS 병해충 예찰
+
+`GET https://ncpms.rda.go.kr/npmsAPI/service` — 농촌진흥청 국가농작물병해충관리시스템. 예찰 관찰포 조사 결과 (2026-11-14 확인, K16)
+
+- **키:** NCPMS 사이트에서 따로 받는다 (`apiKey`). 키가 틀려도 **HTTP 200**에 `{"service": {"errorCode": "ERR_101", ...}}`가 온다. 오류는 항상 `errorCode`로 판단한다.
+- `serviceType=AA003`이면 JSON. HTTP·HTTPS 모두 되지만 키가 URL에 들어가므로 HTTPS를 쓴다.
+- 하루 한도는 공개되지 않았다 (`requirements.md` REQ-NFR-009). 응답은 0.2초 안팎.
+
+| serviceCode | 파라미터 | 돌려주는 것 |
+|---|---|---|
+| `SVC51` 조사 회차 목록 | `searchKncrCode`(작물), `searchExaminYear`, `displayCount`(**최대 50**), `startPoint`(1부터) | `totalCount`, `list[]`: `insectKey`, `kncrCode`·`kncrNm`, `examinYear`, `examinTmrd`(회차), `inputStdrDatetm`(기준일 YYYYMMDD), `examinSpchcknNm`(조사 종류), `predictnSpchcknNm`(관찰포 등). 최신순 |
+| `SVC52` 시도별 결과 | `insectKey` | `structList[]`: `sidoCode`, `sidoNm`, `dbyhsNm`(항목), `inqireCnClCode`, `inqireValue` |
+| `SVC53` 시군별 결과 | `insectKey`, `sidoCode` | `structList[]`: `sigunguCode`(4자리), `sigunguNm`, 항목·값. **`sidoCode`가 없으면 `ERR_901`** |
+
+- 파라미터 이름이 틀려도 오류 없이 무시된다 (`kncrCode=`로 주면 전체 목록이 온다). 필터는 `search...`로 시작한다.
+- 전체 1,075회차 (2026-11 기준). 작물 14개: 사과 FT010601, 배 FT010602, 복숭아 FT020604, 포도 FT040603, 감 FT060605, 감귤 FT060614, 고추 VC011205, 배추 VC021001, 무 VC031101, 양파 VC041201, 마늘 VC041209, 콩 FC030301, 논벼 FC010101, 보리 FC020201.
+- **조사 종류마다 회차가 따로다.** 고추는 노지고추·시설고추, 배추·무는 여름·가을, 마늘은 난지형·한지형. 그래서 회차 구분은 `insectKey`(연도+종류+작물+회차)로 한다.
+- **회차 번호의 날짜가 해마다 같지 않다.** 사과는 2015~2021년 1회차가 4/1(15회), 2022년부터 5/16(10회). 해마다 같은 시기를 비교할 때는 회차 번호가 아니라 `inputStdrDatetm`(조사 기준일)을 쓴다.
+- 값 이름(`dbyhsNm`)의 괄호 안이 단위다: `탄저병(피해과율)`, `응애류(밀도)`, `복숭아순나방(트랩마리수)`. 배추·무는 `가을배추 - 무름병(피해주율)`처럼 앞에 종류가 붙는다.
+- 저장: `pest_survey` (`erd.md` 3절). 시군 단위(SVC53)만 저장한다. 시도는 SVC52로 조사한 시도를 알아내는 데만 쓴다. 받을 회차는 DB에 없는 회차 + 기준일이 최근 30일 안인 회차다 (`collectors/pests/ncpms.py`). 품목과는 `item.ncpms_crop_code`로 잇는다 (단감·떫은감 → 감, 풋고추·건고추·홍고추 → 고추).
+

@@ -1,0 +1,4 @@
+confluent-kafka==2.6.1
+PyMySQL==1.1.1
+# MySQL 8.4 기본 인증(caching_sha2_password)을 PyMySQL로 접속할 때 필요
+cryptography==43.0.3
