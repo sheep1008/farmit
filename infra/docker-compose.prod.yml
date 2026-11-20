@@ -43,7 +43,9 @@ services:
       - "80:80"
     volumes: !override
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/app.conf:/etc/nginx/app.conf:ro   # default.conf·https.conf가 include 하는 공통 설정
       - static-files:/var/www/static:ro   # backend가 collectstatic으로 채운다
+      - certbot-www:/var/www/certbot:ro   # 인증서 발급·갱신 확인용 파일 (certbot이 쓴다, T03)
     restart: unless-stopped
 
   elasticsearch:
@@ -88,3 +90,4 @@ services:
 volumes:
   backend-data:
   static-files:
+  certbot-www:
