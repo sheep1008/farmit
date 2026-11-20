@@ -1,3 +1,5 @@
 # 컨테이너(리눅스) 안에서 실행하는 셸 스크립트는 Windows에서도 LF로 체크아웃한다.
 # CRLF면 "/bin/bash^M: bad interpreter"로 mysql 초기화가 실패한다.
 *.sh text eol=lf
+# cron 파일도 서버(리눅스)에서 그대로 쓴다. CRLF면 명령 끝에 ^M이 붙어 실패한다.
+infra/cron/* text eol=lf
