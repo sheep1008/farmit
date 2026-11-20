@@ -2,10 +2,10 @@
 
 | 항목 | 내용 |
 |---|---|
-| 상태 | **임시본(자리표시)**. 학습이 끝나면 같은 파일 이름으로 교체한다 |
+| 상태 | 합친 학습(E5b) 최종 best 가중치 (2026-11-20). 외부 사진 평가(E6) 전이라 **서비스 정확도는 검증되지 않았다** |
 | 모델 | EfficientNet-B0 (ImageNet 사전학습) + 분류층, 67클래스 (153 시설 32 + 147 노지 30 + 146 사과·배 9 − 중복 정상 4) |
-| 가중치 출처 | 합친 학습 E5b(`train.py --processed data/processed/153 data/processed/147 data/processed/146 --epochs 30 --patience 6`)의 **epoch 2 best** (GPU 장애로 epoch 4에서 중단된 학습의 중간 결과) |
-| 점수 | 검증 macro F1 **0.911** (품목 마스킹, 여백 25%), 마스킹 정확도 0.954. **시험셋 평가 안 함, 외부 사진 평가(E6) 안 함.** 서비스 판단 근거로 쓰지 않는다 |
+| 가중치 출처 | 합친 학습 E5b(`train.py --processed data/processed/153 data/processed/147 data/processed/146 --epochs 30 --patience 6`)의 **best epoch 22** (epoch 22에서 조기 종료, 누적 약 134분) |
+| 점수 | **시험** 정확도 **0.972**, macro F1 **0.929** (품목 마스킹, 여백 25%). 데이터셋별 153 0.975/0.949, 147 0.964/0.910, 146 0.980/0.977. 검증 macro F1 0.941. 모두 **같은 데이터 안의 점수**이고, 외부 사진 평가(E6) 전이다. 자세한 결과는 `docs/vision.md` 4.5 |
 | 파일 | `vision.onnx` (16.4MB), `classes.json` (클래스 이름·작물 매핑) |
 | 데이터 | AI Hub 153·147·146으로 학습했다. 데이터 자체는 레포에 없다. 가중치 배포가 AI Hub 이용 조건에 맞는지는 확인이 필요하다 |
 
@@ -28,4 +28,4 @@ print(cls['labels'][int(p.argmax())], float(p.max()))
 
 ## 교체 방법
 
-학습이 끝나면 `ml/vision`에서 `CUDA_VISIBLE_DEVICES= .venv/Scripts/python.exe -I -X utf8 experiments/export_onnx.py --run runs/e5b_all --out model`로 같은 파일 이름(`vision.onnx`, `classes.json`)을 덮어쓰고, 이 README의 "가중치 출처"와 "점수"를 새 결과로 고친다. 이 변환은 PyTorch와의 출력 차이, 예측 일치율, CPU 추론 시간도 함께 출력한다 (임시본: 차이 2.6e-05, 일치 100%, 1장 8ms).
+새로 학습한 뒤 `ml/vision`에서 `CUDA_VISIBLE_DEVICES= .venv/Scripts/python.exe -I -X utf8 experiments/export_onnx.py --run runs/e5b_all --out model`로 같은 파일 이름(`vision.onnx`, `classes.json`)을 덮어쓰고, 이 README의 "가중치 출처"와 "점수"를 새 결과로 고친다. 이 변환은 PyTorch와의 출력 차이, 예측 일치율, CPU 추론 시간도 함께 출력한다 (현재: 차이 2.67e-05, 일치 100%, 1장 9ms).
