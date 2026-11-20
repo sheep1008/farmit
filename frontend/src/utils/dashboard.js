@@ -56,3 +56,28 @@ export function summarizeForecast(rows, { limit = 3 } = {}) {
 export function formatWon(v) {
   return v == null ? '-' : `${Math.round(v).toLocaleString('ko-KR')}원`
 }
+
+/**
+ * 현재 날씨 아이콘 (GET /api/weather/current). 강수가 있으면 강수 형태, 없으면 하늘 상태로 고른다.
+ * 맑은 밤(관측 시각이 한국 시간 19시~다음 날 6시 전)은 달로 보여 준다.
+ */
+export function weatherIcon(w) {
+  const p = w.precip_type
+  if (p) return p.includes('눈') ? '🌨️' : '🌧️'
+  if (w.sky === '맑음') {
+    const hour = Number((w.observed_at ?? '').slice(11, 13) || 12) // 응답은 한국 시간 ISO (…T11:00:00+09:00)
+    return hour >= 19 || hour < 6 ? '🌙' : '☀️'
+  }
+  if (w.sky === '구름 많음') return '⛅'
+  if (w.sky === '흐림') return '☁️'
+  return '🌡️'
+}
+
+/** 현재 날씨의 보조 값 목록. 예: ['강수 0.5mm', '습도 68%']. 비·눈이 없으면 강수는 뺀다. */
+export function weatherDetails(w) {
+  return [
+    w.rain_mm_1h > 0 ? `강수 ${w.rain_mm_1h}mm` : null,
+    w.humidity_pct == null ? null : `습도 ${Math.round(w.humidity_pct)}%`,
+    w.wind_ms == null ? null : `바람 ${w.wind_ms}m/s`,
+  ].filter(Boolean)
+}

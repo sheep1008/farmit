@@ -9,6 +9,7 @@ import BaseButton from '@/components/common/BaseButton.vue'
 import ItemSelect from '@/components/common/ItemSelect.vue'
 import InfoTip from '@/components/common/InfoTip.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import NowWeather from '@/components/home/NowWeather.vue'
 import SellNowTrial from '@/components/recommend/SellNowTrial.vue'
 import { useAlertStore } from '@/stores/alerts'
 import { useAuthStore } from '@/stores/auth'
@@ -22,12 +23,12 @@ import { summarizeWeeklyFarm, weeklyPeriodText } from '@/utils/farming'
 import { realtimeState, realtimeStatusText } from '@/utils/realtime'
 
 // SCR-003 대시보드 (docs/screens.md).
-// ① 관심 품목 오늘 경매가: 첫 관심 품목의 시장별 평균가와 마지막 수집 시각 (K33, REQ-PRC-004, GET /api/prices/realtime)
-// ② 이번 주 예측: 첫 관심 품목의 이번 주 예측가 상위 3개 시장·80% 구간·명절 주의 (K33, REQ-PRD-001·003, GET /api/forecasts)
+// ① 관심 품목 오늘 경매가: 고른 품목의 시장별 평균가와 마지막 수집 시각 (K33, REQ-PRC-004, GET /api/prices/realtime)
+// ② 이번 주 예측: 고른 품목의 이번 주 예측가 상위 3개 시장·80% 구간·명절 주의 (K33, REQ-PRD-001·003, GET /api/forecasts)
 // ③ 안 읽은 알림 3개 (K20, REQ-ALT-003, GET /api/alerts?unread=true&size=3)
-// ④ 이번 달 할 일: 첫 관심 품목의 이번 달 시작·계속 농작업과 주의 시기 (K33, REQ-RAG-002, GET /api/farming/monthly)
-// ④-2 이번 주 농사 정보: 농촌진흥청 주간농사정보에서 첫 관심 품목 분야의 요약 (K48, REQ-RAG-008, GET /api/farming/weekly)
-// ⑤ 특수 상황 과거 사례 요약: 첫 관심 품목의 사건 종류별 건수와 4주 뒤 평균 변화 (K20, REQ-HIS-001·002, GET /api/cases)
+// ④ 이번 달 할 일: 고른 품목의 이번 달 시작·계속 농작업과 주의 시기 (K33, REQ-RAG-002, GET /api/farming/monthly)
+// ④-2 이번 주 농사 정보: 농촌진흥청 주간농사정보에서 고른 품목 분야의 요약 (K48, REQ-RAG-008, GET /api/farming/weekly)
+// ⑤ 특수 상황 과거 사례 요약: 고른 품목의 사건 종류별 건수와 4주 뒤 평균 변화 (K20, REQ-HIS-001·002, GET /api/cases)
 // ⑥ 채팅 입력창: 입력 후 /chat?q=로 이동, 채팅 화면이 질문 칸을 채운다 (K33, REQ-CHT-001)
 // 맨 위 오늘의 한 줄 브리핑: 시세 변화·안 읽은 알림·이번 달 할 일을 한 문장으로 (K45, GET /api/markets, GET /api/prices/daily unit=week)
 // 비회원(K43, 공개 홈): 같은 화면을 기본 품목으로 보여 준다. 회원 전용인 ③ 알림과 ⑥ 채팅 자리는 가입 안내로 바꾼다.
@@ -44,25 +45,23 @@ const alertsError = ref(false)
 const ready = ref(false)
 const isGuest = computed(() => !auth.isLoggedIn)
 
-// 비회원은 관심 품목이 없으므로 '지금 보는 품목' 규칙으로 고른다 (다른 화면에서 고른 품목 → 가격 예측 대상 → 첫 품목)
-const guestItems = ref([])
-const guestItemId = ref(null)
-const guestItem = computed(() => guestItems.value.find((it) => it.item_id === guestItemId.value) ?? null)
+// 홈에서 볼 품목. 머리말의 품목 선택 상자(검색·★ 관심 품목)에서 바꾼다.
+// 처음 품목은 '지금 보는 품목' 규칙: 다른 화면에서 고른 품목 → 관심 품목(앞에서부터) → 가격 예측 대상 → 첫 품목
+const items = ref([])
+const itemId = ref(null)
+const item = computed(() => items.value.find((it) => it.item_id === itemId.value) ?? null)
+const hasInterest = computed(() => (auth.user?.interest_items ?? []).length > 0)
 
-async function loadGuestItems() {
+async function loadItems() {
   try {
-    guestItems.value = (await http.get('/items')).data.data
-    guestItemId.value = currentItem.initial(guestItems.value)
+    items.value = (await http.get('/items')).data.data
+    itemId.value = currentItem.initial(items.value)
   } catch {
     // 5xx·네트워크 오류 토스트는 인터셉터가 띄운다. 품목이 없으면 카드가 안내 문구를 보여 준다
   }
 }
 
-// 회원: 첫 관심 품목 (없으면 null), 비회원: 위에서 고른 품목
-const item = computed(() => (isGuest.value ? guestItem.value : (auth.user?.interest_items?.[0] ?? null)))
-const noItemText = computed(() =>
-  isGuest.value ? '품목 목록을 불러오지 못했습니다. 새로고침해 주세요.' : '관심 품목을 등록하면 보여 드립니다.',
-)
+const noItemText = '품목 목록을 불러오지 못했습니다. 새로고침해 주세요.'
 const caseMeta = ref(null)
 const casesLoading = ref(false)
 const casesError = ref(false)
@@ -259,14 +258,14 @@ function loadItemCards() {
 
 onMounted(async () => {
   await auth.init() // 이 화면은 비회원도 들어오므로 가드가 기다려 주지 않는다
-  if (isGuest.value) await loadGuestItems()
+  await loadItems()
   ready.value = true
   loadItemCards()
   if (!isGuest.value) loadAlerts() // 알림은 회원 전용 API
 })
 
-// 비회원이 품목을 바꾸면 다른 화면에서도 그 품목이 이어지게 기억하고 카드를 다시 불러온다
-watch(guestItemId, (id, old) => {
+// 품목을 바꾸면 다른 화면에서도 그 품목이 이어지게 기억하고 카드를 다시 불러온다
+watch(itemId, (id, old) => {
   if (old == null) return // 처음 정해질 때는 onMounted가 불러온다
   currentItem.set(id)
   loadItemCards()
@@ -301,26 +300,27 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
         <p class="eyebrow">{{ todayLabel }}</p>
         <h1>오늘 한눈에 보기</h1>
       </div>
-      <label v-if="isGuest && guestItems.length" class="item-select">
+      <label v-if="items.length" class="item-select">
         품목
-        <ItemSelect v-model="guestItemId" :items="guestItems" />
+        <ItemSelect v-model="itemId" :items="items" />
       </label>
-      <RouterLink v-else-if="item" :to="{ name: 'mypage' }" class="item-chip">
-        관심 품목 <strong>{{ item.name }}</strong>
-      </RouterLink>
     </header>
 
     <!-- 오늘의 한 줄 브리핑 (K45): 조각을 누르면 해당 화면으로 간다 -->
-    <p class="briefing" aria-live="polite">
-      <span class="briefing-label">오늘의 브리핑</span>
-      <span v-if="briefingLoading" class="muted">오늘 상황을 정리하는 중…</span>
-      <span v-else-if="!briefing.length" class="muted">{{ BRIEFING_EMPTY_TEXT }}</span>
-      <span v-else>
-        <template v-for="(p, i) in briefing" :key="p.key">
-          <RouterLink :to="p.to">{{ p.text }}</RouterLink>{{ i < briefing.length - 1 ? ', ' : '.' }}
-        </template>
-      </span>
-    </p>
+    <div class="briefing">
+      <p class="briefing-text" aria-live="polite">
+        <span class="briefing-label">오늘의 브리핑</span>
+        <span v-if="briefingLoading" class="muted">오늘 상황을 정리하는 중…</span>
+        <span v-else-if="!briefing.length" class="muted">{{ BRIEFING_EMPTY_TEXT }}</span>
+        <span v-else>
+          <template v-for="(p, i) in briefing" :key="p.key">
+            <RouterLink :to="p.to">{{ p.text }}</RouterLink>{{ i < briefing.length - 1 ? ', ' : '.' }}
+          </template>
+        </span>
+      </p>
+      <!-- 오른쪽: 내 위치의 현재 날씨(회원)와 현재 시각 (REQ-HOM-002) -->
+      <NowWeather :member="!isGuest" />
+    </div>
 
     <!-- 비회원: 가입하면 무엇이 더 되는지 한 번만 안내한다 (채팅 입력창 자리) -->
     <div v-if="isGuest" class="onboarding">
@@ -334,11 +334,11 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
       <BaseButton :to="{ name: 'signup' }" variant="primary">무료로 시작하기</BaseButton>
     </div>
 
-    <!-- 관심 품목이 없으면 카드마다 등록 버튼을 반복하지 않고 여기서 한 번만 안내한다 -->
-    <div v-else-if="!item" class="onboarding">
+    <!-- 관심 품목이 없는 회원: 등록을 한 번만 안내한다 (카드는 기본 품목으로 보여 준다) -->
+    <div v-else-if="!hasInterest" class="onboarding">
       <div>
-        <p class="onboarding-title">관심 품목을 먼저 등록해 주세요</p>
-        <p class="muted">오늘 경매가, 이번 주 예측, 이번 달 할 일을 그 품목 기준으로 보여 드립니다.</p>
+        <p class="onboarding-title">관심 품목을 등록해 보세요</p>
+        <p class="muted">등록하면 홈이 내 품목으로 열리고 그 품목의 알림을 받습니다. 위 품목 상자의 ★로도 넣을 수 있어요.</p>
       </div>
       <BaseButton :to="{ name: 'mypage' }" variant="primary">관심 품목 등록</BaseButton>
     </div>
@@ -602,7 +602,7 @@ const trendClass = (v) => (v == null || Number(v) === 0 ? '' : Number(v) > 0 ? '
 </template>
 
 <style scoped>
-/* 머리말: 날짜 + 제목, 오른쪽에 관심 품목 */
+/* 머리말: 날짜 + 제목, 오른쪽에 품목 선택 */
 .page-head {
   display: flex;
   align-items: flex-end;
@@ -620,20 +620,7 @@ h1 {
   letter-spacing: -0.02em;
   line-height: 1.3;
 }
-.item-chip {
-  flex: none;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: var(--font-size-sm);
-  text-decoration: none;
-}
-.item-chip strong {
-  margin-left: 4px;
-  font-weight: 700;
-}
-/* 비회원 품목 고르기 */
+/* 품목 고르기 */
 .item-select {
   display: flex;
   align-items: center;
@@ -645,8 +632,10 @@ h1 {
 /* 오늘의 한 줄 브리핑: 카드보다 가볍게, 왼쪽 선으로만 구분한다 */
 .briefing {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
   margin-bottom: 16px;
   padding: 12px 18px;
   border-left: 4px solid var(--color-primary);
@@ -657,6 +646,13 @@ h1 {
   line-height: 1.6;
   color: var(--color-heading);
   overflow-wrap: anywhere;
+}
+.briefing-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 320px;
+  min-width: 0;
 }
 .briefing-label {
   font-size: var(--font-size-sm);

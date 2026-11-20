@@ -1002,6 +1002,26 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 `item`은 `{item_id, name, category}`, `market`은 `{market_id, name, sido}`. 결과가 없으면 `200` + `[]`. **오류**: `400 VALIDATION_ERROR`(`q` 없음·100자 초과), `400 INVALID_PARAMETER`(`type`·`size`·`page` 잘못), `503 SERVICE_UNAVAILABLE`(보도자료 검색 저장소 접속 불가). 첫 수집 전(인덱스 없음)에는 `200` + `[]`
 보도자료는 정책브리핑에서 농림축산식품부·농촌진흥청 것만 모은다 (제목·요약·날짜·원문 링크, 본문·사진·첨부 제외). `python manage.py press_collect [--days 3]`가 새 보도자료를 넣고(같은 `newsId`는 덮어씀), `collect_log`(source=`press`)에 남긴다. 한 번에 정책브리핑을 약 4회 요청한다(부처당 목록 1~2쪽, 요청 사이 1초).
 
+### 2.10 날씨 (회원 전용)
+
+#### `GET /api/weather/current` — 내 위치의 현재 날씨 (REQ-HOM-002)
+| 인증 | 화면 | REQ |
+|---|---|---|
+| 회원 | SCR-003 | REQ-HOM-002 |
+
+내 정보의 위치(시군 중심 좌표)를 기상청 격자(nx·ny)로 바꿔 초단기실황을 부른다. 하늘 상태는 실황에 없어 초단기예보의 가장 가까운 시각 값을 쓴다. 같은 격자는 10분 동안 캐시하고 DB에는 저장하지 않는다. LLM 없음. **200**
+```json
+{ "data": { "location": "충남 천안시", "summary": "눈", "sky": "흐림", "precip_type": "눈",
+            "temp_c": 0.8, "humidity_pct": 68.0, "rain_mm_1h": 0.5, "wind_ms": 2.4,
+            "observed_at": "2026-11-20T11:00:00+09:00" } }
+```
+- `summary`: 화면에 보여 줄 한 단어. 강수가 있으면 `precip_type`, 없으면 `sky`
+- `sky`: `맑음`·`구름 많음`·`흐림`. 예보를 못 받으면 `null` (나머지 값은 그대로 준다)
+- `precip_type`: `비`·`비/눈`·`눈`·`빗방울`·`빗방울·눈날림`·`눈날림`. 강수가 없으면 `null`
+- `rain_mm_1h`: 최근 1시간 강수량(mm). `observed_at`: 관측 기준 시각(매시 정각)
+
+**오류**: `401 NOT_AUTHENTICATED`, `404 NOT_FOUND`(내 위치의 좌표를 찾지 못함), `503 DATA_NOT_READY`(기상청 조회 실패·키 없음. 화면은 날씨만 감춘다)
+
 ---
 
 ## 3. 2주차 이후 API (주소 목록)
@@ -1036,6 +1056,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | GET | `/api/farming/search` | 전체 | **(2.8에 상세)** 조건 탐색 ("봄에 심는 채소") | SCR-012 | REQ-RAG-005 | 4 |
 | GET | `/api/farming/glossary` | 전체 | **(2.8에 상세)** 용어 풀이 (농업용어사전 → 위키백과) | SCR-012, 011 | REQ-RAG-007 | 4 |
 | GET | `/api/farming/weekly` | 전체 | **(2.8에 상세)** 이번 주 농사 정보 (주간농사정보 요약, item_id 선택) | SCR-003, 012 | REQ-RAG-008 | 4 |
+| GET | `/api/weather/current` | 회원 | **(2.10에 상세)** 내 위치의 현재 날씨 (기상청 초단기실황) | SCR-003 | REQ-HOM-002 | 3 |
 | POST | `/api/farming/diagnose` | 회원 | **(2.8에 상세)** 증상 진단 (채팅 한도에 포함) | SCR-013 | REQ-RAG-001 | 4 |
 | GET | `/api/prices/retail` | 전체 | KAMIS 도·소매 참고 가격 (선택) | SCR-004 | REQ-PRC-006 | 12월 |
 | POST | `/api/sales/ocr` | 회원 | 정산서 사진 → 입력값 추출 (선택) | SCR-007 | REQ-SAL-004 | 12월 |
