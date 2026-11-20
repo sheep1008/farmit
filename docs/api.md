@@ -405,7 +405,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | `grade` | X | `ALL` | 등급. `ALL`은 전 등급 물량가중 평균 |
 | `compare_last_year` | X | `false` | `true`면 전년 같은 기간 값을 함께 |
 
-- 기간 제한: `unit=day`는 최대 1년, `week`·`month`는 최대 5년 (일수가 아니라 연으로 센다. `from`에 N년을 더한 날짜까지 허용). 넘으면 `400 VALIDATION_ERROR`
+- 기간 제한: `day`·`week`·`month` 모두 최대 5년 (일수가 아니라 연으로 센다. `from`에 N년을 더한 날짜까지 허용). 넘으면 `400 VALIDATION_ERROR`
 
 **200**
 ```json
@@ -595,7 +595,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 #### `GET /api/forecasts` — 주간 가격 예측
 | 인증 | 화면 | REQ |
 |---|---|---|
-| 전체 | SCR-003, SCR-005 | REQ-PRD-001~003 |
+| 전체 | SCR-003, SCR-004, SCR-005 | REQ-PRD-001~003 |
 
 | 쿼리 | 필수 | 설명 |
 |---|---|---|
@@ -627,7 +627,7 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 #### `GET /api/forecasts/history` — 예측 성적표 (지난 예측과 실제 가격)
 | 인증 | 화면 | REQ |
 |---|---|---|
-| 전체 | SCR-005 | REQ-PRD-005 |
+| 전체 | SCR-004, SCR-005 | REQ-PRD-005 |
 
 | 쿼리 | 필수 | 설명 |
 |---|---|---|
@@ -660,6 +660,36 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 - 예측 대상이 아닌 품목(`is_forecast` false): `200`, `data: []`, `meta.forecast_available: false`, `meta.message`.
 
 **오류**: `400 VALIDATION_ERROR`(`item_id`·`market_id` 필수, `item_id` 숫자), `404 NOT_FOUND`(없는 품목·시장)
+
+#### `GET /api/forecasts/backtest` — 검증 예측 (서비스 예측이 없던 기간의 지난 예측)
+| 인증 | 화면 | REQ |
+|---|---|---|
+| 전체 | SCR-004 | REQ-PRD-005 |
+
+| 쿼리 | 필수 | 기본값 | 설명 |
+|---|---|---|---|
+| `item_id` | O | | 품목 |
+| `market_id` | O | | 시장 |
+| `from` | X | 오늘 − 5년 | 이 날짜가 든 주부터 (`YYYY-MM-DD`) |
+
+가격 통계 차트의 지난 예측 선을 길게 그리려고 준다. 서비스가 실제로 내보낸 예측(`forecast`, `/api/forecasts/history`)은 2026-10부터라 그 전은 모델 검증 때의 예측(`forecast_backtest`)으로 채운다.
+**검증 예측은 그 주 이전 데이터로만 학습한 모델의 1주 앞 예측이지만, 그때 사용자에게 실제로 보여 준 값은 아니다.** 화면에서는 "검증 예측"으로 구분해 표시하고, 같은 주에 실제 지난 예측이 있으면 그것을 쓴다.
+
+**200**
+```json
+{
+  "data": [
+    { "target_week": "2021-11-22", "pred_price": 3706.0, "lower80": 3243.0, "upper80": 4330.1 }
+  ],
+  "meta": { "item_id": 10, "market_id": "110001", "market_name": "서울가락", "horizon": 1,
+            "forecast_available": true, "price_unit": "원/kg" }
+}
+```
+- 대상 주 오름차순. `horizon` 1(그 주 월요일에 한 그 주 예측)만, 지난주까지만 준다 (이번 주부터는 `/api/forecasts`).
+- 검증 예측이 적재되지 않은 품목·시장은 `200` + `data: []`.
+- 예측 대상이 아닌 품목(`is_forecast` false): `200`, `data: []`, `meta.forecast_available: false`, `meta.message`.
+
+**오류**: `400 VALIDATION_ERROR`(`item_id`·`market_id` 필수, `item_id` 숫자, `from` 형식), `404 NOT_FOUND`(없는 품목·시장)
 
 #### `POST /api/recommendations` — 판매 추천 계산
 | 인증 | 화면 | REQ |
@@ -986,7 +1016,8 @@ Django 세션을 쓴다. 로그인하면 서버가 쿠키를 내려 주고, 이�
 | PATCH | `/api/sales/{id}` | 회원 | **(2.6에 상세)** 판매 기록 수정 | SCR-007 | REQ-SAL-001 | 2 |
 | DELETE | `/api/sales/{id}` | 회원 | **(2.6에 상세)** 판매 기록 삭제 | SCR-007 | REQ-SAL-001 | 2 |
 | GET | `/api/forecasts` | 전체 | **(2.5에 상세)** 주간 예측 (item_id, market_id) — 예측값·80% 구간·명절 주의 | SCR-003, 005 | REQ-PRD-001~003 | 2 |
-| GET | `/api/forecasts/history` | 전체 | **(2.5에 상세)** 예측 성적표 (item_id, market_id) — 지난 예측·실제 주평균가·오차·범위 적중 | SCR-005 | REQ-PRD-005 | 4 |
+| GET | `/api/forecasts/history` | 전체 | **(2.5에 상세)** 예측 성적표 (item_id, market_id) — 지난 예측·실제 주평균가·오차·범위 적중 | SCR-004, SCR-005 | REQ-PRD-005 | 4 |
+| GET | `/api/forecasts/backtest` | 전체 | **(2.5에 상세)** 검증 예측 (item_id, market_id, from) — 서비스 예측이 없던 기간의 1주 앞 예측 | SCR-004 | REQ-PRD-005 | 5 |
 | POST | `/api/recommendations` | 회원 | **(2.5에 상세)** 판매 추천 계산 (품목·물량·시기·비용) | SCR-005 | REQ-REC-001~006 | 2 |
 | POST | `/api/recommendations/now` | 전체 | **(2.5에 상세)** 전국 시장 "지금 팔면" 실수령액 (비회원은 분당 20회) | SCR-003, SCR-005 | REQ-REC-007 | 2 |
 | GET | `/api/alerts` | 회원 | 알림 목록 (`unread=true` 필터) | SCR-003, 008 | REQ-ALT-003 | 3 |

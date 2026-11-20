@@ -12,9 +12,10 @@ from rest_framework.permissions import IsAuthenticated
 from api.responses import error, ok
 from codes.models import Holiday, Item, Market, MarketClosure
 
-from .models import Forecast, SettlePrice
+from .models import Forecast, ForecastBacktest, SettlePrice
 from .routes import road_routes, trip
-from .views import _aggregate, _bad, _get_item, _kst_iso, _price, _today_kst, market_prices
+from .views import (_add_years, _aggregate, _bad, _get_item, _kst_iso, _parse_date, _price, _today_kst,
+                    market_prices)
 
 # 명절 이름. holiday 테이블에는 공휴일 전체가 들어 있어 이름으로 명절만 고른다 (결정 0009)
 HOLIDAY_KEYWORDS = ('설날', '추석')
@@ -24,6 +25,8 @@ HOLIDAY_NOTICE = '명절 전후에는 가격이 크게 오를 수 있으나, 이
 NO_FORECAST_NOTICE = '이 품목은 아직 가격 예측을 제공하지 않습니다.'
 # 예측 성적표가 돌려주는 최근 대상 주 수 (api.md 2.5)
 HISTORY_WEEKS = 12
+# 검증 예측을 `from` 없이 부르면 돌려주는 기간 (가격 통계 차트의 가장 긴 기간과 같다)
+BACKTEST_YEARS = 5
 
 
 def _holiday_dates(weeks):
@@ -156,6 +159,47 @@ def forecast_history(request):
                for h, rows in sorted(by_horizon.items())]
     return ok(data, {**meta, 'forecast_available': True,
                      'weeks': len({row['target_week'] for row in data}), 'summary': summary})
+
+
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([])
+def forecast_backtest(request):
+    """검증 예측 (가격 통계 차트의 지난 예측 선). 서비스 예측이 없던 기간을 모델 검증 때의 1주 앞 예측으로 채운다.
+
+    그 시점 이전 데이터로만 학습한 값이지만 그때 실제로 보여 준 예측은 아니다 (forecast_backtest 테이블).
+    """
+    params = request.query_params
+    details = {}
+    item = _get_item(params.get('item_id', ''), details)
+    market_id = params.get('market_id', '')
+    if not market_id:
+        details['market_id'] = ['필수 값입니다.']
+    today = _today_kst()
+    start = _add_years(today, -BACKTEST_YEARS) if params.get('from') is None else _parse_date(params['from'])
+    if start is None:
+        details['from'] = ['2000-01-01~2100-12-31 범위의 YYYY-MM-DD 형식이어야 합니다.']
+    if details:
+        return _bad(details)
+    if item is False:
+        return error(404, 'NOT_FOUND', '없는 품목입니다.')
+    market = Market.objects.filter(pk=market_id).first()
+    if market is None:
+        return error(404, 'NOT_FOUND', '없는 시장입니다.')
+
+    meta = {'item_id': item.item_id, 'market_id': market.market_id, 'market_name': market.name,
+            'horizon': 1, 'price_unit': '원/kg'}
+    if not item.is_forecast:
+        return ok([], {**meta, 'forecast_available': False, 'message': NO_FORECAST_NOTICE})
+    # `from`이 주 중간이어도 그 주(월요일이 대상 주)부터, 지난주까지만 준다 (이번 주부터는 /forecasts의 실제 예측)
+    rows = (ForecastBacktest.objects
+            .filter(item=item, market=market, horizon=1,
+                    target_week__gte=start - timedelta(days=start.weekday()),
+                    target_week__lt=today - timedelta(days=today.weekday()))
+            .order_by('target_week'))
+    data = [{'target_week': r.target_week.isoformat(), 'pred_price': _price(r.pred_price),
+             'lower80': _price(r.lower80), 'upper80': _price(r.upper80)} for r in rows]
+    return ok(data, {**meta, 'forecast_available': True})
 
 
 class RecommendationSerializer(serializers.Serializer):

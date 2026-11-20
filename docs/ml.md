@@ -288,7 +288,9 @@ mlflow ui --backend-store-uri sqlite:///mlruns/airflow.db
 
 ### 예측 이력 (REQ-PRD-005, K19)
 `forecast` 테이블은 지난 기준 주를 지우지 않는다. `farmit_ml.monitor`가 지난 예측과 실제 주평균을 나란히 놓는다 (Airflow `forecast_weekly`의 `monitor` 태스크가 매주 돈다). 사용자에게는 `GET /api/forecasts/history`와 판매 추천 화면의 예측 성적표로 공개한다 (K47, api.md 2.5).
+가격 통계 차트의 지난 예측 선은 서비스 예측이 없던 기간(2026-10 이전)을 **검증 예측**으로 채운다: `farmit_ml.selection`이 남긴 OOF(2021~2024, 그 해 이전 데이터로만 학습)와 테스트(2025~) 예측을 `farmit_ml.backtest_store`가 `forecast_backtest` 테이블에 넣는다 (`GET /api/forecasts/backtest`). 그때 실제로 보여 준 예측이 아니라서 `forecast`·성적표·`monitor`와 섞지 않는다. 80% 구간은 같은 OOF 잔차로 만든 분위수라 OOF 기간의 적중률은 실제보다 좋게 보인다. 시장 선별을 다시 돌리면(`selection`) 이것도 다시 적재한다.
 ```bash
+python -m farmit_ml.backtest_store --item 0601              # outputs/oof_0601_v4.csv + test_0601_v4.csv → forecast_backtest
 python -m farmit_ml.monitor --item 0601                     # 실제가 있는 가장 최근 주(지난주)를 채점
 python -m farmit_ml.monitor --item 0601 --week 2026-11-09   # 그 주를 다시 채점
 ```
