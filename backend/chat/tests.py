@@ -164,6 +164,33 @@ class AnswerFlowTests(ChatBase):
         self.assertEqual(second['answer'], first['answer'])
 
 
+class NoItemSelectedTests(ChatBase):
+    """채팅 화면은 품목을 보내지 않는다. 질문에서 작물을 알아낸다"""
+
+    def test_crop_in_question_filters_search(self):
+        self.complete.return_value = classify_json(crop='사과')
+        self.stream.side_effect = stream_of('탄저병일 수 있습니다.[근거 1]\n')
+        sse(self.ask('사과 열매에 둥근 반점이 생겨요'))
+        self.assertEqual(self.search.call_args.kwargs['crop'], '사과')
+
+    def test_no_crop_searches_all_documents(self):
+        self.complete.return_value = classify_json(crop=None)
+        self.stream.side_effect = stream_of('서리 대비 방법입니다.[근거 1]\n')
+        sse(self.ask('늦서리가 걱정돼요'))
+        self.assertIsNone(self.search.call_args.kwargs['crop'])
+
+    def test_two_crops_search_all_documents(self):
+        self.complete.return_value = classify_json(crop='사과')
+        self.stream.side_effect = stream_of('둘 다 저온에 약합니다.[근거 1]\n')
+        sse(self.ask('사과와 배 중 어느 쪽이 서리에 약해요?'))
+        self.assertIsNone(self.search.call_args.kwargs['crop'])
+
+    def test_sale_question_uses_crop_from_question(self):
+        self.complete.return_value = classify_json(intent='판매', crop='사과', queries=[])
+        done = dict(sse(self.ask('사과를 언제 팔까?')))['done']
+        self.assertEqual(done['answer'], P.ASK_VOLUME.format(crop_eul='사과를'))
+
+
 class SalesFlowTests(ChatBase):
     """REQ-CHT-002: "사과 어디서 팔까?" → 물량을 되묻고, 답하면 추천 결과를 설명"""
 

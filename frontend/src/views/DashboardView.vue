@@ -16,7 +16,7 @@ import { useCurrentItemStore } from '@/stores/currentItem'
 import { BRIEFING_EMPTY_TEXT, buildBriefing } from '@/utils/briefing'
 import { addDays, formatKstDateTime, mondayOf, todayKst } from '@/utils/dates'
 import { CASE_TYPES, alertTypeLabel, caseTypeLabel, formatPct, regionText } from '@/utils/alerts'
-import { CHAT_MAX_LENGTH, chatPrefillRoute } from '@/utils/chat'
+import { CHAT_MAX_LENGTH, chatAskRoute } from '@/utils/chat'
 import { formatWon, summarizeForecast, summarizeRealtime, summarizeMonthly } from '@/utils/dashboard'
 import { summarizeWeeklyFarm, weeklyPeriodText } from '@/utils/farming'
 import { realtimeState, realtimeStatusText } from '@/utils/realtime'
@@ -166,7 +166,7 @@ const chatText = ref('')
 const chatRemaining = computed(() => auth.user?.chat_remaining_today ?? null)
 
 function goChat() {
-  const to = chatPrefillRoute(chatText.value)
+  const to = chatAskRoute(chatText.value)
   if (to) router.push(to)
 }
 

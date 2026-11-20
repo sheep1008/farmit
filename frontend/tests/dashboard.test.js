@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHAT_MAX_LENGTH, chatPrefillRoute } from '@/utils/chat'
+import { CHAT_MAX_LENGTH, chatAskRoute, chatPrefillRoute } from '@/utils/chat'
 import { formatWon, summarizeForecast, summarizeMonthly, summarizeRealtime } from '@/utils/dashboard'
 
 describe('이번 주 예측 카드', () => {
@@ -38,6 +38,11 @@ describe('채팅 입력창 카드', () => {
   it('공백뿐이면 이동하지 않는다', () => {
     expect(chatPrefillRoute('  \n ')).toBeNull()
     expect(chatPrefillRoute(undefined)).toBeNull()
+  })
+
+  it('홈 입력창 질문은 바로 보내라는 표시를 주소가 아닌 history.state에 싣는다', () => {
+    expect(chatAskRoute(' 사과를 언제 팔까? ')).toEqual({ name: 'chat', query: { q: '사과를 언제 팔까?' }, state: { autoSend: true } })
+    expect(chatAskRoute('  ')).toBeNull()
   })
 
   it('채팅 화면 최대 글자 수까지만 넘긴다', () => {

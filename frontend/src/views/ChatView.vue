@@ -20,9 +20,8 @@ const route = useRoute()
 const messages = ref([]) // [{ role: 'user', content } | newReply() 모양]
 const sessionId = ref(null) // 첫 답변의 session 이벤트로 받는다. 이어서 묻는 질문에 같이 보낸다
 const remaining = computed(() => auth.user?.chat_remaining_today ?? null)
-const interestItems = computed(() => auth.user?.interest_items ?? [])
-const itemId = ref(interestItems.value[0]?.item_id ?? '') // '' = 품목 선택 안 함
-// ?q=로 오면 질문 칸을 미리 채운다 (알림 상세의 "채팅으로 물어보기"). 보내기는 사용자가 누른다
+// ?q=로 오면 질문 칸을 미리 채운다 (알림 상세의 "채팅으로 물어보기"). 보내기는 사용자가 누른다.
+// 홈 입력창에서 온 질문만 바로 보낸다 (아래 onMounted)
 const question = ref(typeof route.query.q === 'string' ? route.query.q.slice(0, MAX_LENGTH) : '')
 const sending = ref(false)
 const formError = ref('')
@@ -48,7 +47,6 @@ async function send() {
   formError.value = ''
   const body = { message: text }
   if (sessionId.value) body.session_id = sessionId.value
-  if (itemId.value) body.item_id = itemId.value
 
   messages.value.push({ role: 'user', content: text })
   messages.value.push(newReply())
@@ -127,6 +125,14 @@ async function loadSessions(more = false) {
   }
 }
 onMounted(() => loadSessions())
+
+// 홈 입력창에서 온 질문(history.state.autoSend, utils/chat.js chatAskRoute)은 바로 보낸다.
+// 먼저 주소를 /chat으로 바꿔(replace) q와 표시를 지운다 → 새로고침·뒤로·앞으로 가기로 같은 질문을 다시 보내지 않는다
+onMounted(async () => {
+  if (!window.history.state?.autoSend || !question.value) return
+  await router.replace({ name: 'chat', state: { autoSend: false } }) // replace는 이전 state를 이어받아 직접 꺼야 한다
+  send()
+})
 
 // 새 대화의 첫 질문이 저장되면 목록 맨 위에 넣는다 (서버 제목 = 질문 앞 40자, api.md 2.7)
 function addSessionToList(id, firstQuestion) {
@@ -278,14 +284,6 @@ function onKeydown(e) {
       </div>
 
       <form class="composer" @submit.prevent="send">
-        <div class="options">
-          <label for="chat-item">품목</label>
-          <select id="chat-item" v-model="itemId" :disabled="sending">
-            <option value="">선택 안 함</option>
-            <option v-for="it in interestItems" :key="it.item_id" :value="it.item_id">{{ it.name }}</option>
-          </select>
-          <span class="hint">품목을 고르면 그 작물 자료만 근거로 씁니다.</span>
-        </div>
         <div class="input-row">
           <textarea
             v-model="question"
@@ -581,21 +579,6 @@ h1 {
   flex-direction: column;
   gap: 8px;
 }
-.options {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--font-size-sm);
-}
-.options label {
-  font-weight: 600;
-  color: var(--color-heading);
-}
-.hint {
-  color: var(--color-text-muted);
-}
-select,
 textarea {
   min-height: 40px;
   padding: 8px 12px;
@@ -605,7 +588,6 @@ textarea {
   color: var(--color-text);
   font: inherit;
 }
-select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--color-primary);
@@ -632,9 +614,6 @@ textarea {
   }
   .bubble {
     max-width: 100%;
-  }
-  .hint {
-    display: none;
   }
 }
 </style>
