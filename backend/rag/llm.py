@@ -116,6 +116,27 @@ def _wrap(exc):
     return LlmError('unavailable', f'LLM 호출 실패 {type(exc).__name__}')
 
 
+MAX_IMAGE_CHARS = 1_500_000   # data URL 전체 길이 (약 1.1MB 사진). 화면이 긴 변 1024px JPEG로 줄여 보낸다
+_IMAGE_RE = re.compile(r'data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})')
+
+
+def parse_image(data_url):
+    """화면이 보낸 사진 data URL → {'media_type', 'data'(base64)}. 형식이 다르면 None."""
+    m = _IMAGE_RE.fullmatch(data_url)
+    return {'media_type': m.group(1), 'data': m.group(2)} if m else None
+
+
+def image_block(media_type, data):
+    """사진 1장을 메시지 content에 넣는 조각 (base64). 사진 입력은 Claude 모델만 받는다."""
+    return {'type': 'image', 'source': {'type': 'base64', 'media_type': media_type, 'data': data}}
+
+
+def _text_only(messages):
+    # OpenAI·Gemini 본문은 글자만 만든다. 사진이 든 메시지를 그대로 보내면 사진 없이 엉뚱한 답이 온다
+    if any(not isinstance(m['content'], str) for m in messages):
+        raise LlmError('bad_request', '사진 입력은 Claude 모델만 지원합니다')
+
+
 def provider(model):
     """모델 이름 → 'anthropic' | 'openai' | 'gemini'"""
     if model.startswith('gemini'):
@@ -129,6 +150,7 @@ def complete(system, messages, max_tokens=1024, model=None):
     """한 번에 답을 받는다. 반환: LlmResult"""
     model = _model(model)
     if provider(model) != 'anthropic':
+        _text_only(messages)
         return _http_complete(system, messages, max_tokens, model)
     started = time.monotonic()
     try:
@@ -142,6 +164,7 @@ def stream(system, messages, max_tokens=2048, model=None):
     """답을 조각으로 받는다. ('delta', 글자 조각)을 차례로 내고, 마지막에 ('done', LlmResult)를 낸다."""
     model = _model(model)
     if provider(model) != 'anthropic':
+        _text_only(messages)
         yield from _http_stream(system, messages, max_tokens, model)
         return
     started = time.monotonic()
@@ -159,7 +182,8 @@ _JSON_RE = re.compile(r'\{.*\}', re.S)
 
 
 def complete_json(system, user_text, max_tokens=512, model=None):
-    """JSON 객체 하나를 답하게 한다. 형식이 틀리면 한 번 다시 묻는다. 반환: (dict 또는 None, [LlmResult])"""
+    """JSON 객체 하나를 답하게 한다. 형식이 틀리면 한 번 다시 묻는다. 반환: (dict 또는 None, [LlmResult])
+    user_text는 글자, 또는 사진이 든 content 목록(image_block + text 조각)."""
     messages = [{'role': 'user', 'content': user_text}]
     results = []
     for _ in range(2):

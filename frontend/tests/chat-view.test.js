@@ -71,3 +71,46 @@ describe('splitAnswer', () => {
     expect(parts.map((p) => (p.type === 'cite' ? `[근거 ${p.n}]` : p.value)).join('')).toBe('정읍이 좋습니다.\n- 첫째[근거 2]')
   })
 })
+
+describe('fitSize (사진 줄이기, REQ-CHT-010)', () => {
+  it('긴 변을 1024px로 맞추고 비율을 지킨다. 작은 사진은 그대로 둔다', async () => {
+    const { fitSize } = await import('@/utils/image')
+    expect(fitSize(4000, 3000)).toEqual({ width: 1024, height: 768 })
+    expect(fitSize(3000, 4000)).toEqual({ width: 768, height: 1024 })
+    expect(fitSize(800, 600)).toEqual({ width: 800, height: 600 })
+  })
+})
+
+describe('올린 사진 보관 (REQ-CHT-010)', () => {
+  it('대화 id와 질문 순서로 넣고 꺼내며, 대화를 다시 열 때 사진 질문에만 붙인다', async () => {
+    const store = new Map()
+    globalThis.localStorage = {
+      getItem: (k) => store.get(k) ?? null,
+      setItem: (k, v) => store.set(k, v),
+      removeItem: (k) => store.delete(k),
+    }
+    const { clearChatPhotos, loadChatPhoto, saveChatPhoto, toViewMessages: toView } = await import('@/utils/chat')
+    saveChatPhoto(7, 1, 'data:image/jpeg;base64,AAA')
+    expect(loadChatPhoto(7, 1)).toBe('data:image/jpeg;base64,AAA')
+    expect(loadChatPhoto(7, 0)).toBe('')
+
+    const view = toView(
+      [
+        { role: 'user', content: '글 질문' },
+        { role: 'assistant', content: '답', intent_label: '재배 상담', sources: [] },
+        { role: 'user', content: '[사진] 사진의 증상을 진단해 주세요' },
+      ],
+      7,
+    )
+    expect(view[0]).toEqual({ role: 'user', content: '글 질문' })
+    expect(view[2]).toEqual({ role: 'user', content: '[사진] 사진의 증상을 진단해 주세요', image: 'data:image/jpeg;base64,AAA' })
+
+    for (let i = 0; i < 40; i += 1) saveChatPhoto(9, i, 'x') // 최근 30장만 남긴다
+    expect(loadChatPhoto(7, 1)).toBe('')
+    expect(loadChatPhoto(9, 39)).toBe('x')
+
+    clearChatPhotos()
+    expect(loadChatPhoto(9, 39)).toBe('')
+    delete globalThis.localStorage
+  })
+})

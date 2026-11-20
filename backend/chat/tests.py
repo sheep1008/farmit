@@ -702,3 +702,153 @@ class LlmCompareSummaryTests(TestCase):
         s = summarize(rows, ['판매', '병해충', '시세'])
         self.assertEqual(s, {'intent_ok': 1, 'n': 3, 'errors': 1, 'avg_ms': 2000, 'in': 30, 'out': 5,
                              'cited': 1, 'answered': 1})
+
+
+PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
+
+
+def photo_json(**kw):
+    data = {'is_crop': True, 'crop': '사과', 'symptoms': '열매에 둥근 갈색 반점이 여러 개 있음', 'queries': ['사과 탄저병']}
+    data.update(kw)
+    return result(json.dumps(data, ensure_ascii=False))
+
+
+def has_image(content):
+    return isinstance(content, list) and any(b.get('type') == 'image' for b in content)
+
+
+class PhotoTests(ChatBase):
+    """REQ-CHT-010: 사진을 올리면 증상을 읽어 병해충 상담으로 답한다."""
+
+    def test_known_crop_photo_is_answered_from_documents(self):
+        self.complete.return_value = photo_json()
+        self.stream.side_effect = stream_of('탄저병일 수 있습니다.[근거 1]\n')
+        ev = sse(self.client.post(URL, {'image': PHOTO}, format='json'))  # 질문 없이 사진만
+        # 사진은 판독 호출에만 들어간다. 답변은 판독한 증상 글과 근거로 쓴다
+        self.assertTrue(has_image(self.complete.call_args.args[1][0]['content']))
+        self.assertEqual(self.search.call_args.kwargs['crop'], '사과')
+        self.assertIn('둥근 갈색 반점', self.search.call_args.args[0])
+        answer_content = self.stream.call_args.args[1][0]['content']
+        self.assertIsInstance(answer_content, str)
+        self.assertIn('사진에서 본 증상', answer_content)
+        done = dict(ev)['done']
+        self.assertEqual((done['intent'], [s['n'] for s in done['sources']]), ('병해충', [1]))
+        self.assertNotIn(P.PHOTO_ONLY_NOTICE, done['answer'])
+        self.assertTrue(done['answer'].endswith(P.DISCLAIMER))
+        self.assertIn({'step': 'photo', 'message': '사진을 살펴보는 중'}, [d for e, d in ev if e == 'status'])
+
+    def test_photo_itself_is_not_saved(self):
+        self.complete.return_value = photo_json()
+        self.stream.side_effect = stream_of('탄저병일 수 있습니다.[근거 1]\n')
+        sse(self.ask('이거 무슨 병이에요?', image=PHOTO))
+        session = ChatSession.objects.get(user=self.user)
+        self.assertEqual(session.title, '[사진] 이거 무슨 병이에요?')
+        contents = list(session.messages.values_list('content', flat=True))
+        self.assertEqual(contents[0], '[사진] 이거 무슨 병이에요?')
+        self.assertFalse(any('base64' in c or '/9j/' in c for c in contents))
+
+    def test_crop_not_in_item_table_is_answered_from_photo_only(self):
+        """품목표에 없는 작물: 자료를 찾지 않고 사진만 보고 답하며, 추정이라는 안내를 붙인다"""
+        self.complete.return_value = photo_json(crop='용과', queries=[])
+        self.stream.side_effect = stream_of('줄기에 갈색 반점이 보입니다.[근거 1]\n만코제브 수화제를 물 20L당 20g 뿌립니다.\n')
+        ev = sse(self.ask('왜 이래요?', image=PHOTO))
+        self.search.assert_not_called()
+        self.assertTrue(has_image(self.stream.call_args.args[1][0]['content']))
+        self.assertIs(self.stream.call_args.args[0], P.PHOTO_ONLY_SYSTEM)
+        done = dict(ev)['done']
+        self.assertTrue(done['answer'].startswith(P.PHOTO_ONLY_NOTICE))
+        self.assertEqual(done['sources'], [])
+        self.assertNotIn('[근거 1]', done['answer'])   # 근거가 없으니 번호도 지운다
+        self.assertNotIn('20g', done['answer'])        # 약제 사용량 치환은 그대로 (REQ-CHT-005)
+        streamed = ''.join(d['text'] for e, d in ev if e == 'delta')
+        self.assertTrue(streamed.startswith(P.PHOTO_ONLY_NOTICE))
+
+    def test_known_crop_without_evidence_falls_back_to_photo_only(self):
+        self.complete.return_value = photo_json()
+        self.search.return_value = []
+        self.stream.side_effect = stream_of('열매에 반점이 보입니다.\n')
+        done = dict(sse(self.ask('사과가 이상해요', image=PHOTO)))['done']
+        self.search.assert_called_once()
+        self.assertTrue(done['answer'].startswith(P.PHOTO_ONLY_NOTICE))
+
+    def test_not_a_crop_photo_gets_guidance_without_answer_llm(self):
+        self.complete.return_value = photo_json(is_crop=False, crop=None, symptoms='', queries=[])
+        done = dict(sse(self.ask('이거 봐 주세요', image=PHOTO)))['done']
+        self.stream.assert_not_called()
+        self.search.assert_not_called()
+        self.assertEqual((done['intent'], done['answer'], done['sources']), ('병해충', P.PHOTO_NOT_CROP, []))
+
+    def test_unknown_crop_is_asked_once_then_answered_from_photo_only(self):
+        """사진만으로 작물을 모르면 한 번 되묻고(need_crop), 되물은 뒤에도 모르면 사진만 보고 답한다"""
+        self.complete.return_value = photo_json(crop=None, queries=[])
+        first = dict(sse(self.client.post(URL, {'image': PHOTO}, format='json')))['done']
+        self.assertEqual((first['answer'], first['need_crop'], first['sources']), (P.PHOTO_ASK_CROP, True, []))
+        self.stream.assert_not_called()
+        self.search.assert_not_called()
+
+        self.stream.side_effect = stream_of('열매에 얼룩이 보입니다.\n')
+        second = dict(sse(self.ask('잘 모르겠어요', image=PHOTO, session_id=first['session_id'])))['done']
+        self.assertTrue(second['answer'].startswith(P.PHOTO_ONLY_NOTICE))
+        self.assertNotIn('need_crop', second)
+
+    def test_crop_given_after_being_asked_is_used(self):
+        self.complete.return_value = photo_json(crop=None, queries=[])
+        first = dict(sse(self.client.post(URL, {'image': PHOTO}, format='json')))['done']
+        self.complete.return_value = photo_json(crop='배', queries=['배 검은별무늬병'])
+        self.stream.side_effect = stream_of('검은별무늬병일 수 있습니다.[근거 1]\n')
+        second = dict(sse(self.ask('배', image=PHOTO, session_id=first['session_id'])))['done']
+        self.assertEqual(self.search.call_args.kwargs['crop'], '배')
+        self.assertNotIn('need_crop', second)
+        # 사진 판독에 이전 대화(되물은 말)가 들어간다 → "배"가 작물 이름이라는 것을 안다
+        self.assertIn(P.PHOTO_ASK_CROP[:20], self.complete.call_args.args[1][0]['content'][1]['text'])
+
+    def test_selected_item_is_never_asked(self):
+        """품목을 고른 채팅(판매 추천 화면 패널)은 작물을 되묻지 않는다"""
+        self.complete.return_value = photo_json(crop=None, queries=[])
+        self.stream.side_effect = stream_of('탄저병일 수 있습니다.[근거 1]\n')
+        done = dict(sse(self.ask('이거 뭐예요', image=PHOTO, item_id=self.apple.item_id)))['done']
+        self.assertNotIn('need_crop', done)
+        self.assertEqual(self.search.call_args.kwargs['crop'], '사과')
+
+    def test_unclear_photo_asks_for_another_photo(self):
+        """작물 사진이지만 흐리거나 멀어 판단하기 어려우면 답하지 않고 다른 사진을 요청한다"""
+        self.complete.return_value = photo_json(clear=False)
+        done = dict(sse(self.ask('이거 뭐예요', image=PHOTO)))['done']
+        self.assertEqual((done['answer'], done['sources']), (P.PHOTO_UNCLEAR, []))
+        self.stream.assert_not_called()
+        self.search.assert_not_called()
+
+    def test_answer_is_told_to_request_more_photos_when_unsure(self):
+        self.complete.return_value = photo_json()
+        self.stream.side_effect = stream_of('탄저병일 수 있습니다.[근거 1]\n')
+        sse(self.ask('이거 뭐예요', image=PHOTO))
+        self.assertIn(P.PHOTO_MORE, self.stream.call_args.args[1][0]['content'])
+
+    def test_photo_skips_rules_and_answer_cache(self):
+        """사진 질문은 범위 밖 규칙·같은 질문 캐시를 타지 않는다 (사진마다 답이 다르다)"""
+        self.complete.return_value = photo_json()
+        self.stream.side_effect = stream_of('탄저병일 수 있습니다.[근거 1]\n')
+        for _ in range(2):
+            done = dict(sse(self.ask('게임하다 봤는데 이거 뭐예요', image=PHOTO)))['done']
+            self.assertEqual((done['intent'], done['cached']), ('병해충', False))
+        self.assertEqual(self.stream.call_count, 2)
+
+    def test_invalid_input_is_rejected_before_stream(self):
+        for body in ({}, {'message': '  '}, {'image': 'data:image/gif;base64,AAAA'}, {'image': 'https://example.com/a.jpg'},
+                     {'image': 'data:image/jpeg;base64,' + 'A' * 1_500_000}):
+            res = self.client.post(URL, body, format='json')
+            self.assertEqual((res.status_code, res.json()['error']['code']), (400, 'VALIDATION_ERROR'), body.keys())
+        self.complete.assert_not_called()
+        self.assertFalse(ChatSession.objects.exists())
+
+
+class PhotoProviderTests(TestCase):
+    @override_settings(GMS_KEY='k')
+    def test_non_claude_model_rejects_photo_instead_of_dropping_it(self):
+        from rag import llm
+        messages = [{'role': 'user', 'content': [llm.image_block('image/jpeg', 'AAAA'), {'type': 'text', 'text': 'q'}]}]
+        with mock.patch('rag.llm.httpx.post') as post:
+            with self.assertRaises(LlmError) as cm:
+                llm.complete('s', messages, model='gpt-5')
+        self.assertEqual(cm.exception.kind, 'bad_request')
+        post.assert_not_called()

@@ -510,3 +510,72 @@ class ReviewFixTests(DiagnoseTests):
             codes = [APIClient().get('/api/farming/glossary', {'q': 'x'}, HTTP_X_FORWARDED_FOR=f'1.2.3.{i}').status_code
                      for i in range(3)]
         self.assertEqual(codes, [200, 200, 429])
+
+
+PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
+READ = {'is_crop': True, 'crop': '사과', 'symptoms': '열매에 갈색 반점이 여러 개 있음', 'queries': []}
+ONE = {'candidates': [{'name': '탄저병', 'matching': '반점', 'distinguish': '', 'action': '제거', 'evidence': [1]}]}
+GUESS = {'candidates': [{'name': '점무늬 계열 병', 'matching': '갈색 반점', 'distinguish': '테두리',
+                         'action': '만코제브 수화제를 물 20L당 20g 뿌립니다.', 'evidence': [1]}]}
+
+
+class DiagnosePhotoTests(DiagnoseTests):
+    """REQ-CHT-010: 증상 진단에 사진을 올리면 사진에서 읽은 증상으로 진단한다."""
+
+    def photo(self, **body):
+        return self.client.post(self.URL, {'item_id': self.apple.item_id, 'image': PHOTO, **body}, format='json')
+
+    def test_photo_symptom_is_read_and_used_for_search(self):
+        self.complete.side_effect = [llm_result(READ), llm_result(ONE)]
+        res = self.photo()   # 증상 글 없이 사진만
+        self.assertEqual(res.status_code, 200)
+        d = res.json()['data']
+        self.assertEqual((d['photo_symptom'], d['symptom']), ('열매에 갈색 반점이 여러 개 있음', ''))
+        self.assertEqual([c['name'] for c in d['candidates']], ['탄저병'])
+        self.assertNotIn('photo_only', d)
+        self.assertIn('갈색 반점', self.search.call_args.args[0])
+        first, second = [c.args[1][0]['content'] for c in self.complete.call_args_list]
+        self.assertEqual(first[0]['type'], 'image')      # 사진은 판독 호출에만
+        self.assertIsInstance(second, str)
+        user_msg = ChatMessage.objects.get(role='user')
+        self.assertEqual(user_msg.content, '[증상 진단] 사과: [사진] ')
+        self.assertNotIn('/9j/', user_msg.content)
+
+    def test_no_evidence_falls_back_to_photo_only_candidates(self):
+        self.search.return_value = []
+        self.complete.side_effect = [llm_result(READ), llm_result(GUESS)]
+        d = self.photo(symptom='열매가 이상해요').json()['data']
+        self.assertTrue(d['photo_only'])
+        self.assertEqual((d['sources'], d['candidates'][0]['evidence']), ([], []))   # 근거 번호를 줘도 믿지 않는다
+        self.assertIn(DOSE_TOKEN, d['candidates'][0]['action'])
+        self.assertIn('사진만 보고', d['message'])
+        self.assertEqual(ChatMessage.objects.filter(role='assistant').count(), 1)    # 한도를 쓴다
+
+    def test_item_without_documents_is_diagnosed_from_photo_only(self):
+        """자료가 없는 품목: 사진이 없으면 400, 있으면 자료 검색 없이 사진만 보고"""
+        with mock.patch('farming.views.crop_util.crop_name', return_value=None):
+            self.assertEqual(self.post().status_code, 400)
+            self.complete.side_effect = [llm_result(READ), llm_result(GUESS)]
+            d = self.photo().json()['data']
+        self.search.assert_not_called()
+        self.assertTrue(d['photo_only'])
+
+    def test_not_a_crop_photo_returns_guidance(self):
+        self.complete.side_effect = [llm_result({'is_crop': False, 'crop': None, 'symptoms': '', 'queries': []})]
+        d = self.photo().json()['data']
+        self.assertEqual(d['candidates'], [])
+        self.assertIn('다시 올려', d['message'])
+        self.search.assert_not_called()
+
+    def test_unclear_photo_asks_for_another_photo(self):
+        self.complete.side_effect = [llm_result({**READ, 'clear': False})]
+        d = self.photo().json()['data']
+        self.assertEqual(d['candidates'], [])
+        self.assertIn('다른 사진을 보내 주세요', d['message'])
+        self.search.assert_not_called()
+
+    def test_symptom_or_photo_is_required_and_photo_format_is_checked(self):
+        for body in ({'item_id': self.apple.item_id}, {'item_id': self.apple.item_id, 'symptom': ' '},
+                     {'item_id': self.apple.item_id, 'image': 'data:image/gif;base64,AAAA'}):
+            self.assertEqual(self.client.post(self.URL, body, format='json').status_code, 400, body)
+        self.complete.assert_not_called()

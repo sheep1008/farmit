@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import http from '@/api/http'
+import { clearChatPhotos } from '@/utils/chat'
+import { clearLastDiagnosis } from '@/utils/farming'
 
 // 로그인 상태. 세션은 쿠키(sessionid, HttpOnly)라 JS에서 볼 수 없으므로 GET /users/me 결과로 판단한다.
 export const useAuthStore = defineStore('auth', () => {
@@ -52,6 +54,9 @@ export const useAuthStore = defineStore('auth', () => {
       // 무시: 서버 세션이 남아 있어도 새로고침하면 /users/me로 다시 맞춰진다
     }
     user.value = null
+    // 채팅에 올린 사진 사본과 마지막 증상 진단을 이 브라우저에서 지운다 (같은 PC를 다음 사람이 쓸 수 있다)
+    clearChatPhotos()
+    clearLastDiagnosis()
   }
 
   // 회원 탈퇴 (SCR-015, docs/api.md 2.1 DELETE /users/me). 실수 방지로 비밀번호를 다시 받는다.
@@ -59,6 +64,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function withdraw(password) {
     await http.delete('/users/me', { data: { password } })
     user.value = null // 204: 서버가 계정·개인 데이터를 지우고 세션을 끝냈다
+    clearChatPhotos()
+    clearLastDiagnosis()
   }
 
   return { user, isLoggedIn, init, fetchMe, setUser, login, logout, withdraw }

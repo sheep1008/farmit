@@ -3,6 +3,10 @@
 /** 질문 최대 글자 수 (채팅 화면·대시보드 입력창 공통) */
 export const CHAT_MAX_LENGTH = 1000
 
+/** 사진만 보냈을 때의 질문, 대화 기록에서 사진 질문 앞에 붙는 표시 (서버 chat/prompts.py와 같은 값, REQ-CHT-010) */
+export const PHOTO_QUESTION = '사진의 증상을 진단해 주세요'
+export const PHOTO_PREFIX = '[사진] '
+
 /**
  * 다른 화면에서 채팅으로 질문을 넘길 때의 이동 위치. 채팅 화면은 ?q=로 질문 칸만 채우고, 보내기는 사용자가 누른다.
  * 공백뿐이면 null (이동하지 않는다).
@@ -58,11 +62,58 @@ export function failReply(reply, message) {
   Object.assign(reply, { state: 'error', status: '', error: message || '답변을 만들지 못했습니다.' })
 }
 
-/** 저장된 대화(GET /api/chat/sessions/{id}의 messages)를 화면 메시지 모양으로 바꾼다. */
-export function toViewMessages(messages) {
+// ── 올린 사진 보관 (REQ-CHT-010) ─────────────────
+// 서버는 사진을 저장하지 않는다. 대화를 다시 열 때도 사진이 보이게, 보낸 사진의 작은 사본을 이 브라우저(localStorage)에만 둔다.
+// 열쇠는 "대화 id:그 대화의 몇 번째 사용자 질문(0부터)". 최근 30장만 두고, 로그아웃하면 지운다. 다른 기기·브라우저에서는 보이지 않는다.
+const PHOTO_STORE_KEY = 'farmit.chatPhotos'
+const PHOTO_STORE_MAX = 30
+
+function readPhotoStore() {
+  try {
+    const list = JSON.parse(globalThis.localStorage?.getItem(PHOTO_STORE_KEY) ?? '[]')
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+
+export function saveChatPhoto(sessionId, userIndex, dataUrl) {
+  const key = `${sessionId}:${userIndex}`
+  const list = [...readPhotoStore().filter(([k]) => k !== key), [key, dataUrl]].slice(-PHOTO_STORE_MAX)
+  // 저장 공간이 모자라면 오래된 사진부터 버리고 다시 넣는다
+  while (list.length) {
+    try {
+      globalThis.localStorage?.setItem(PHOTO_STORE_KEY, JSON.stringify(list))
+      return
+    } catch {
+      list.shift()
+    }
+  }
+}
+
+export function loadChatPhoto(sessionId, userIndex) {
+  return readPhotoStore().find(([k]) => k === `${sessionId}:${userIndex}`)?.[1] ?? ''
+}
+
+export function clearChatPhotos() {
+  try {
+    globalThis.localStorage?.removeItem(PHOTO_STORE_KEY)
+  } catch {
+    // 저장소를 못 쓰는 브라우저: 넣은 것도 없다
+  }
+}
+
+/** 저장된 대화(GET /api/chat/sessions/{id}의 messages)를 화면 메시지 모양으로 바꾼다. sessionId를 주면 이 브라우저에 둔 사진을 붙인다. */
+export function toViewMessages(messages, sessionId = null) {
+  let userIndex = -1
+  const photoOf = (m) => {
+    userIndex += 1
+    const image = sessionId && m.content.startsWith(PHOTO_PREFIX) ? loadChatPhoto(sessionId, userIndex) : ''
+    return image ? { image } : {}
+  }
   return messages.map((m) =>
     m.role === 'user'
-      ? { role: 'user', content: m.content }
+      ? { role: 'user', content: m.content, ...photoOf(m) }
       : { ...newReply(), state: 'done', status: '', content: m.content, intentLabel: m.intent_label ?? '', sources: m.sources ?? [] },
   )
 }

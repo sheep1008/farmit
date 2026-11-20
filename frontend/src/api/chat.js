@@ -79,7 +79,7 @@ async function toApiError(res) {
  * 질문을 보내고 SSE 이벤트를 받는 대로 onEvent(name, data)로 넘긴다.
  * 이벤트 순서: session → status* → intent → delta* → sources → done (실패 시 error로 끝남)
  *
- * @param {{message: string, session_id?: number, item_id?: number}} body
+ * @param {{message?: string, image?: string, session_id?: number, item_id?: number}} body  image: 사진 data URL (REQ-CHT-010)
  * @param {{onEvent: (name: string, data: object) => void, signal?: AbortSignal}} options
  * @returns {Promise<{event: 'done'|'error', data: object}>} 마지막 이벤트
  * @throws 요청 단계 오류(400·401·403·404·429)면 err.apiError가 있는 Error.

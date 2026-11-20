@@ -78,3 +78,35 @@ export function summarizeWeeklyFarm(data, limit = 3) {
     hidden: Math.max(0, section.items.length - limit),
   }
 }
+
+// ── 마지막 증상 진단 보관 (REQ-CHT-010) ─────────────────
+// 다른 화면에 갔다 와도 올린 사진과 결과가 보이게, 마지막 진단 1건을 이 브라우저(localStorage)에만 둔다.
+// 서버는 사진을 저장하지 않는다. 로그아웃하면 지운다 (stores/auth.js).
+const LAST_DIAGNOSIS_KEY = 'farmit.lastDiagnosis'
+
+/** entry: { itemId, symptom, photo(data URL 또는 ''), data(응답의 data) } */
+export function saveLastDiagnosis(entry) {
+  try {
+    globalThis.localStorage?.setItem(LAST_DIAGNOSIS_KEY, JSON.stringify(entry))
+  } catch {
+    // 저장 공간이 모자라면 보관하지 않는다 (진단 결과는 화면에 그대로 있다)
+  }
+}
+
+/** 보관한 진단이 그 품목 것이면 돌려준다. 없거나 다른 품목이면 null */
+export function loadLastDiagnosis(itemId) {
+  try {
+    const entry = JSON.parse(globalThis.localStorage?.getItem(LAST_DIAGNOSIS_KEY) ?? 'null')
+    return entry && entry.itemId === itemId && entry.data ? entry : null
+  } catch {
+    return null
+  }
+}
+
+export function clearLastDiagnosis() {
+  try {
+    globalThis.localStorage?.removeItem(LAST_DIAGNOSIS_KEY)
+  } catch {
+    // 저장소를 못 쓰는 브라우저: 넣은 것도 없다
+  }
+}

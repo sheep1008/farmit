@@ -46,9 +46,13 @@ export async function fetchGuide(itemId) {
  *                sources: [{ n, title, source_label, url, license }], notice, disclaimer, message? },
  *        meta: { remaining_today } }
  * 근거가 없으면 candidates: [] + data.message. 진단 자료가 없는 품목은 400.
+ * image(사진 data URL, REQ-CHT-010)를 주면 data.photo_symptom(사진에서 읽은 증상)이 오고,
+ * 자료 근거 없이 사진만 보고 만든 후보면 data.photo_only: true + data.message(추정 안내), 후보의 evidence는 [].
  */
-export async function diagnose(itemId, symptom) {
-  const res = await http.post('/farming/diagnose', { item_id: itemId, symptom })
+export async function diagnose(itemId, symptom, image = '') {
+  const body = { item_id: itemId, symptom }
+  if (image) body.image = image
+  const res = await http.post('/farming/diagnose', body)
   return res.data
 }
 
