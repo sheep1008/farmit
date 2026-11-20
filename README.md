@@ -221,6 +221,7 @@ docker compose -f infra/docker-compose.yml --profile auction run --rm auction-pr
 | `infra/scripts/server-setup.sh` | 서버 초기 설정 (Docker, 로그 크기 제한, 스왑 4GB, UTC) |
 | `infra/scripts/issue-cert.sh` | HTTPS 인증서 첫 발급 |
 | `infra/scripts/deploy-check.sh` | 배포 점검 (health, 외부 포트, 응답 시간, Flink, Airflow) |
+| `infra/cron/farmit` | 서버 주기 작업 (빠진 Flink 작업 다시 제출, airflow-scheduler 매일 재시작) |
 
 ### 처음 배포
 
@@ -247,14 +248,16 @@ $DC exec backend python manage.py loaddata markets_collect markets_national item
 $DC exec backend python manage.py rag_collect
 $DC exec backend python manage.py rag_index
 
-# 6. Flink 작업 제출 (Flink 컨테이너가 다시 뜰 때마다 다시 한다)
+# 6. Flink 작업 제출 + 주기 작업 설치 (빠진 Flink 작업을 5분마다 다시 제출, airflow-scheduler를 매일 재시작)
 for j in weather_warning auction_trade realtime_price; do bash streaming/flink/submit.sh $j; done
+sudo cp infra/cron/farmit /etc/cron.d/farmit      # 레포가 /home/ubuntu/farmit 이 아니면 파일 안의 경로를 고친다
 
 # 7. 점검. 실패 항목이 없어야 한다
 bash infra/scripts/deploy-check.sh https://도메인
 ```
 
 - Airflow DAG는 새 서버에서 모두 꺼져 있다. 관리 화면에서 켠다 (아래 SSH 터널).
+- 주기 작업(`infra/cron/farmit`)이 한 일은 `journalctl -t farmit-flink -t farmit-airflow`로 본다. Flink 작업이 다시 제출되면 `realtime_price`의 당일 집계가 그 시점부터 다시 세어진다 (위 "실시간 경매" 참고).
 - 관리 포트의 외부 차단 확인은 서버 밖에서 봐야 정확하다. 내 PC(Git Bash)에서도 `bash infra/scripts/deploy-check.sh https://도메인`을 한 번 실행한다.
 - 인증서는 `certbot` 컨테이너가 12시간마다 확인해 만료 30일 전에 갱신하고, Nginx가 하루 한 번 다시 읽는다.
 
@@ -266,7 +269,7 @@ bash infra/scripts/deploy-check.sh https://도메인
 cd farmit && git pull
 DC="docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml -f infra/docker-compose.https.yml --profile airflow --profile auction"
 $DC up -d --build                                 # 코드가 이미지 안에 있어서 --build가 있어야 반영된다. migrate는 backend가 뜰 때 돈다
-bash infra/scripts/deploy-check.sh https://도메인   # Flink 작업이 빠졌으면 여기서 알려 준다 → submit.sh
+bash infra/scripts/deploy-check.sh https://도메인   # Flink 작업은 5분 안에 cron이 다시 제출한다. 바로 띄우려면 submit.sh
 ```
 
 - 환경 변수가 새로 생겼으면 서버의 `.env`에도 직접 넣는다 (`.env`는 git에 없다).

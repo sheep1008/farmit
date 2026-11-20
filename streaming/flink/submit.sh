@@ -14,8 +14,9 @@ export MSYS_NO_PATHCONV=1   # Git Bash가 /tmp 같은 컨테이너 경로를 Win
 
 [ -f "$sql" ] || { echo "없는 파일: $sql" >&2; exit 1; }
 
-# 이미 RUNNING인 같은 이름 작업이 있으면 두 번 띄우지 않는다
-if curl -sf localhost:8081/jobs/overview | grep -Eq "\"name\":\"$name\"[^}]*\"state\":\"RUNNING\""; then
+# 같은 이름 작업이 이미 떠 있으면 두 번 띄우지 않는다
+# RUNNING만 보면 안 된다: 오류로 다시 시작하는 중(RESTARTING 등)에 또 제출하면 같은 작업이 두 개가 된다 (서버에서는 cron이 5분마다 이 스크립트를 부른다)
+if curl -sf localhost:8081/jobs/overview | grep -Eq "\"name\":\"$name\"[^}]*\"state\":\"(RUNNING|RESTARTING|CREATED|INITIALIZING|FAILING|RECONCILING)\""; then
   echo "'$name' 작업이 이미 실행 중이다. 다시 띄우려면 Flink UI(localhost:8081)에서 Cancel 한 뒤 실행한다."
   exit 0
 fi
