@@ -1,6 +1,6 @@
 """146 EDA 2단계: labels.csv(eda_146_load.py)로 표·그림을 만든다. 이미지는 열지 않는다.
   .venv/Scripts/python.exe -I -X utf8 experiments/eda_146.py
-출력: docs/vision-146-eda/tables.md, fig_bbox_ratio.png, fig_imbalance.png
+출력: docs/vision/archive/vision-146-eda/tables.md, fig_bbox_ratio.png, fig_imbalance.png
 불균형 비교용으로 data/processed/153·147의 manifest.csv를 읽는다.
 """
 import collections as C, csv, math, os, re, statistics as S
@@ -8,7 +8,7 @@ import collections as C, csv, math, os, re, statistics as S
 import numpy as np
 
 LAB = 'data/review/146/labels.csv'
-DOC = '../../docs/vision-146-eda'
+DOC = '../../docs/vision/archive/vision-146-eda'
 CROPS = {'배': 1, '사과': 2}
 DIS_OF = {'배': (1, 2), '사과': (3, 4, 5, 6, 7)}
 AREA_FN = {'01': '열매', '03': '잎', '04': '?04', '05': '?05'}   # 04·05 뜻은 시트로 확인(아래 문서 참고)

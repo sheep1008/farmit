@@ -6,7 +6,7 @@
          충돌은 잎 종류별로 나눠 센다: (질병 잎 → 정상 배경), (정상 잎 → 질병 배경), (병 → 다른 병 배경)
 
 실행 (ml/vision에서): .venv/Scripts/python.exe -I -X utf8 experiments/e3_147.py <part1|part2|all> [시드 수=3]
-출력: ../../docs/vision-147-e3/*.json, *.log. 캐시: data/review/147/e3_cache.npz (git 제외 폴더)
+출력: ../../docs/vision/archive/vision-147-e3/*.json, *.log. 캐시: data/review/147/e3_cache.npz (git 제외 폴더)
 """
 import collections, csv, io, json, math, os, random, sys, time, zipfile
 from concurrent.futures import ProcessPoolExecutor
@@ -16,7 +16,7 @@ from PIL import Image, ImageOps
 
 ROOT = 'data/raw/147/노지 작물 질병 진단 이미지'
 CACHE = 'data/review/147/e3_cache.npz'
-OUT = '../../docs/vision-147-e3'
+OUT = '../../docs/vision/archive/vision-147-e3'
 SIZE = 224
 USE = {'고추': {'1', '2'}, '잎마름병(토마토)': {'15'}, '콩': {'13', '14'}, '파': {'16', '17', '18'}}
 CAP = 400

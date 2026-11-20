@@ -1,5 +1,7 @@
 # 사진 진단 — 146 과수화상병 촬영 이미지 (사과·배)
 
+> **작업 기록 원본.** 읽기 좋게 정리한 문서는 [vision.md](../../vision.md) · [eda.md](../eda.md) · [preprocessing.md](../preprocessing.md) · [performance.md](../performance.md). 이 문서는 시간 순서대로 쌓은 기록이라 내용 순서가 섞여 있다.
+
 [vision.md](vision.md)의 153 기록, [vision-147.md](vision-147.md)의 147 기록과 **별개**로 146을 진행하는 문서다. 153·147 기록은 고치지 않는다. 결정·규격 출처는 vision.md 1장(결정), 5장(전처리 규격), [vision-preprocess-test.md](vision-preprocess-test.md)이다.
 
 | 항목 | 내용 |
@@ -8,7 +10,7 @@
 | 데이터 | AI Hub 146 과수화상병 촬영 이미지, 2작물(사과·배), 질병 코드 7개. 과제 번호 80 |
 | 위치 | `ml/vision/data/raw/146/과수화상병 촬영 이미지/{Training,Validation}/` (zip 18개, **112.8 GiB(121 GB)**. 처음 예상 170GB보다 작다) |
 | 모델 구성 | 최종 배포 모델은 153·147·146을 합친 하나 (vision.md 1장). 이 세션은 146의 EDA·전략 확인·전처리까지만 했다. 합친 학습은 하지 않았다 |
-| 기록 위치 | 이 문서, `docs/vision-146-eda/`, `docs/vision-146-f3/`. 이미지가 든 시트는 `ml/vision/data/review/146/`에만 있다 (docs에는 표·그래프만) |
+| 기록 위치 | 이 문서, `docs/vision/archive/vision-146-eda/`, `docs/vision/archive/vision-146-f3/`. 이미지가 든 시트는 `ml/vision/data/review/146/`에만 있다 (docs에는 표·그래프만) |
 | 데이터 취급 | AI Hub 데이터는 git·공유에 올리지 않는다. 원본 삭제는 사용자에게 먼저 알리고 한다 |
 
 ## 1. 체크리스트

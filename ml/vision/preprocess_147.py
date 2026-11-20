@@ -1,4 +1,4 @@
-"""147 노지 작물 질병 전처리 (docs/vision.md 5장 규격 + docs/vision-147.md 4·5장의 결정). 원본 zip을 풀지 않고 바로 읽는다.
+"""147 노지 작물 질병 전처리 (docs/vision/archive/vision.md 5장 규격 + docs/vision/archive/vision-147.md 4·5장의 결정). 원본 zip을 풀지 않고 바로 읽는다.
 
   .venv/Scripts/python.exe -I -X utf8 preprocess_147.py --raw "data/raw/147/노지 작물 질병 진단 이미지" --out data/processed/147 \
       [--crops 고추,토마토] [--review data/review/147] [--workers 12]

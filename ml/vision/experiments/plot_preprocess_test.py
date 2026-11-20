@@ -1,4 +1,4 @@
-"""시험 결과 그래프 2장 (docs/vision-preprocess-test/)."""
+"""시험 결과 그래프 2장 (docs/vision/archive/vision-preprocess-test/)."""
 import json, sys
 import numpy as np
 import matplotlib; matplotlib.use('Agg')

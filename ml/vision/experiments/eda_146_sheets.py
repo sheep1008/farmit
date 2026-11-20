@@ -3,7 +3,7 @@
 출력(이미지가 들어 있으므로 docs가 아니라 data/review/146/ 에만 쓴다):
   data/review/146/sheet_<작물>.jpg   클래스(질병)·부위(정상)별 8장, 빨간 상자 = JSON bbox (EXIF 회전 뒤)
   data/review/146/exif_check.jpg     bbox가 W,H를 바꿔야 들어가는 표본: 위 = 회전 전, 아래 = 회전 뒤
-표(텍스트)는 docs/vision-146-eda/exif_survey.md 에 쓴다.
+표(텍스트)는 docs/vision/archive/vision-146-eda/exif_survey.md 에 쓴다.
 """
 import collections as C, csv, io, os, random, re, zipfile
 
@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 ROOT = 'data/raw/146/과수화상병 촬영 이미지'
 REV = 'data/review/146'
-DOC = '../../docs/vision-146-eda'
+DOC = '../../docs/vision/archive/vision-146-eda'
 LAB = f'{REV}/labels.csv'
 THUMB = 170
 

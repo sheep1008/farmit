@@ -1,11 +1,11 @@
 """147 EDA 2단계: labels.csv(eda_147_load.py 출력)로 표를 만든다. 이미지는 열지 않는다.
   .venv/Scripts/python.exe -I -X utf8 experiments/eda_147.py
-출력: docs/vision-147-eda/tables.md, bbox_ratio.png, area_risk.csv 등
+출력: docs/vision/archive/vision-147-eda/tables.md, bbox_ratio.png, area_risk.csv 등
 """
 import csv, collections as C, os, re
 import numpy as np
 
-DOC = '../../docs/vision-147-eda'
+DOC = '../../docs/vision/archive/vision-147-eda'
 R = list(csv.DictReader(open('data/review/147/labels.csv', encoding='utf-8')))
 ZERO = None
 for r in R:

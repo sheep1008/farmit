@@ -1,11 +1,11 @@
 """146 F1: 받은 zip 확인. 중앙 디렉터리(파일 목록)만 읽고 이미지·JSON은 풀지 않는다.
   .venv/Scripts/python.exe -I -X utf8 experiments/eda_146_f1.py
-출력: docs/vision-146-eda/f1_files.md
+출력: docs/vision/archive/vision-146-eda/f1_files.md
 """
 import collections, os, re, zipfile
 
 ROOT = 'data/raw/146/과수화상병 촬영 이미지'
-DOC = '../../docs/vision-146-eda'
+DOC = '../../docs/vision/archive/vision-146-eda'
 
 
 def zname(i):
