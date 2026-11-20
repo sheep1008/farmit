@@ -1,4 +1,4 @@
-"""153 시설 작물 질병 전처리 (docs/vision.md 5장 규격). 원본 zip을 풀지 않고 바로 읽는다.
+"""153 시설 작물 질병 전처리 (docs/vision/archive/vision.md 5장 규격). 원본 zip을 풀지 않고 바로 읽는다.
 
   python -X utf8 preprocess.py --raw "data/raw/153/071.시설 작물 질병 진단/01.데이터" --out data/processed/153 \
       [--crops 고추,토마토] [--review data/review/153] [--workers 12]

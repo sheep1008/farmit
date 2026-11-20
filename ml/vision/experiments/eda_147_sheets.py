@@ -1,13 +1,13 @@
 """147 EDA 3단계: 작물별 확인 시트(질병 위 / 정상 아래, bbox를 빨간 상자로). 이미지는 zip에서 메모리로만 읽는다.
   .venv/Scripts/python.exe -I -X utf8 experiments/eda_147_sheets.py
-출력: docs/vision-147-eda/sheet_<작물>.jpg, exif_check.txt
+출력: docs/vision/archive/vision-147-eda/sheet_<작물>.jpg, exif_check.txt
 표본: 작물마다 질병 6장(클래스·대상ID를 번갈아) + 정상 6장(서로 다른 묶음), seed 고정.
 """
 import csv, collections as C, io, os, random, zipfile
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 ROOT = 'data/raw/147/노지 작물 질병 진단 이미지'
-DOC = '../../docs/vision-147-eda'
+DOC = '../../docs/vision/archive/vision-147-eda'
 T = 300; N = 6
 random.seed(147)
 R = list(csv.DictReader(open('data/review/147/labels.csv', encoding='utf-8')))

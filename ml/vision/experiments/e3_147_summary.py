@@ -1,9 +1,9 @@
-"""e3_147.py 결과 집계 (평균 ± 표준편차). 출력: docs/vision-147-e3/summary.md
+"""e3_147.py 결과 집계 (평균 ± 표준편차). 출력: docs/vision/archive/vision-147-e3/summary.md
   .venv/Scripts/python.exe -I -X utf8 experiments/e3_147_summary.py
 """
 import json, collections as C
 import numpy as np
-D = '../../docs/vision-147-e3'
+D = '../../docs/vision/archive/vision-147-e3'
 ms = lambda v: f'{np.mean(v):.3f} ± {np.std(v):.3f}'
 out = []; P = out.append
 r1 = json.load(open(f'{D}/part1_results.json', encoding='utf-8'))

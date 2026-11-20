@@ -2,13 +2,13 @@
   cd ml/vision && .venv/Scripts/python.exe -I -X utf8 experiments/eda_153.py
 주의: manifest는 전처리 '선별 뒤' 목록이다 (정상은 질병 합계의 약 2배·질병 부위에 맞춰 뽑음, 포도 Validation 없음,
 코드표 밖 66개 제외, 11장 중복 제거). 그래서 정상의 장수·부위 분포는 선별의 결과이고 원본 분포가 아니다 (표에 명시).
-출력: docs/vision-153-eda/tables.md, fig_bbox_ratio.png, sheet_<작물>.jpg
+출력: docs/vision/archive/vision-153-eda/tables.md, fig_bbox_ratio.png, sheet_<작물>.jpg
 """
 import csv, collections as C, os
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-PROC = 'data/processed/153'; DOC = '../../docs/vision-153-eda'
+PROC = 'data/processed/153'; DOC = '../../docs/vision/archive/vision-153-eda'
 os.makedirs(DOC, exist_ok=True)
 R = list(csv.DictReader(open(f'{PROC}/manifest.csv', encoding='utf-8-sig')))
 for r in R:

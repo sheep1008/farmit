@@ -1,6 +1,6 @@
 """학습 결과 그림 (train.py가 낸 results.json·classes.json·confusion_test.csv → 그림 4장 + 요약 표).
 
-  python -X utf8 plot_results.py runs/s8_153 ../../docs/vision-train-s8_153
+  python -X utf8 plot_results.py runs/s8_153 ../../docs/vision/archive/vision-train-s8_153
 
 그림
   fig_training.png   학습 곡선: 학습 loss / 검증 macro F1·정확도 / 검증 단서 충돌 (epoch별)

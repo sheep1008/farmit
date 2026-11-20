@@ -1,5 +1,7 @@
 # 사진 진단 전처리 방식 시험 (2026-11-19)
 
+> **작업 기록 원본.** 읽기 좋게 정리한 문서는 [vision.md](../../vision.md) · [eda.md](../eda.md) · [preprocessing.md](../preprocessing.md) · [performance.md](../performance.md). 이 문서는 시간 순서대로 쌓은 기록이라 내용 순서가 섞여 있다.
+
 [vision.md](vision.md) S4~S5의 "전처리를 어떻게 할 것인가"를 정하기 위한 시험 기록이다. 이미지·원자료는 [vision-preprocess-test/](vision-preprocess-test/) 폴더에 있다.
 
 ## 0. 결론
@@ -115,11 +117,11 @@
 모두 `ml/vision/experiments/`에서 `ml/vision/.venv`로 실행한다. 153 원본 zip이 `ml/vision/data/raw/153/`에 있어야 한다.
 
 ```bash
-python -X utf8 experiments/preprocess_test.py   "data/raw/153/071.시설 작물 질병 진단/01.데이터" ../../docs/vision-preprocess-test 6 150,300,600   # 시험 1 (약 40분)
-python -X utf8 experiments/summarize_preprocess_test.py ../../docs/vision-preprocess-test/results.json > ../../docs/vision-preprocess-test/summary.md
-python -X utf8 experiments/cue_conflict_test.py "data/raw/153/071.시설 작물 질병 진단/01.데이터" ../../docs/vision-preprocess-test 4            # 시험 2 (약 7분)
-python -X utf8 experiments/margin_swap_test.py  "data/raw/153/071.시설 작물 질병 진단/01.데이터" ../../docs/vision-preprocess-test 3            # 시험 3 (약 12분)
-python -X utf8 experiments/plot_preprocess_test.py ../../docs/vision-preprocess-test                                                         # 그래프 (matplotlib 필요)
+python -X utf8 experiments/preprocess_test.py   "data/raw/153/071.시설 작물 질병 진단/01.데이터" ../../docs/vision/archive/vision-preprocess-test 6 150,300,600   # 시험 1 (약 40분)
+python -X utf8 experiments/summarize_preprocess_test.py ../../docs/vision/archive/vision-preprocess-test/results.json > ../../docs/vision/archive/vision-preprocess-test/summary.md
+python -X utf8 experiments/cue_conflict_test.py "data/raw/153/071.시설 작물 질병 진단/01.데이터" ../../docs/vision/archive/vision-preprocess-test 4            # 시험 2 (약 7분)
+python -X utf8 experiments/margin_swap_test.py  "data/raw/153/071.시설 작물 질병 진단/01.데이터" ../../docs/vision/archive/vision-preprocess-test 3            # 시험 3 (약 12분)
+python -X utf8 experiments/plot_preprocess_test.py ../../docs/vision/archive/vision-preprocess-test                                                         # 그래프 (matplotlib 필요)
 ```
 
 폴더 구성: `results.json`·`conflict_results.json`·`margin_swap_results.json` (원자료), `summary.md`, `fig_*.png`. (`run1~3.log`와 AI Hub 이미지인 `samples_*.jpg`·`conflict_samples.jpg`는 레포에 없다.)

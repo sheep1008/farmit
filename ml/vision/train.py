@@ -3,7 +3,7 @@
   python -X utf8 train.py --processed data/processed/153 [data/processed/147 ...] --out runs/s8_153 [--epochs 12]
   python -X utf8 train.py --processed data/processed/153 --out runs/smoke --smoke     # 코드 확인용 (작은 표본, 2 epoch)
 
-입력 규격 (docs/vision.md 5장, docs/vision-preprocess-test.md 6장)
+입력 규격 (docs/vision/archive/vision.md 5장, docs/vision/archive/vision-preprocess-test.md 6장)
   - 전처리 결과(512px crop, bbox 25% 여백)에서 **여백을 0~25%로 무작위** 줄여 자르고 384x384로 맞춘다. 이미지 전체는 쓰지 않는다.
   - **배경 교체 증강**: 확률 1/3로 (원본 2 : 합성 1) 잎(bbox 안쪽)을 다른 학습 이미지(작물·클래스 상관없음)의 bbox 자리에 붙인다. 정답은 잎의 클래스.
   - 색·밝기·흐림·JPEG 압축·크기·회전·뒤집기 증강.

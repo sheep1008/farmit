@@ -1,4 +1,4 @@
-"""146 과수화상병(사과·배) 전처리 (docs/vision.md 5장 규격 + docs/vision-146.md 4~6장의 결정). 원본 zip을 풀지 않고 바로 읽는다.
+"""146 과수화상병(사과·배) 전처리 (docs/vision/archive/vision.md 5장 규격 + docs/vision/archive/vision-146.md 4~6장의 결정). 원본 zip을 풀지 않고 바로 읽는다.
 
   .venv/Scripts/python.exe -I -X utf8 preprocess_146.py --raw "data/raw/146/과수화상병 촬영 이미지" --out data/processed/146 \
       [--crops 배] [--review data/review/146] [--workers 12] [--dis-cap 1000] [--normal-cap 3000]

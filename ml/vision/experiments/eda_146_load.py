@@ -1,12 +1,12 @@
 """146 EDA 1단계: 라벨 zip의 JSON을 전부 읽어 표(labels.csv)로 만든다. 이미지는 열지 않는다.
   .venv/Scripts/python.exe -I -X utf8 experiments/eda_146_load.py
-출력: data/review/146/labels.csv (git 제외 폴더), docs/vision-146-eda/load_log.txt
+출력: data/review/146/labels.csv (git 제외 폴더), docs/vision/archive/vision-146-eda/load_log.txt
 """
 import collections, csv, json, os, re, zipfile
 
 ROOT = 'data/raw/146/과수화상병 촬영 이미지'
 OUT = 'data/review/146'
-DOC = '../../docs/vision-146-eda'
+DOC = '../../docs/vision/archive/vision-146-eda'
 EXT = re.compile(r'\.(jpe?g|png)$', re.I)
 
 

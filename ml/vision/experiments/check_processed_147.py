@@ -34,4 +34,4 @@ for j, r in enumerate(sel):
     im = Image.open(f"{P}/{r['path']}").convert('RGB'); k = T / max(im.size); im = im.resize((int(im.width * k), int(im.height * k)))
     ImageDraw.Draw(im).rectangle([int(r['bx0']) * k, int(r['by0']) * k, int(r['bx1']) * k, int(r['by1']) * k], outline='red', width=3)
     sheet.paste(im, ((j % 6) * T, (j // 6) * T))
-os.makedirs('../../docs/vision-147-e4', exist_ok=True); sheet.save('data/review/147/exif_sheet.jpg', quality=85)
+os.makedirs('../../docs/vision/archive/vision-147-e4', exist_ok=True); sheet.save('data/review/147/exif_sheet.jpg', quality=85)

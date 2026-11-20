@@ -1,13 +1,13 @@
 """147 EDA 1단계: 라벨 zip의 JSON을 전부 읽어 표(labels.csv)로 만든다. 이미지는 열지 않는다.
   .venv/Scripts/python.exe -I -X utf8 experiments/eda_147_load.py
-출력: data/review/147/labels.csv (git 제외 폴더), docs/vision-147-eda/load_log.txt
+출력: data/review/147/labels.csv (git 제외 폴더), docs/vision/archive/vision-147-eda/load_log.txt
 JSON 필드 구조(키 집합)와 파일명 파싱 불일치도 함께 센다.
 """
 import collections, csv, json, os, re, sys, zipfile
 
 ROOT = 'data/raw/147/노지 작물 질병 진단 이미지'
 OUT = 'data/review/147'
-DOC = '../../docs/vision-147-eda'
+DOC = '../../docs/vision/archive/vision-147-eda'
 
 
 def name_of(i):
