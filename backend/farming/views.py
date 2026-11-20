@@ -24,7 +24,7 @@ from farming import weekly as wk
 from farming.models import FarmSchedule
 from prices.views import _bad, _get_item, _today_kst
 from rag import crops as crop_util
-from rag.llm import LlmError
+from rag.llm import MAX_IMAGE_CHARS, LlmError, parse_image
 from rag.store import StoreUnavailable
 
 logger = logging.getLogger(__name__)
@@ -185,7 +185,37 @@ def glossary(request):
 
 class DiagnoseSerializer(serializers.Serializer):
     item_id = serializers.IntegerField(min_value=1, max_value=2 ** 31 - 1)
-    symptom = serializers.CharField(max_length=300, trim_whitespace=True)
+    symptom = serializers.CharField(max_length=300, trim_whitespace=True, required=False, allow_blank=True)
+    # 작물 사진 1장 (REQ-CHT-010). 저장하지 않고 LLM에만 넘긴다
+    image = serializers.CharField(required=False, max_length=MAX_IMAGE_CHARS)
+
+    def validate_image(self, value):
+        image = parse_image(value)
+        if image is None:
+            raise serializers.ValidationError('jpeg·png·webp 사진만 올릴 수 있습니다.')
+        return image
+
+    def validate(self, attrs):
+        if not attrs.get('symptom') and 'image' not in attrs:
+            raise serializers.ValidationError({'symptom': ['증상을 적거나 사진을 올려 주세요.']})
+        return attrs
+
+
+def _diagnose(crop, item_name, symptom, image):
+    """(결과, [LlmResult]). 사진이 있으면 증상을 읽어 합치고, 자료로 후보가 안 나오면 사진만 보고 후보를 만든다 (REQ-CHT-010)."""
+    if not image:
+        return diag.diagnose(crop, symptom)
+    seen, message, usage = diag.read_photo(crop or item_name, symptom, image)
+    if not seen:   # 작물 사진이 아니거나 판단하기 어려운 사진: 안내만
+        return diag.no_reading(message), usage
+    result = {'candidates': []}
+    if crop:
+        result, more = diag.diagnose(crop, f'{symptom} {seen}'.strip())
+        usage += more
+    if not result['candidates']:
+        result, more = diag.photo_only(crop or item_name, symptom, seen, image)
+        usage += more
+    return {**result, 'photo_symptom': seen}, usage
 
 
 @api_view(['POST'])
@@ -200,9 +230,11 @@ def diagnose_view(request):
     if item is None:
         return error(404, 'NOT_FOUND', '없는 품목입니다.')
     crop = crop_util.crop_name(item.name)
-    if not crop:
+    image = s.validated_data.get('image')
+    if not crop and not image:   # 자료가 없는 품목은 사진이 있을 때만 진단한다 (사진만 보고 추정)
         return _bad({'item_id': ['증상 진단 자료가 없는 품목입니다.']})
-    symptom = s.validated_data['symptom']
+    symptom = s.validated_data.get('symptom', '')
+    shown = ('[사진] ' if image else '') + symptom   # 기록용. 사진은 저장하지 않는다
     user = request.user
     with transaction.atomic():
         get_user_model().objects.select_for_update().filter(pk=user.pk).first()   # 동시 요청이 한도를 함께 넘지 않게
@@ -212,10 +244,10 @@ def diagnose_view(request):
                         {'retry_after_seconds': wait})
             res['Retry-After'] = str(wait)
             return res
-        session = ChatSession.objects.create(user=user, title=f'[증상 진단] {item.name} {symptom}'[:40])
-        ChatMessage.objects.create(session=session, role='user', content=f'[증상 진단] {item.name}: {symptom}')
+        session = ChatSession.objects.create(user=user, title=f'[증상 진단] {item.name} {shown}'[:40])
+        ChatMessage.objects.create(session=session, role='user', content=f'[증상 진단] {item.name}: {shown}')
     try:
-        result, usage = diag.diagnose(crop, symptom)
+        result, usage = _diagnose(crop, item.name, symptom, image)
     except StoreUnavailable:
         session.delete()
         return error(503, 'SERVICE_UNAVAILABLE', '자료 검색을 잠시 쓸 수 없습니다.')

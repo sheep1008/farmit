@@ -112,3 +112,22 @@ describe('이번 주 농사 정보 (REQ-RAG-008)', () => {
     expect(summarizeWeeklyFarm(undefined).section).toBeNull()
   })
 })
+
+describe('마지막 증상 진단 보관 (REQ-CHT-010)', () => {
+  it('같은 품목일 때만 돌려주고, 지우면 없다', async () => {
+    const store = new Map()
+    globalThis.localStorage = {
+      getItem: (k) => store.get(k) ?? null,
+      setItem: (k, v) => store.set(k, v),
+      removeItem: (k) => store.delete(k),
+    }
+    const { clearLastDiagnosis, loadLastDiagnosis, saveLastDiagnosis } = await import('@/utils/farming')
+    const entry = { itemId: 10, symptom: '', photo: 'data:image/jpeg;base64,AAA', data: { candidates: [] } }
+    saveLastDiagnosis(entry)
+    expect(loadLastDiagnosis(10)).toEqual(entry)
+    expect(loadLastDiagnosis(11)).toBeNull()
+    clearLastDiagnosis()
+    expect(loadLastDiagnosis(10)).toBeNull()
+    delete globalThis.localStorage
+  })
+})

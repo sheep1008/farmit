@@ -4,6 +4,7 @@
 → 판매: 품목·물량을 되묻거나 판매 추천 계산 결과를 설명
 → 시세: 물은 주 앞뒤 가격·물량, 1년 전, 명절, 주산지 사건, 생산량을 DB에서 모아 설명 (chat/price_context.py)
 → 그 밖: RAG 검색 → 답변 스트리밍
+사진이 있으면(REQ-CHT-010) 위 흐름 대신 _photo(): 사진 판독(LLM 1번) → 아는 작물이면 RAG 답변, 아니면 사진만 보고 답변.
 → 줄마다 약제 사용량 치환·근거 목록에 없는 번호 제거 → 인용된 근거만 출처로 → 면책 문구.
 
 run()은 (이벤트 이름, dict)를 차례로 내는 제너레이터다. 뷰가 SSE로 바꿔 보낸다. DB 저장은 뷰가 한다.
@@ -276,8 +277,64 @@ def find_item(crop):
     return None
 
 
-def run(user, question, item, history, today, recommend, market=None):
-    """질문 1건 처리. market: 화면에서 보던 시장(시세 상담에서 질문에 시장이 없을 때 쓴다). 이벤트: status, intent, delta, sources, final(본문·출처·역할·사용량·캐시 여부)
+def _photo(question, image, crop, known, usage, done, history):
+    """사진이 있는 질문 (REQ-CHT-010). image: {'media_type', 'data'(base64)}. 사진은 LLM에만 넘기고 저장하지 않는다."""
+    block = llm.image_block(image['media_type'], image['data'])
+    yield 'status', {'step': 'photo', 'message': '사진을 살펴보는 중'}
+    data, results = llm.complete_json(P.PHOTO_SYSTEM, [block, {'type': 'text', 'text': P.PHOTO_USER.format(
+        crop=crop or '(선택 안 함)', history=history_text(history), question=question)}], max_tokens=400)
+    for r in results:
+        usage.add(r)
+    data = data or {}
+    yield 'intent', {'intent': '병해충'}
+    symptoms = data.get('symptoms') if isinstance(data.get('symptoms'), str) else ''
+    # 작물 사진이 아니면 다시 찍어 달라고, 흐리거나 멀어서 판단하기 어려우면 다른 사진을 보내 달라고 안내한다 (답변 LLM 없음)
+    notice = (P.PHOTO_NOT_CROP if not data.get('is_crop') or not symptoms.strip()
+              else P.PHOTO_UNCLEAR if data.get('clear') is False else None)
+    if notice:
+        yield 'delta', {'text': notice}
+        yield done('병해충', notice, [], disclaimer=False)
+        return
+    seen = data.get('crop') if isinstance(data.get('crop'), str) else None
+    # 작물을 모르면 자료를 찾을 수 없다. 한 번은 작물을 되묻고(화면이 다음 질문에 같은 사진을 함께 보낸다), 되물은 뒤에도 모르면 사진만 보고 답한다
+    asked = bool(history) and history[-1]['role'] == 'assistant' and history[-1]['content'] == P.PHOTO_ASK_CROP
+    if not crop and not seen and not asked:
+        yield 'delta', {'text': P.PHOTO_ASK_CROP}
+        result = done('병해충', P.PHOTO_ASK_CROP, [], disclaimer=False)
+        result[1]['need_crop'] = True
+        yield result
+        return
+    q_crop = crop or (seen if seen in known else None)
+    evidence = []
+    if q_crop:  # 품목표에 있는 작물만 자료를 찾는다 (다른 작물 자료를 이 작물 것처럼 쓰지 않게)
+        yield 'status', {'step': 'search', 'message': '농촌진흥청 자료를 찾는 중'}
+        queries = [q for q in (data.get('queries') or []) if isinstance(q, str)][:4]
+        evidence = retrieve.search(f'{symptoms} {question}', crop=q_crop, queries=queries, size=EVIDENCE_SIZE)
+    if evidence:
+        yield 'status', {'step': 'answer', 'message': f'근거 {len(evidence)}건으로 답변을 쓰는 중'}
+        system, lead = P.ANSWER_SYSTEM, ''
+        content = P.ANSWER_USER.format(
+            crop=q_crop, role=P.INTENT_LABELS['병해충'], role_format=P.ROLE_FORMAT['병해충'],
+            question=f'{question}\n(사진에서 본 증상: {symptoms})\n({P.PHOTO_MORE})',
+            evidence=retrieve.format_evidence(evidence))
+    else:
+        # 품목표에 없는 작물이거나 자료가 없다 → 사진만 보고 답하고, 추정이라는 안내를 맨 앞에 붙인다
+        yield 'status', {'step': 'answer', 'message': '사진을 보고 답변을 쓰는 중'}
+        system, lead = P.PHOTO_ONLY_SYSTEM, P.PHOTO_ONLY_NOTICE + '\n\n'
+        content = [block, {'type': 'text', 'text': P.PHOTO_ONLY_USER.format(
+            crop=seen or '(알 수 없음)', question=question, symptoms=symptoms)}]
+        yield 'delta', {'text': lead}
+    text = ''
+    for kind, value in _stream_answer(system, content, evidence, usage):   # 1000 토큰으로는 마지막 줄(추가 사진 요청)이 잘렸다
+        if kind == 'answer':
+            text = value['text']
+        else:
+            yield kind, value
+    yield done('병해충', lead + text, None, evidence=evidence)
+
+
+def run(user, question, item, history, today, recommend, market=None, image=None):
+    """질문 1건 처리. market: 화면에서 보던 시장(시세 상담에서 질문에 시장이 없을 때 쓴다). image: 사진(있으면 _photo로). 이벤트: status, intent, delta, sources, final(본문·출처·역할·사용량·캐시 여부)
 
     recommend(user, item, volume_kg, desired_date) → (status, data, meta): prices의 판매 추천 계산.
     """
@@ -292,6 +349,10 @@ def run(user, question, item, history, today, recommend, market=None):
         if guide_links is not None:
             data['guide_links'] = guide_links
         return 'final', data
+
+    if image:
+        yield from _photo(question, image, crop, known, usage, done, history)
+        return
 
     # 1) 규칙: 다른 품목·범위 밖 (LLM 없음, REQ-CHT-004)
     notice = rule_check(question, crop, known)

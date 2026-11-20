@@ -25,7 +25,7 @@ from chat.models import ChatMessage, ChatSession
 from codes.models import Item, Market
 from prices.forecast_views import compute_recommendation
 from prices.views import _kst_iso, _today_kst
-from rag.llm import LlmError
+from rag.llm import MAX_IMAGE_CHARS, LlmError, parse_image
 from rag.store import StoreUnavailable
 
 logger = logging.getLogger(__name__)
@@ -33,11 +33,26 @@ MAX_QUESTION = 1000
 
 
 class MessageSerializer(serializers.Serializer):
-    message = serializers.CharField(max_length=MAX_QUESTION, trim_whitespace=True)
+    message = serializers.CharField(max_length=MAX_QUESTION, trim_whitespace=True, required=False, allow_blank=True)
+    # 작물 사진 1장 (REQ-CHT-010). 저장하지 않고 LLM에만 넘긴다
+    image = serializers.CharField(required=False, max_length=MAX_IMAGE_CHARS)
     session_id = serializers.IntegerField(required=False, min_value=1, max_value=2 ** 63 - 1)
     item_id = serializers.IntegerField(required=False, min_value=1, max_value=2 ** 31 - 1)
     # 화면에서 보던 시장 (시세 상담 근거에 쓴다, 선택)
     market_id = serializers.CharField(required=False, max_length=6)
+
+    def validate_image(self, value):
+        image = parse_image(value)
+        if image is None:
+            raise serializers.ValidationError('jpeg·png·webp 사진만 올릴 수 있습니다.')
+        return image
+
+    def validate(self, attrs):
+        if not attrs.get('message'):
+            if 'image' not in attrs:
+                raise serializers.ValidationError({'message': ['질문을 입력해 주세요.']})
+            attrs['message'] = P.PHOTO_QUESTION
+        return attrs
 
 
 def _sse(event, data):
@@ -89,19 +104,22 @@ def messages(request):
             res['Retry-After'] = str(wait)
             return res
         history = []
+        # 사진은 저장하지 않는다. 기록에는 사진을 올린 질문이라는 표시만 남긴다
+        saved = (P.PHOTO_PREFIX if 'image' in v else '') + v['message']
         if session is None:
-            session = ChatSession.objects.create(user=user, title=v['message'][:40])
+            session = ChatSession.objects.create(user=user, title=saved[:40])
         else:
             history = [{'role': m.role, 'content': m.content}
                        for m in session.messages.order_by('-created_at', '-id')[:service.HISTORY_TURNS]][::-1]
-        ChatMessage.objects.create(session=session, role='user', content=v['message'])
+        ChatMessage.objects.create(session=session, role='user', content=saved)
     remaining = remaining_today(user)  # 이번 질문을 뺀 값. 관리자는 None
 
     def events():
         started = time.monotonic()
         yield _sse('session', {'session_id': session.id, 'remaining_today': remaining})
         try:
-            for name, data in service.run(user, v['message'], item, history, _today_kst(), _recommend, market):
+            for name, data in service.run(user, v['message'], item, history, _today_kst(), _recommend, market,
+                                          v.get('image')):
                 if name != 'final':
                     if name == 'intent':
                         data = {**data, 'intent_label': P.INTENT_LABELS[data['intent']]}
@@ -118,6 +136,8 @@ def messages(request):
                         'sources': data['sources'], 'remaining_today': remaining, 'cached': data['cached']}
                 if 'guide_links' in data:
                     done['guide_links'] = data['guide_links']
+                if data.get('need_crop'):   # 사진의 작물을 되물었다 (REQ-CHT-010). 화면이 다음 질문에 같은 사진을 함께 보낸다
+                    done['need_crop'] = True
                 if 'recommendation' in data:
                     done['recommendation'] = data['recommendation']
                 yield _sse('done', done)
