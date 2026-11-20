@@ -134,6 +134,26 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+# 배포: collectstatic이 관리자 화면 CSS·JS를 여기에 모으고 Nginx가 /static/ 으로 내보낸다 (infra/docker-compose.prod.yml)
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+
+# ── 배포 설정 (T02). DJANGO_DEBUG=False일 때만 켠다. 값은 .env.prod.example 참고 ──────────
+# Nginx 뒤에서 HTTPS로 서비스한다. 브라우저 ─HTTPS→ Nginx ─HTTP→ gunicorn
+# CSRF 검사에서 믿을 출처 (예: https://farmit.example.com). Nginx가 Host를 그대로 넘겨서 보통은 비워도 된다
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
+if not DEBUG:
+    # gunicorn은 HTTP로 받으므로, Nginx가 붙인 X-Forwarded-Proto 헤더를 보고 원래 요청이 HTTPS였는지 안다
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # 세션·CSRF 쿠키를 HTTPS에서만 보낸다. 인증서를 붙이기 전(HTTP)에 로그인을 확인할 때만 False로 둔다
+    SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = os.environ.get('DJANGO_COOKIE_SECURE', 'True') == 'True'
+    # DEBUG=False에서는 Django가 오류를 화면에 찍지 않는다 (관리자 메일로만 보낸다). docker logs로 볼 수 있게 화면에 찍는다
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'handlers': {'console': {'class': 'logging.StreamHandler'}},
+        'root': {'handlers': ['console'], 'level': 'INFO'},
+    }
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -144,7 +164,8 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'api.exceptions.custom_exception_handler',
     # 로그인 없이 부르는 용어 풀이(외부 API 호출)와 비회원 "지금 팔면"만 접속 주소별로 제한한다
     # 앞단 프록시 수. 0이면 X-Forwarded-For 헤더를 믿지 않고 접속 주소만 쓴다 (헤더로 제한을 피하지 못하게). Nginx를 앞에 두면 1
-    'NUM_PROXIES': int(os.environ.get('NUM_PROXIES', '0')),
+    # 테스트는 프록시 없이 직접 부르므로 배포 컨테이너(NUM_PROXIES=1)에서 돌려도 0으로 둔다
+    'NUM_PROXIES': 0 if sys.argv[1:2] == ['test'] else int(os.environ.get('NUM_PROXIES', '0')),
     'DEFAULT_THROTTLE_RATES': {'glossary': os.environ.get('GLOSSARY_RATE', '30/min'),
                                'sell_now_guest': os.environ.get('SELL_NOW_GUEST_RATE', '20/min')},
 }

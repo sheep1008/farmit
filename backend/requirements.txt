@@ -7,3 +7,4 @@ elasticsearch==8.19.3
 fastembed==0.9.1
 pypdf==5.1.0
 httpx==0.28.1
+gunicorn==23.0.0

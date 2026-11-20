@@ -1,0 +1,90 @@
+# 배포용 덮어쓰기 파일 (T02). docker-compose.yml 위에 겹쳐서 쓴다. 이 파일에는 개발용과 다른 점만 적는다.
+#
+# 실행 (레포 루트에서):
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --profile airflow --profile auction up -d --build
+#
+# 개발용과 다른 점
+#   1. backend는 runserver 대신 gunicorn으로 띄운다
+#   2. 화면은 Vite dev server 대신 Nginx가 빌드 결과를 내보낸다. 외부로 여는 포트는 Nginx의 80뿐이다
+#   3. 코드를 마운트하지 않고 이미지 안의 코드를 쓴다 (서버에서 git pull 뒤 --build로 반영)
+#   4. 서버가 다시 켜지면 스스로 뜬다 (restart: unless-stopped)
+#   5. 메모리를 묶는다. 제한이 없으면 JVM(Kafka·Flink)이 서버 메모리에 맞춰 넓게 잡는다 (docs/infra-memory.md 6절)
+#
+# !reset 은 개발용 값을 지우고, !override 는 합치지 않고 통째로 바꾼다 (기본은 목록을 합친다)
+# 127.0.0.1에만 연 관리 포트(Airflow 8080, Flink 8081, ES 9200, Kibana 5601)는 그대로 둔다.
+# 외부에서는 닿지 않고, 서버에 SSH 터널을 걸어서 본다 (REQ-NFR-005)
+
+services:
+  mysql:
+    ports: !reset []               # 외부에 열지 않는다. 필요하면 exec mysql 로 들어간다
+    restart: unless-stopped
+
+  backend:
+    # 워커 1개 + 스레드 8개: 워커마다 임베딩 모델(약 0.5GB)을 따로 올리므로 워커를 늘리지 않고 스레드로 동시 요청을 받는다
+    # 채팅(SSE)은 답이 끝날 때까지 스레드 하나를 잡고 있다
+    # collectstatic: 관리자 화면 CSS·JS를 static-files 볼륨에 모은다. Nginx가 같은 볼륨을 읽어 /static/ 으로 내보낸다
+    command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1 --threads 8 --access-logfile -"
+    environment:
+      NUM_PROXIES: "1"             # 앞에 Nginx가 1대 있다. 접속 주소별 호출 제한이 X-Forwarded-For의 실제 주소를 쓴다
+    ports: !reset []               # Nginx만 backend:8000 으로 접속한다
+    volumes: !override
+      - model-cache:/models
+      - backend-data:/app/data     # RAG 수집 파일(data/rag). 화면이 자료 건수·길잡이 목차를 여기서 읽는다
+      - static-files:/app/staticfiles
+    restart: unless-stopped
+
+  # 개발용 frontend(Vite dev server)를 Nginx로 바꾼다. 서비스 이름은 그대로 두어 명령을 같게 쓴다
+  frontend:
+    build: !override
+      context: ../frontend
+      dockerfile: Dockerfile.prod
+    environment: !reset {}
+    ports: !override
+      - "80:80"
+    volumes: !override
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - static-files:/var/www/static:ro   # backend가 collectstatic으로 채운다
+    restart: unless-stopped
+
+  elasticsearch:
+    mem_limit: 1200m               # 힙 512MB + 파일 캐시. 제한이 없으면 파일 캐시가 계속 늘어난다
+    restart: unless-stopped
+
+  kafka:
+    environment:
+      KAFKA_HEAP_OPTS: -Xms384m -Xmx384m   # 기본 1GB. 토픽 3개·파티션 1개라 작게 잡아도 된다
+    restart: unless-stopped
+
+  flink-jobmanager:
+    environment:
+      # 개발용 값에 jobmanager.memory.process.size만 더했다 (기본 1600m). 작업 3개를 관리만 하므로 1GB면 된다
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        execution.checkpointing.dir: file:///opt/flink/checkpoints
+        jobmanager.memory.process.size: 1024m
+    volumes: !override
+      - flink-checkpoints:/opt/flink/checkpoints
+    restart: unless-stopped
+
+  flink-taskmanager:
+    restart: unless-stopped
+
+  airflow-db:
+    restart: unless-stopped
+
+  auction-producer:
+    volumes: !reset []
+
+  weather-warning-producer:
+    volumes: !reset []
+
+  alert-consumer:
+    volumes: !reset []
+
+  weekly-farm-collector:
+    volumes: !override
+      - backend-data:/app/data     # 주간농사정보 PDF 캐시 (backend와 같은 볼륨)
+
+volumes:
+  backend-data:
+  static-files:
