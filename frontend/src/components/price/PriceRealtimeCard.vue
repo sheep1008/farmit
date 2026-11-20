@@ -78,7 +78,7 @@ const fmt = (v) => (v == null ? '-' : Math.round(v).toLocaleString('ko-KR'))
     </div>
     <p class="sub">
       <template v-if="collectedAt">마지막 수집 {{ formatKstDateTime(collectedAt) }} · </template>
-      경매 중 약 20분마다 갱신, 다음 날 정산되면 위 차트에 확정 가격으로 반영됩니다.
+      경매 중 3분마다 수집(낮 12시 이후 30분마다), 낙찰 후 반영까지 약 20분 걸릴 수 있습니다. 다음 날 정산되면 위 차트에 확정 가격으로 반영됩니다.
     </p>
 
     <LoadingSpinner v-if="loading && !rows.length" label="당일 경매가를 불러오는 중…" />
