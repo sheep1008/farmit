@@ -28,7 +28,8 @@ const UNITS = [
   { value: 'week', label: '주' },
   { value: 'month', label: '월' },
 ]
-// 기간 = 어제부터 거슬러 올라간 개월 수 (API 한도: 모든 단위 최대 5년)
+// 기간 = 처음에 보여 줄 구간 (어제부터 거슬러 올라간 개월 수). 자료는 늘 5년치(API 한도)를 받아 두고
+// 차트에서 끌거나 휠을 돌리면 고른 기간 밖의 과거도 볼 수 있다
 const RANGES = [
   { months: 1, label: '1개월' },
   { months: 3, label: '3개월' },
@@ -37,6 +38,7 @@ const RANGES = [
   { months: 36, label: '3년' },
   { months: 60, label: '5년' },
 ]
+const LOAD_MONTHS = 60
 
 const items = ref([])
 const markets = ref([])
@@ -56,6 +58,10 @@ const range = computed(() => {
   const from = addDays(addMonths(to, -filters.value.months), 1)
   return { from, to }
 })
+// 받아 두는 자료의 시작일 (기간 선택과 상관없이 5년 전)
+const loadFrom = computed(() => addDays(addMonths(range.value.to, -LOAD_MONTHS), 1))
+// 처음 보이는 구간의 첫 칸 (단위에 맞춘 x축 값: 그날·그 주 월요일·그 달)
+const viewStart = computed(() => periodsBetween(range.value.from, range.value.to, filters.value.unit)[0])
 
 // ── 예측 선 (회원만) ── 예측은 주 평균이라 일·주 단위에서만 그린다 (월 단위에는 맞는 자리가 없다)
 const forecast = ref([])
@@ -67,7 +73,7 @@ async function loadForecast() {
   if (!auth.isLoggedIn || !itemId || !marketId || unit === 'month') return
   // 예측이 없는 품목·시장이거나 아직 준비 전(503)이면 선 없이 둔다. 하나가 실패해도 나머지는 그린다
   const [backtest, history, upcoming] = await Promise.all([
-    fetchForecastBacktest(itemId, marketId, range.value.from).catch(() => null),
+    fetchForecastBacktest(itemId, marketId, loadFrom.value).catch(() => null),
     fetchForecastHistory(itemId, marketId).catch(() => null),
     fetchForecasts(itemId, marketId).catch(() => null),
   ])
@@ -84,15 +90,12 @@ async function loadForecast() {
   for (const r of upcoming?.data ?? []) byWeek.set(r.target_week, { ...r, period: r.target_week, kind: 'upcoming' })
   forecast.value = [...byWeek.values()]
 }
-watch(
-  () => [filters.value.itemId, filters.value.marketId, filters.value.unit, filters.value.months, auth.isLoggedIn],
-  loadForecast,
-)
+watch(() => [filters.value.itemId, filters.value.marketId, filters.value.unit, auth.isLoggedIn], loadForecast)
 
-// x축은 기간 끝(어제)에서 예측이 있는 마지막 주까지 늘린다. 기간 시작보다 이른 지난 예측은 축에 없어 그려지지 않는다
+// x축은 5년 전부터, 끝은 어제에서 예측이 있는 마지막 주까지 늘린다
 const periods = computed(() => {
   const lastForecast = forecast.value.reduce((max, f) => (f.period > max ? f.period : max), range.value.to)
-  return periodsBetween(range.value.from, lastForecast, filters.value.unit)
+  return periodsBetween(loadFrom.value, lastForecast, filters.value.unit)
 })
 
 async function loadCodes() {
@@ -127,7 +130,7 @@ async function loadDaily() {
         market_id: marketId,
         unit,
         grade,
-        from: range.value.from,
+        from: loadFrom.value,
         to: range.value.to,
         compare_last_year: true, // 전년 같은 시기 비교선 (REQ-PRC-002)
       },
@@ -146,8 +149,9 @@ async function loadDaily() {
   }
 }
 
-// 선택이 바뀔 때마다 다시 조회 → 단위를 바꾸면 차트가 그 단위로 다시 그려진다 (REQ-PRC-002)
-watch(filters, loadDaily, { deep: true })
+// 선택이 바뀔 때마다 다시 조회 → 단위를 바꾸면 차트가 그 단위로 다시 그려진다 (REQ-PRC-002).
+// 기간은 보이는 구간만 바꾸므로 다시 조회하지 않는다
+watch(() => [filters.value.itemId, filters.value.marketId, filters.value.unit, filters.value.grade], loadDaily)
 // 품목을 바꾸면 다른 화면에서도 이어 보이게 기억한다
 watch(
   () => filters.value.itemId,
@@ -236,7 +240,14 @@ const lastUpdated = computed(() => formatKstDateTime(meta.value?.last_updated))
         title="이 기간에는 거래가 없습니다"
         description="기간을 늘리거나 다른 시장·등급을 골라 보세요."
       />
-      <PriceTrendChart v-else :periods="periods" :rows="rows" :forecast="forecast" :class="{ dim: loading }" />
+      <PriceTrendChart
+        v-else
+        :periods="periods"
+        :rows="rows"
+        :forecast="forecast"
+        :view-start="viewStart"
+        :class="{ dim: loading }"
+      />
     </div>
 
     <!-- 시장 비교(확정)와 당일 경매가(확정 전)를 나란히 놓아 같이 비교한다. 좁은 화면에서는 위아래로 -->

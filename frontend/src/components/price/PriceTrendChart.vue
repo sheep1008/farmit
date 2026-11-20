@@ -37,6 +37,8 @@ const props = defineProps({
   // 예측 점: [{ period(대상 주 월요일), pred_price, lower80, upper80, kind }]. 없으면 선을 그리지 않는다.
   // kind: 'backtest' 검증 예측(그때 보여 준 값은 아님) · 'past' 실제로 내보낸 지난 예측 · 'upcoming' 앞으로의 예측
   forecast: { type: Array, default: () => [] },
+  // 처음 보여 줄 구간의 첫 x축 값 (고른 기간의 시작). 그 앞은 끌거나 휠을 돌려야 보인다. 없으면 전체를 보여 준다
+  viewStart: { type: String, default: '' },
 })
 
 const el = ref(null)
@@ -57,8 +59,8 @@ const fmt = (v) => Math.round(v).toLocaleString('ko-KR')
 const won = (v) => (v == null ? '-' : `${fmt(v)}원`)
 const kg = (v) => (v == null ? '-' : `${fmt(v)}kg`)
 
-// ── 요약 숫자 ──
-const traded = computed(() => props.rows.filter((r) => r.avg_price != null))
+// ── 요약 숫자 ── 고른 기간(viewStart 이후)만으로 계산한다. 차트를 끌어도 바뀌지 않는다
+const traded = computed(() => props.rows.filter((r) => r.avg_price != null && r.period >= props.viewStart))
 const latest = computed(() => traded.value.at(-1) ?? null)
 // 변화율(%). 기준이 없으면 null
 const pct = (now, base) => (now == null || !base ? null : ((now - base) / base) * 100)
@@ -129,7 +131,14 @@ function buildOption() {
     axisPointer: { link: [{ xAxisIndex: 'all' }] },
     // 휠 확대·축소, 왼쪽 버튼·터치로 끌기는 echarts가 처리한다 (오른쪽 버튼 끌기는 아래 onPanStart).
     // 보이는 구간만 남기므로(filterMode 기본값) 확대하면 가격 축도 그 구간에 맞춰진다
-    dataZoom: [{ type: 'inside', xAxisIndex: [0, 1] }],
+    dataZoom: [
+      {
+        type: 'inside',
+        xAxisIndex: [0, 1],
+        startValue: Math.max(props.periods.indexOf(props.viewStart), 0), // 처음에는 고른 기간만 보인다
+        endValue: props.periods.length - 1,
+      },
+    ],
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'line', lineStyle: { color: muted } },
@@ -300,7 +309,7 @@ onBeforeUnmount(() => {
   chart?.dispose()
 })
 
-watch(() => [props.periods, props.rows, props.forecast], render)
+watch(() => [props.periods, props.rows, props.forecast, props.viewStart], render)
 </script>
 
 <template>
@@ -329,7 +338,8 @@ watch(() => [props.periods, props.rows, props.forecast], render)
       @contextmenu.prevent
     ></div>
     <p class="hint">
-      마우스 휠로 확대·축소, 오른쪽 버튼(또는 왼쪽 버튼)으로 끌어 이동합니다.
+      마우스 휠로 확대·축소, 오른쪽 버튼(또는 왼쪽 버튼)으로 끌어 이동합니다. 오른쪽으로 끌면 고른 기간보다 앞선 과거(5년 전까지)도
+      볼 수 있습니다.
       <template v-if="forecast.some((f) => f.kind === 'backtest')">
         예측 선에서 서비스 예측을 시작하기 전 구간은 검증 예측입니다 (그 주 이전 자료로만 학습한 모델의 값, 당시 제공한 예측은
         아님).
