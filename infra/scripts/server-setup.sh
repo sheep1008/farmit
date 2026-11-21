@@ -4,7 +4,7 @@
 # 실행 (서버에서, 레포 루트):
 #   sudo bash infra/scripts/server-setup.sh
 #
-# 하는 일: Docker 설치 → ubuntu 사용자를 docker 그룹에 추가 → 컨테이너 로그 크기 제한 → 스왑 4GB → 시간대 UTC
+# 하는 일: Docker 설치 → ubuntu 사용자를 docker 그룹에 추가 → 컨테이너 로그 크기 제한 → 스왑 4GB → 시간대 UTC → 예측 산출물 폴더 권한
 # 두 번 돌려도 같은 결과가 되게 썼다 (이미 된 단계는 건너뛴다)
 
 set -euo pipefail                       # 명령이 실패하거나 빈 변수를 쓰면 바로 멈춘다 (반쯤 설정된 채로 넘어가지 않게)
@@ -64,6 +64,14 @@ sysctl --system >/dev/null                                  # 위 설정을 지�
 # ── 5. 시간대 UTC ───────────────────────────────────────────────────────
 # DB·수집기·스케줄이 모두 UTC 기준이다 (CLAUDE.md 2절). 서버 로그 시각도 같게 맞춘다
 timedatectl set-timezone UTC
+
+# ── 6. 예측 산출물 폴더를 Airflow 사용자가 쓸 수 있게 ───────────────────
+# 주간 예측 DAG가 ml/data(피처 CSV)·ml/outputs(점검 CSV)·ml/mlruns(MLflow)에 쓴다. 세 폴더는 git에 없어서
+# clone 뒤에는 존재하지 않고, ml/은 ubuntu 소유라 컨테이너의 airflow 사용자(UID 50000, Airflow 공식 이미지 기본값)가
+# 만들지 못한다 (PermissionError: '/opt/farmit/ml/data'). Windows 개발 PC에서는 권한을 따지지 않아 드러나지 않는다
+ml_dir="$(cd "$(dirname "$0")/../.." && pwd)/ml"            # 어디서 실행해도 레포의 ml/ 을 가리키게
+mkdir -p "$ml_dir/data" "$ml_dir/outputs" "$ml_dir/mlruns"  # 없으면 만든다
+chown -R 50000:0 "$ml_dir/data" "$ml_dir/outputs" "$ml_dir/mlruns"   # 소유자를 airflow 사용자로 (그룹 0은 이미지 기본값)
 
 # ── 결과 확인 ───────────────────────────────────────────────────────────
 echo "── 설정 결과 ──"

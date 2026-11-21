@@ -218,7 +218,7 @@ docker compose -f infra/docker-compose.yml --profile auction run --rm auction-pr
 |---|---|
 | `infra/docker-compose.prod.yml` | gunicorn, Nginx가 화면 서빙, 외부 포트는 80뿐, 메모리 제한, 자동 재시작 |
 | `infra/docker-compose.https.yml` | 443 + 인증서 + 자동 갱신(`certbot`). 인증서를 받은 뒤부터 붙인다 |
-| `infra/scripts/server-setup.sh` | 서버 초기 설정 (Docker, 로그 크기 제한, 스왑 4GB, UTC) |
+| `infra/scripts/server-setup.sh` | 서버 초기 설정 (Docker, 로그 크기 제한, 스왑 4GB, UTC, 예측 산출물 폴더 권한) |
 | `infra/scripts/issue-cert.sh` | HTTPS 인증서 첫 발급 |
 | `infra/scripts/deploy-check.sh` | 배포 점검 (health, 외부 포트, 응답 시간, Flink, Airflow) |
 | `infra/cron/farmit` | 서버 주기 작업 (빠진 Flink 작업 다시 제출, airflow-scheduler 매일 재시작) |
@@ -272,7 +272,30 @@ $DC up -d --build                                 # 코드가 이미지 안에 �
 bash infra/scripts/deploy-check.sh https://도메인   # Flink 작업은 5분 안에 cron이 다시 제출한다. 바로 띄우려면 submit.sh
 ```
 
-- 환경 변수가 새로 생겼으면 서버의 `.env`에도 직접 넣는다 (`.env`는 git에 없다).
+바꾼 곳에 따라 서버에서 할 일이 다르다.
+
+| 바꾼 곳 | 서버에서 할 일 |
+|---|---|
+| `backend/`, `frontend/`, 실시간 수집기·알림 컨슈머 | `$DC up -d --build` (코드가 이미지 안에 있다) |
+| `batch/dags/`, `batch/spark/`, `collectors/`의 배치 수집기, `ml/` | `git pull`만 하면 된다 (Airflow에 폴더가 마운트되어 있다). `requirements.txt`·`Dockerfile`을 바꿨으면 `--build` |
+| `streaming/flink/*.sql` | 돌고 있는 작업은 옛 SQL 그대로다. Flink 화면(SSH 터널 8081)에서 그 작업을 Cancel 한 뒤 `bash streaming/flink/submit.sh <이름>` |
+| 환경 변수 | 서버의 `.env`에 직접 넣고 `$DC up -d` (`.env`는 git에 없다) |
+| 모델 변경(마이그레이션) | 반영 **전에** 아래 백업을 먼저 한다 |
+
+```bash
+# DB 백업 (마이그레이션이 있거나 큰 변경일 때 반영 전에)
+$DC exec -T mysql sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction "$MYSQL_DATABASE"' | gzip > ~/farmit-$(date +%F).sql.gz
+
+# 되돌리기: 반영 뒤 문제가 생기면 직전 커밋으로 돌아가 다시 빌드한다
+git log --oneline -5              # 돌아갈 커밋 확인
+git checkout <이전 커밋> && $DC up -d --build
+git checkout master               # GitLab에서 문제 MR을 Revert 해 master를 고친 뒤 다시 pull 한다
+```
+
+- 되돌려도 이미 적용된 마이그레이션은 그대로 남는다. 컬럼을 지우거나 이름을 바꾸는 변경은 옛 코드와 맞지 않을 수 있으니, 백업을 해 두고 "컬럼 추가 → 코드 반영 → 나중에 옛 컬럼 삭제"처럼 나눠서 올린다.
+- 반영은 한국 시간 17시 이후 저녁에 한다. 경매 수집(00~17시), 매일 수집(07:00), 주간 예측(월 08:00)과 겹치지 않는다.
+- `realtime_price` 작업을 경매 시간 중에 다시 제출하면 당일 집계가 그 시점부터 다시 세어진다 (위 "실시간 경매" 참고).
+- 한 번에 하나씩 작게 올린다. 여러 MR을 묶어 올리면 문제가 생겼을 때 원인을 찾기 어렵다.
 - 반영하는 사람은 서버 SSH 접속이 필요하다. 각자 키를 만들어 공개 키를 서버 `~/.ssh/authorized_keys`에 추가하고(`.pem` 파일을 주고받지 않는다), Lightsail 방화벽 22번에 그 사람 IP를 넣는다.
 
 ### 관리 화면 보기 (SSH 터널)
