@@ -74,6 +74,12 @@ services:
   airflow-db:
     restart: unless-stopped
 
+  airflow-scheduler:
+    environment:
+      # 예측 학습 스레드 수 (기본 8). 서버 CPU는 2개라 8개로 돌리면 서로 다투느라 더 느리다
+      # CPU 2개에서 사과(0501) 예측 1회: 스레드 8개 2분 29초(CPU 290초) → 2개 51초(CPU 97초) (2026-11-21 측정)
+      FARMIT_ML_THREADS: "2"
+
   auction-producer:
     volumes: !reset []
 

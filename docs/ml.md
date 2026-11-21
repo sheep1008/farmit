@@ -323,7 +323,7 @@ docker run --rm -v "$PWD/ml/data:/app/data" -v "$PWD/ml/outputs:/app/outputs" fa
 | `FARMIT_ML_DATA` | `ml/data/<model.json data_file>` | 입력 데이터셋 (`--data`가 우선) |
 | `FARMIT_ML_CONFIG` | `ml/config/<--item>` | 설정 폴더 (실험용 설정 비교, `--config`가 우선) |
 | `FARMIT_ML_OUTPUT` | `ml/outputs` | 결과 CSV 폴더 |
-| `FARMIT_ML_THREADS` | `8` | 학습 스레드 수. **XGBoost·LSTM은 스레드 수가 바뀌면 결과가 조금 달라진다** |
+| `FARMIT_ML_THREADS` | `8` | 학습 스레드 수. **XGBoost·LSTM은 스레드 수가 바뀌면 결과가 조금 달라진다**. 배포 서버는 CPU가 2개라 `2`로 둔다 (`infra/docker-compose.prod.yml`) |
 | `MLFLOW_TRACKING_URI` | `sqlite:///ml/mlruns/mlflow.db` | MLflow 서버를 띄우면 그 주소로 |
 
 ---
