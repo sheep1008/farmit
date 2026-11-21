@@ -321,6 +321,7 @@ erDiagram
 
 - UK① = (trade_date, market_id, item_id, grade). 같은 날짜를 다시 수집해도 중복되지 않는다 (REQ-COL-008).
 - 인덱스: (item_id, market_id, trade_date) — 기간 조회용
+- 인덱스: (item_id, grade, trade_date) — 품목·등급의 가장 최근 정산일 찾기용 (시장 간 비교·"지금 팔면". 2026-11-21 T01에서 추가, REQ-NFR-001)
 
 **auction_trade** — 실시간 경매 낙찰 건 원본 (REQ-COL-002)
 | 컬럼 | 타입 | 키 | 설명 |

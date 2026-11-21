@@ -8,7 +8,6 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from django.conf import settings
-from django.db.models import Max
 from rest_framework import serializers
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
@@ -64,7 +63,8 @@ def compute_sell_now(user, item, v):
     # 도로 거리·통행료 (시군구 → 시장). 저장된 값이 없으면 여기서 카카오에 물어 저장한다
     routes = road_routes(profile.sido, profile.sigungu, markets) if has_location else {}
     base = SettlePrice.objects.filter(item=item, grade=grade, market__in=markets)
-    base_date = base.aggregate(latest=Max('trade_date'))['latest']
+    # 날짜 역순 1건으로 찾는다 (Max()는 품목의 모든 행을 읽어 느리다. prices/views.py market_prices와 같은 방식, T01)
+    base_date = base.order_by('-trade_date').values_list('trade_date', flat=True).first()
 
     warnings = []
     if not transport_applied:
