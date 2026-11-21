@@ -259,8 +259,9 @@ def market_prices(item, grade, day=None):
     markets = list(Market.objects.filter(is_collect=True).order_by('market_id'))
     if day is None:
         # 가장 최근 정산일 = 이 품목·등급의 가장 늦은 거래정산일자
+        # Max()로 구하면 품목의 모든 행을 읽어 사과는 10초가 넘는다. 날짜 역순 1건은 인덱스 끝에서 바로 찾는다 (T01)
         day = (SettlePrice.objects.filter(item=item, grade=grade, market__in=markets)
-               .aggregate(latest=Max('trade_date'))['latest'])
+               .order_by('-trade_date').values_list('trade_date', flat=True).first())
     rows = {}
     if day is not None:
         rows = {r.market_id: r for r in SettlePrice.objects.filter(

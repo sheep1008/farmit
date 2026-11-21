@@ -183,7 +183,7 @@ GMS_OPENAI_URL = f'{GMS_ROOT}/api.openai.com/v1/chat/completions'
 GMS_GEMINI_URL = f'{GMS_ROOT}/generativelanguage.googleapis.com/v1beta/models'
 LLM_API_KEY = GMS_KEY or os.environ.get('ANTHROPIC_API_KEY') or None
 LLM_BASE_URL = GMS_BASE_URL if GMS_KEY else None   # None = Anthropic 기본 주소
-LLM_DAILY_LIMIT = int(os.environ.get('LLM_DAILY_LIMIT', '20'))  # 회원별 하루 질문 수 (REQ-NFR-008)
+LLM_DAILY_LIMIT = int(os.environ.get('LLM_DAILY_LIMIT') or 20)  # 회원별 하루 질문 수 (REQ-NFR-008). .env에 빈 값으로 있어도 기본값
 # 채팅은 사람이 기다리므로 짧게. 재시도 1번까지 최악 약 60초 (rag/llm.py)
 LLM_TIMEOUT_SECONDS = float(os.environ.get('LLM_TIMEOUT_SECONDS', '30'))
 
@@ -217,4 +217,4 @@ KAKAO_NAVI_TIMEOUT_SECONDS = float(os.environ.get('KAKAO_NAVI_TIMEOUT_SECONDS', 
 # 회원이 km당 운송비를 넣지 않았을 때 쓰는 기본 단가 (원/km). 1톤 트럭(현대 포터2) 연료비 기준:
 # 경유 복합연비 약 9.3km/L(8.6~9.9), 경유 약 1,600원/L로 잡으면 약 170원/km. 연료비만이고 인건비·감가는 뺐다.
 # 유가가 크게 바뀌면 .env의 TRANSPORT_DEFAULT_COST_PER_KM으로 고친다
-TRANSPORT_DEFAULT_COST_PER_KM = int(os.environ.get('TRANSPORT_DEFAULT_COST_PER_KM', '170'))
+TRANSPORT_DEFAULT_COST_PER_KM = int(os.environ.get('TRANSPORT_DEFAULT_COST_PER_KM') or 170)  # .env에 빈 값으로 있어도 기본값

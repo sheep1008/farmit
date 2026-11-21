@@ -3,7 +3,7 @@
 #
 # 형식: 분 시 일 월 요일 사용자 명령. 시각은 UTC (server-setup.sh가 서버 시간대를 UTC로 맞춘다)
 # 레포가 /home/ubuntu/farmit 에 있다고 본다 (README "처음 배포"의 clone 위치). 다르면 아래 경로를 고친다
-# 결과 보기: journalctl -t farmit-flink -t farmit-airflow
+# 결과 보기: journalctl -t farmit-flink -t farmit-airflow -t farmit-press
 
 # 1. Flink 작업 자동 제출 (5분마다)
 #    Flink 컨테이너가 다시 뜨면(서버 재부팅, 배포) 제출해 둔 작업이 사라진다. 빠진 작업만 다시 제출한다
@@ -14,3 +14,8 @@
 #    태스크가 scheduler 안에서 돌아서 돌수록 메모리가 늘어난다 (막 띄우면 약 400MiB → 오래 돌면 약 1.1GiB, docs/infra-memory.md)
 #    재시작하면 돌던 태스크가 끊기므로 수집(22:00 UTC)·예측(일 23:00 UTC)과 먼 시각, 10분마다 도는 DAG를 피해 5분에 한다
 5 12 * * * ubuntu cd /home/ubuntu/farmit && docker compose -f infra/docker-compose.yml --profile airflow restart airflow-scheduler 2>&1 | logger -t farmit-airflow
+
+# 3. 보도자료 수집 (매일 22:30 UTC = 한국 시간 07:30, REQ-COL-007)
+#    Django 명령이라 Airflow가 아니라 backend 컨테이너에서 돌린다. 오늘 포함 3일치를 받아 하루 빠져도 메워진다
+#    같은 보도자료는 덮어쓰므로 중복되지 않고, 결과는 collect_log(source=press)에도 남는다. cron에는 터미널이 없어 -T를 붙인다
+30 22 * * * ubuntu cd /home/ubuntu/farmit && docker compose -f infra/docker-compose.yml exec -T backend python manage.py press_collect 2>&1 | logger -t farmit-press

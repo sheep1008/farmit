@@ -61,6 +61,7 @@ market=$(curl -skL -m 20 "$BASE/api/markets" | grep -o '"market_id":"[^"]*"' | h
 paths=(/ /api/markets /api/items /api/farming/weekly)
 if [ -n "$item" ] && [ -n "$market" ]; then
     paths+=("/api/prices/daily?item_id=$item&market_id=$market" "/api/prices/realtime?item_id=$item&market_id=$market" "/api/forecasts?item_id=$item&market_id=$market")
+    paths+=("/api/prices/compare?item_id=$item")   # 날짜를 안 주면 가장 최근 정산일을 찾는다. 인덱스가 없으면 10초가 넘었다 (T01)
 else
     bad "품목·시장 목록을 읽지 못해 가격 API는 재지 못했다 (item, market 테이블에 값이 있는지 확인)"
 fi

@@ -13,6 +13,7 @@ SSAFY 관통 프로젝트 · 양정호, 김기현 · 2026-10-19 ~ 2026-12-24
 | [docs/api.md](docs/api.md) | API 명세서 |
 | [docs/ml.md](docs/ml.md) | 가격 예측: 현재 모델(사과 v3), 사용법, 전국·저장성 품목 확장 검토 |
 | [docs/infra-memory.md](docs/infra-memory.md) | 컨테이너 메모리 측정, 서버 사양 판단 |
+| [docs/test-report.md](docs/test-report.md) | 통합 테스트 보고서: 필수 요구사항 체크리스트, 찾은 문제, 서버에 반영할 것 |
 
 ## 폴더 구조
 
@@ -221,7 +222,7 @@ docker compose -f infra/docker-compose.yml --profile auction run --rm auction-pr
 | `infra/scripts/server-setup.sh` | 서버 초기 설정 (Docker, 로그 크기 제한, 스왑 4GB, UTC, 예측 산출물 폴더 권한) |
 | `infra/scripts/issue-cert.sh` | HTTPS 인증서 첫 발급 |
 | `infra/scripts/deploy-check.sh` | 배포 점검 (health, 외부 포트, 응답 시간, Flink, Airflow) |
-| `infra/cron/farmit` | 서버 주기 작업 (빠진 Flink 작업 다시 제출, airflow-scheduler 매일 재시작) |
+| `infra/cron/farmit` | 서버 주기 작업 (빠진 Flink 작업 다시 제출, airflow-scheduler 매일 재시작, 보도자료 매일 수집) |
 
 ### 처음 배포
 
@@ -247,8 +248,9 @@ DC="docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml 
 $DC exec backend python manage.py loaddata markets_collect markets_national items
 $DC exec backend python manage.py rag_collect
 $DC exec backend python manage.py rag_index
+$DC exec backend python manage.py press_collect --days 30     # 보도자료 검색용 첫 적재. 그 뒤는 아래 cron이 매일 받는다
 
-# 6. Flink 작업 제출 + 주기 작업 설치 (빠진 Flink 작업을 5분마다 다시 제출, airflow-scheduler를 매일 재시작)
+# 6. Flink 작업 제출 + 주기 작업 설치 (빠진 Flink 작업을 5분마다 다시 제출, airflow-scheduler를 매일 재시작, 보도자료 매일 수집)
 for j in weather_warning auction_trade realtime_price; do bash streaming/flink/submit.sh $j; done
 sudo cp infra/cron/farmit /etc/cron.d/farmit      # 레포가 /home/ubuntu/farmit 이 아니면 파일 안의 경로를 고친다
 
@@ -257,7 +259,7 @@ bash infra/scripts/deploy-check.sh https://도메인
 ```
 
 - Airflow DAG는 새 서버에서 모두 꺼져 있다. 관리 화면에서 켠다 (아래 SSH 터널).
-- 주기 작업(`infra/cron/farmit`)이 한 일은 `journalctl -t farmit-flink -t farmit-airflow`로 본다. Flink 작업이 다시 제출되면 `realtime_price`의 당일 집계가 그 시점부터 다시 세어진다 (위 "실시간 경매" 참고).
+- 주기 작업(`infra/cron/farmit`)이 한 일은 `journalctl -t farmit-flink -t farmit-airflow -t farmit-press`로 본다. `infra/cron/farmit`이 바뀌면 `sudo cp`를 다시 한다. Flink 작업이 다시 제출되면 `realtime_price`의 당일 집계가 그 시점부터 다시 세어진다 (위 "실시간 경매" 참고).
 - 관리 포트의 외부 차단 확인은 서버 밖에서 봐야 정확하다. 내 PC(Git Bash)에서도 `bash infra/scripts/deploy-check.sh https://도메인`을 한 번 실행한다.
 - 인증서는 `certbot` 컨테이너가 12시간마다 확인해 만료 30일 전에 갱신하고, Nginx가 하루 한 번 다시 읽는다.
 

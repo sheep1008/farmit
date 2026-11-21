@@ -27,7 +27,9 @@ class SettlePrice(models.Model):
         # 같은 날짜를 다시 수집해도 같은 (날짜, 시장, 품목, 등급) 행이 두 번 저장되지 않게 막는다 (REQ-COL-008)
         constraints = [models.UniqueConstraint(fields=['trade_date', 'market', 'item', 'grade'], name='uk_settle_price')]
         # 품목·시장별 기간 조회용 (품목 → 시장 → 날짜 순서. 날짜 범위 조건이 맨 뒤에 와야 인덱스가 잘 쓰인다)
-        indexes = [models.Index(fields=['item', 'market', 'trade_date'], name='idx_settle_item_mkt_date')]
+        indexes = [models.Index(fields=['item', 'market', 'trade_date'], name='idx_settle_item_mkt_date'),
+                   # 품목·등급의 가장 최근 정산일 찾기용 (시장 간 비교, 지금 팔면). 없으면 품목의 모든 행을 읽는다 (T01, REQ-NFR-001)
+                   models.Index(fields=['item', 'grade', 'trade_date'], name='idx_settle_item_grade_date')]
 
 
 # 실시간 경매 낙찰 건 원본 (erd.md 2.3, REQ-COL-002)
