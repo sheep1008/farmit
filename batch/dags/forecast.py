@@ -62,6 +62,9 @@ with DAG(
     start_date=pendulum.datetime(2026, 11, 1, tz="UTC"),
     catchup=False,           # 놓친 주는 손으로 --base-week를 넘겨 다시 돌린다 (docs/ml.md 5장)
     max_active_runs=1,       # 같은 CSV·forecast 행을 쓰므로 한 번에 하나만
+    # 태스크도 한 번에 하나만. 품목 예측 3개와 past_case(Spark)가 같이 돌면 서버 CPU 2개를 나눠 써서
+    # 모두 제한 시간에 걸리고 버스트 용량까지 바닥난다 (2026-11-20 수동 실행: 3번 시도 모두 30분 timeout)
+    max_active_tasks=1,
     default_args={"retries": 2, "retry_delay": timedelta(minutes=10), "execution_timeout": timedelta(minutes=30)},
     user_defined_macros={"kst_monday": kst_monday, "kst_last_sunday": kst_last_sunday},
     tags=["batch", "ml"],
