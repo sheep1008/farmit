@@ -6,7 +6,7 @@
 | 모델 | EfficientNet-B0 (ImageNet 사전학습) + 분류층, 67클래스 (153 시설 32 + 147 노지 30 + 146 사과·배 9 − 중복 정상 4) |
 | 가중치 출처 | 합친 학습 E5b(`train.py --processed data/processed/153 data/processed/147 data/processed/146 --epochs 30 --patience 6`)의 **best epoch 22** (epoch 22에서 조기 종료, 누적 약 134분) |
 | 점수 | **시험** 정확도 **0.972**, macro F1 **0.929** (품목 마스킹, 여백 25%). 데이터셋별 153 0.975/0.949, 147 0.964/0.910, 146 0.980/0.977. 검증 macro F1 0.941. 모두 **같은 데이터 안의 점수**이고, 외부 사진 평가(E6) 전이다. 자세한 결과는 `docs/vision/archive/vision.md` 4.5 |
-| 파일 | `vision.onnx` (16.4MB), `classes.json` (클래스 이름·작물 매핑) |
+| 파일 | `classes.json` (클래스 이름·작물 매핑). **공개 저장소에는 `vision.onnx`(16.4MB)를 넣지 않았다** — AI Hub 데이터로 학습한 가중치를 공개해도 되는지 확인 전이다. 이 모델은 서비스에 연결하지 않았다 |
 | 데이터 | AI Hub 153·147·146으로 학습했다. 데이터 자체는 레포에 없다. 가중치 배포가 AI Hub 이용 조건에 맞는지는 확인이 필요하다 |
 
 ## 입출력

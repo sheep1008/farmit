@@ -34,7 +34,7 @@ ml/outputs/
 # 사진 진단(ml/vision): 학습 산출물·모델 가중치. 데이터는 위 data/ 규칙으로 이미 제외
 ml/vision/runs/
 *.onnx
-!ml/vision/model/vision.onnx
+# 공개 저장소에는 vision.onnx를 올리지 않는다 (AI Hub 데이터로 학습한 가중치, 이용 조건 확인 전)
 *.pt
 *.pth
 
