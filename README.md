@@ -141,7 +141,8 @@ docker compose -f infra/docker-compose.yml exec backend python manage.py test
 | 자원 | 제공 | 이용 조건 | 쓰는 곳 |
 |---|---|---|---|
 | 도매시장 정산정보, 실시간 경매정보 | 한국농수산식품유통공사(aT), 공공데이터포털 | 이용허락범위 제한 없음 | 가격 통계·예측·실수령액 |
-| ASOS 일자료, 기상특보 | 기상청, 공공데이터포털 | 공공누리 제1유형(출처표시) | 날씨, 산지 특보 알림 |
+| ASOS 일자료, 기상특보, 단기예보 | 기상청, 공공데이터포털 | 공공누리 제1유형(출처표시) | 날씨, 현재 날씨, 산지 특보 알림 |
+| 농작물 생산량 통계 (KOSIS) | 국가데이터처(통계청) | KOSIS 활용약관 (출처표시) | 시세 상담 근거 |
 | 특일 정보 | 한국천문연구원, 공공데이터포털 | 이용허락범위 제한 없음 | 명절·휴일 |
 | 품목별 국가별 수출입실적 | 관세청, 공공데이터포털 | 이용허락범위 제한 없음 | 수입량 급증 알림 |
 | 병해충 정보·예찰 (NCPMS) | 농촌진흥청 | 출처 표시, 비상업 이용 (무료 비영리 서비스로 이용) | 상담 근거, 알림 |
@@ -166,6 +167,8 @@ docker compose -f infra/docker-compose.yml exec backend python manage.py test
 | Apache ECharts | Apache-2.0 | 차트 |
 | Django, Django REST framework | BSD-3-Clause | 서버 |
 | Apache Kafka, Apache Flink, Apache Airflow, Apache Spark | Apache-2.0 | 수집·스트리밍·배치 |
+| fastembed | Apache-2.0 | 임베딩 실행 |
+| Pretendard, Noto Sans KR, IBM Plex Sans KR | SIL OFL 1.1 | 화면 글꼴 |
 | Elasticsearch, Kibana | Elastic License 2.0 / AGPL-3.0 / SSPL 중 선택 (서버로만 실행, 수정·배포하지 않음) | 검색, 대시보드 |
 | MySQL | GPL-2.0 (서버로만 실행) | DB |
 | scikit-learn | BSD-3-Clause | 가격 예측 |
