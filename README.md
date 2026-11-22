@@ -4,7 +4,7 @@
 
 공공기관 자료를 근거로 질문에 답하고, 전국 도매시장 가격과 예측으로 "언제, 어디에 팔면 얼마가 남는지" 보여 줍니다.
 
-[서비스 바로가기](https://farmit.site) · [개발 문서](docs/DEVELOPMENT.md)
+[서비스 바로가기](https://farmit.site) · [시연 영상](https://youtu.be/MNbtaLIYR6k) · [개발 문서](docs/DEVELOPMENT.md)
 
 > **시연 계정** `farmitdemo` / `Demo2026farm` — 가짜 데이터로 만든 체험용 계정입니다. 로그인하지 않아도 가격 통계와 "지금 팔면" 계산은 쓸 수 있습니다.
 
